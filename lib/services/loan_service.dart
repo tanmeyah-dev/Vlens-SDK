@@ -18,14 +18,14 @@ class LoanService extends BaseClient {
   @override
   void initialize() {
     if (_loanRepo is LoanRepoImp) {
-      (_loanRepo as LoanRepoImp).initialize();
+      (_loanRepo).initialize();
     }
   }
 
   @override
   void dispose() {
     if (_loanRepo is LoanRepoImp) {
-      (_loanRepo as LoanRepoImp).dispose();
+      (_loanRepo).dispose();
     }
   }
 

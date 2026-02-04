@@ -13,3 +13,10 @@ class SDKConstants {
   SDKConstants._();
 }
 
+/// App constants for fonts and other app-wide values
+class AppConstants {
+  AppConstants._(); // Private constructor to prevent instantiation
+  
+  /// English app font family
+  static const String englishAppFont = 'Roboto';
+}

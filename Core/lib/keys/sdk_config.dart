@@ -1,4 +1,4 @@
-import '../bases/data/api/exceptions/error.dart' show ConfigurationException;
+import 'package:core/bases/data/api/exceptions/error.dart' show ConfigurationException;
 
 /// Configuration class for SDK initialization.
 class SDKConfig {

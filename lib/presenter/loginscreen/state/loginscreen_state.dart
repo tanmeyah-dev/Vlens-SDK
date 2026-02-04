@@ -1,0 +1,19 @@
+import 'package:core/bases/states/base/non_render_state.dart';
+import 'package:core/bases/states/base/render_data_state.dart';
+import '../model/loginscreen_model.dart';
+
+class InitLoginScreen extends RenderDataState<LoginScreenModel> {
+  InitLoginScreen({required LoginScreenModel data}) : super(data);
+}
+
+class UpdateLoginScreenUI extends RenderDataState<LoginScreenModel> {
+  UpdateLoginScreenUI(super.data);
+}
+
+class OnLoginSuccessState extends NonRenderState {}
+
+class OnLoginErrorState extends NonRenderState {
+  final String errorMessage;
+  
+  OnLoginErrorState(this.errorMessage);
+}

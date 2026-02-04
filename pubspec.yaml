@@ -12,6 +12,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_bloc: ^8.1.4
+  iconsax_flutter: ^1.0.0
+  country_code_picker: ^3.0.0
+  pinput: ^2.2.0
   core:
     path: Core
 
@@ -27,8 +31,8 @@ dev_dependencies:
 flutter:
 
   # To add assets to your package, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
+   assets:
+     - assets/images/logo.png
   #   - images/a_dot_ham.jpeg
   #
   # For details regarding assets in packages, see

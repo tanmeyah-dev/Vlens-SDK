@@ -3,18 +3,8 @@
 /// This package provides a Software Development Kit for Flutter applications.
 library tan_sdk;
 
-// Export Core package files directly
-export 'package:core/main.dart';
-export 'package:core/bases/base_client.dart';
-export 'package:core/bases/data/api/exceptions/error.dart';
-export 'package:core/keys/constants.dart';
-export 'package:core/keys/sdk_config.dart';
-
-// Export Core components
-export 'package:core/components/button/app_button.dart';
-export 'package:core/components/text/app_text.dart';
-export 'package:core/components/loading/loading_widget.dart';
-export 'package:core/components/card/card_widget.dart';
+// Export Core package (using main export file for better IDE navigation)
+export 'package:core/core.dart';
 
 // Export data models
 export 'data/models/loan_application.dart';
@@ -33,4 +23,7 @@ export 'services/loan_service.dart';
 export 'services/sdk_service.dart';
 
 // Export presenter/scenes
-export 'presenter/loan_conditions/scene/loan_conditions_screen.dart';
+export 'presenter/mobile_number/scene/mobile_number_scene.dart';
+export 'presenter/loginscreen/scene/loginscreen_scene.dart';
+export 'presenter/username_security_code/scene/username_security_code_scene.dart';
+export 'routes/route_path.dart';
