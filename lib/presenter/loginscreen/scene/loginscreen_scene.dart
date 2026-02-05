@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
 import 'package:vlens/vlens.dart';
+import 'package:vlens/src/data/models/extracted_data.dart';
 import '../bloc/loginscreen_bloc.dart';
 import '../event/loginscreen_event.dart';
 import '../model/loginscreen_model.dart';
@@ -246,9 +247,8 @@ class _LoginScreenSceneState
         Expanded(
           child: AppButton(
             title: "تسجيل الدخول",
-            textColor: _model.isLoginButtonDisabled
-                ? AppColors.gray
-                : AppColors.white,
+            textColor:
+                _model.isLoginButtonDisabled ? AppColors.gray : AppColors.white,
             onPressed:
                 _model.isLoginButtonDisabled ? null : () => _validation(),
           ),
@@ -349,19 +349,19 @@ class _LoginScreenSceneState
     _model.phoneNumberError = null;
     _model.passwordError = null;
     emit(UpdateLoginScreenUIEvent(_model));
-    
+
     // Validate form - if validation fails, Flutter automatically shows errors on TextFormField
     // We need to wait for the UI to update before validating
     await Future.microtask(() {});
-    
+
     final isValid = _model.formKey.currentState!.validate();
-    
+
     if (!isValid) {
       // Validation failed - errors are automatically displayed by TextFormField
       // The form will show red borders and error messages below the fields
       return;
     }
-    
+
     // Only proceed with login if form validation passes
     emit(LoginEvent(
       _model.mobileNumberController.text,
@@ -379,7 +379,8 @@ class _LoginScreenSceneState
         apiBaseUrl: "https://api.vlenseg.com",
         accessToken: "", // TODO: Get access token from login response
         refreshToken: "", // TODO: Get refresh token from login response
-        apiKey: "W70qYFzumZYn9nPqZXdZ39eRjpW5qRPrZ4jlxlG6c", // TODO: Replace with your API key
+        apiKey:
+            "W70qYFzumZYn9nPqZXdZ39eRjpW5qRPrZ4jlxlG6c", // TODO: Replace with your API key
         tenancyName: "silverkey2", // TODO: Replace with your tenancy name
       ),
       defaultLocale: "ar", // Arabic locale
@@ -408,6 +409,17 @@ class _LoginScreenSceneState
           errorMessageAr: "خطأ في الشبكة",
         ),
       ],
+      onSuccess: (ExtractedData? p1) {
+        print(p1);
+        print("success");
+        print(p1?.idFrontData?.firstName);
+      },
+      onFailure: (String errorCode, String errorMsg) {
+        print(errorCode);
+        print(errorMsg);
+        print("failure");
+      },
+      getExtractedData: true,
     );
 
     // Initialize VLens SDK - this will automatically navigate to FlowController
