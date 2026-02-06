@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/security_code_constants.dart';
 import '../utils/security_code_validator.dart';
-import '../utils/username_validator.dart';
+import '../../mobile_number/utils/phone_validator.dart';
 
 class UsernameSecurityCodeModel {
   final TextEditingController usernameController = TextEditingController();
@@ -25,7 +25,8 @@ class UsernameSecurityCodeModel {
 
   bool isConfirmSecurityCodeValid() {
     final code = confirmSecurityCodeController.text;
-    return SecurityCodeValidator.isValid(code, SecurityCodeConstants.pinLength);
+    // Confirm code just needs to match the create code, not validate all requirements
+    return code.isNotEmpty && SecurityCodeValidator.codesMatch(createSecurityCodeController.text, code);
   }
 
   bool doSecurityCodesMatch() {
@@ -35,7 +36,7 @@ class UsernameSecurityCodeModel {
   }
 
   bool isUsernameValid() {
-    return UsernameValidator.isValid(usernameController.text);
+    return PhoneValidator.validate(usernameController.text) == null;
   }
 
   bool isFormValid() {

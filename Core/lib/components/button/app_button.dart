@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:core/components/image/app_image.dart';
-import 'package:core/keys/constants.dart';
 import '../../style/app_gradient.dart';
 import '../../style/app_colors.dart';
 import '../../style/app_fonts.dart';
 import '../../style/app_dimens.dart';
-import '../../utils/ui.dart';
 
 class AppButton extends Container {
   AppButton({

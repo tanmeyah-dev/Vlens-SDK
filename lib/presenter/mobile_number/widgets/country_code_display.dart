@@ -1,15 +1,11 @@
 import 'package:core/extensions/widget_extension.dart';
 import 'package:core/utils/ui.dart';
 import 'package:core/style/app_colors.dart';
-import 'package:country_code_picker/country_code_picker.dart';
 import 'package:flutter/material.dart';
 
 class CountryCodeDisplay extends StatelessWidget {
-  final CountryCode selectedCountryCode;
-
   const CountryCodeDisplay({
     super.key,
-    required this.selectedCountryCode,
   });
 
   @override
@@ -32,18 +28,14 @@ class CountryCodeDisplay extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Image.asset(
-                selectedCountryCode.flagUri ?? "",
-                package: 'country_code_picker',
-                width: 24,
-                height: 24,
-                errorBuilder: (context, error, stackTrace) {
-                  return const SizedBox(width: 24, height: 24);
-                },
+              // Static Egypt flag emoji
+              const Text(
+                '🇪🇬',
+                style: TextStyle(fontSize: 24),
               ),
               4.width,
               Text(
-                selectedCountryCode.dialCode ?? "+20",
+                "+20",
                 style: TextStyle(
                   color: AppColors.black,
                   fontWeight: FontWeight.w500,

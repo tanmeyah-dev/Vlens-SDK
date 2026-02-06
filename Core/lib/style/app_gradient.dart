@@ -12,7 +12,7 @@ class AppGradient {
     return LinearGradient(
       begin: isHorizontal ? Alignment.centerLeft : Alignment.topCenter,
       end: isHorizontal ? Alignment.centerRight : Alignment.bottomCenter,
-      colors: [
+      colors: const [
         AppColors.primary,
         AppColors.primaryLight,
       ],

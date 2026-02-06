@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 class LoginScreenModel {
   final TextEditingController mobileNumberController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+  final FocusNode passwordFocusNode = FocusNode();
   var formKey = GlobalKey<FormState>();
   var isLoginButtonDisabled = true;
-  bool passwordVisible = true;
   bool isBiometricAvailable = false;
   String? phoneNumberError;
   String? passwordError;
+  bool isLoading = false;
 
   bool isInputEmpty() {
     return mobileNumberController.text.isEmpty ||
@@ -29,8 +30,6 @@ class LoginScreenModel {
   bool isPasswordValid() {
     final password = passwordController.text.trim();
     if (password.isEmpty) return false;
-    if (!RegExp(r'^\d+$').hasMatch(password)) return false;
-    if (password.length != 6) return false;
     return true;
   }
 

@@ -2,7 +2,6 @@ import 'package:core/components/text/app_text.dart';
 import 'package:core/extensions/widget_extension.dart';
 import 'package:core/utils/ui.dart';
 import 'package:core/style/app_colors.dart';
-import 'package:country_code_picker/country_code_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../constants/mobile_number_constants.dart';
@@ -11,14 +10,12 @@ import 'country_code_display.dart';
 
 class MobileNumberField extends StatefulWidget {
   final TextEditingController controller;
-  final CountryCode selectedCountryCode;
   final Function(String) onChanged;
   final FormFieldValidator<String>? validator;
 
   const MobileNumberField({
     super.key,
     required this.controller,
-    required this.selectedCountryCode,
     required this.onChanged,
     this.validator,
   });
@@ -113,7 +110,7 @@ class _MobileNumberFieldState extends State<MobileNumberField> {
                       width: 1,
                     ),
                   ),
-                  errorStyle: const TextStyle(
+                  errorStyle: TextStyle(
                     color: AppColors.error,
                     fontSize: 12,
                     height: 1.2,
@@ -132,10 +129,8 @@ class _MobileNumberFieldState extends State<MobileNumberField> {
               ),
             ),
             8.width,
-            // Country code display widget
-            CountryCodeDisplay(
-              selectedCountryCode: widget.selectedCountryCode,
-            ),
+            // Static country code display widget
+            const CountryCodeDisplay(),
           ],
         ),
       ],

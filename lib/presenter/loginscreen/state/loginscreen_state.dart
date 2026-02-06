@@ -17,3 +17,5 @@ class OnLoginErrorState extends NonRenderState {
   
   OnLoginErrorState(this.errorMessage);
 }
+
+class OnLoginLoadingState extends NonRenderState {}

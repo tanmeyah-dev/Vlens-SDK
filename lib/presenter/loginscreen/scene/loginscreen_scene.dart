@@ -10,14 +10,13 @@ import 'package:core/utils/ui.dart';
 import 'package:core/style/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
-import 'package:vlens/vlens.dart';
 import '../bloc/loginscreen_bloc.dart';
 import '../event/loginscreen_event.dart';
 import '../model/loginscreen_model.dart';
 import '../state/loginscreen_state.dart';
 import '../../../routes/route_path.dart';
 import '../utils/phone_validator.dart';
+import '../../username_security_code/widgets/pin_input_field.dart';
 
 class LoginScreenScene extends StatefulWidget {
   const LoginScreenScene({super.key});
@@ -29,11 +28,35 @@ class LoginScreenScene extends StatefulWidget {
 class _LoginScreenSceneState
     extends BaseState<LoginScreenScene, LoginScreenBloc, LoginScreenModel> {
   late LoginScreenModel _model;
+  bool _listenersAdded = false;
+  bool _isLoadingDialogShowing = false;
+
+  @override
+  void dispose() {
+    if (_listenersAdded) {
+      _model.mobileNumberController.removeListener(_updateButtonState);
+      _model.passwordController.removeListener(_updateButtonState);
+    }
+    super.dispose();
+  }
 
   @override
   Widget buildWidget(
       BuildContext context, RenderDataState<LoginScreenModel> state) {
     _model = state.data;
+    
+    // Add listeners only once to prevent excessive state updates
+    if (!_listenersAdded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_listenersAdded) {
+          _model.mobileNumberController.addListener(_updateButtonState);
+          _model.passwordController.addListener(_updateButtonState);
+          _listenersAdded = true;
+          // Initial button state check
+          _updateButtonState();
+        }
+      });
+    }
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
@@ -62,7 +85,7 @@ class _LoginScreenSceneState
                             // Mobile number field
                             _buildMobileNumberField(),
                             24.height,
-                            // Password field
+                            // Password field (PIN)
                             _buildPasswordField(),
                           ],
                         ),
@@ -114,7 +137,7 @@ class _LoginScreenSceneState
   }
 
   Widget _buildLogo() {
-    return AppImage(
+    return const AppImage(
       AppAssets.tanmeyah,
       height: 80,
     );
@@ -145,6 +168,7 @@ class _LoginScreenSceneState
           controller: _model.mobileNumberController,
           keyboardType: TextInputType.phone,
           maxLength: 11,
+          textAlign: TextAlign.right,
           inputFormatters: [
             FilteringTextInputFormatter.digitsOnly,
           ],
@@ -158,7 +182,7 @@ class _LoginScreenSceneState
                 _model.formKey.currentState?.validate();
               });
             }
-            emit(EnableLoginButtonEvent(_model.areFieldsValid()));
+            _updateButtonState();
           },
           validator: (value) {
             // Show server-side error if set (from login failure)
@@ -174,53 +198,27 @@ class _LoginScreenSceneState
   }
 
   Widget _buildPasswordField() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        AppText(
-          "كلمة المرور",
-          color: AppColors.secondary,
-          fontSize: 14,
-          fontWeight: FontWeight.w400,
-        ),
-        8.height,
-        AppTextField(
-          hintText: "******",
-          controller: _model.passwordController,
-          obscureText: _model.passwordVisible,
-          keyboardType: TextInputType.number,
-          maxLength: 6,
-          inputFormatters: [
-            FilteringTextInputFormatter.digitsOnly,
-          ],
-          onChanged: (_) {
-            emit(EnableLoginButtonEvent(_model.areFieldsValid()));
-          },
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return "كلمة المرور مطلوبة";
-            }
-            // Check if it contains only digits
-            if (!RegExp(r'^\d+$').hasMatch(value)) {
-              return "كلمة المرور يجب أن تحتوي على أرقام فقط";
-            }
-            // Check if it's exactly 6 digits
-            if (value.length != 6) {
-              return "كلمة المرور يجب أن تكون 6 أرقام";
-            }
-            return null;
-          },
-          endSuffix: Icon(
-            _model.passwordVisible ? Iconsax.eye : Iconsax.eye_slash,
-            color: AppColors.navy,
-            size: 20,
-          ),
-          onSuffixTap: () {
-            emit(PasswordVisibilityEvent(!_model.passwordVisible));
-          },
-        ),
-      ],
+    return PinInputField(
+      label: "كلمة المرور",
+      controller: _model.passwordController,
+      focusNode: _model.passwordFocusNode,
+      obscureText: true,
+      keyboardType: TextInputType.visiblePassword,
+      textAlign: TextAlign.right,
+      validator: (value) {
+        if (value == null || value.isEmpty) {
+          return "كلمة المرور مطلوبة";
+        }
+        return null;
+      },
+      onChanged: _updateButtonState,
     );
+  }
+
+  void _updateButtonState() {
+    if (mounted) {
+      emit(EnableLoginButtonEvent(_model.areFieldsValid()));
+    }
   }
 
   Widget _buildForgotPasswordLink() {
@@ -273,8 +271,8 @@ class _LoginScreenSceneState
           borderRadius: BorderRadius.circular(8),
           color: AppColors.primary,
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
+        child: const Padding(
+          padding: EdgeInsets.all(12.0),
           child: AppImage(
             AppAssets.fingerPrintWhite,
             height: 40,
@@ -320,10 +318,48 @@ class _LoginScreenSceneState
 
   @override
   void listenToState(BuildContext context, BaseStates state) {
-    if (state is OnLoginSuccessState) {
-      // Initialize VLens SDK and navigate to it
-      _initializeVLensSDK(context);
+    if (state is OnLoginLoadingState) {
+      // Show loading dialog immediately
+      if (!_isLoadingDialogShowing) {
+        _isLoadingDialogShowing = true;
+        // Use post frame callback to ensure context is ready
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && context.mounted && _isLoadingDialogShowing) {
+            try {
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                barrierColor: Colors.black54,
+                builder: (dialogContext) => const Dialog(
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  child: Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                ),
+              );
+            } catch (e) {
+              _isLoadingDialogShowing = false;
+            }
+          } else {
+            _isLoadingDialogShowing = false;
+          }
+        });
+      }
+    } else if (state is OnLoginSuccessState) {
+      // Hide loading dialog if showing
+      if (_isLoadingDialogShowing) {
+        _isLoadingDialogShowing = false;
+        Navigator.of(context).pop(); // Close loading dialog
+      }
+      // Response is already printed in terminal by BLoC
+      // No navigation needed
     } else if (state is OnLoginErrorState) {
+      // Hide loading dialog if showing
+      if (_isLoadingDialogShowing) {
+        _isLoadingDialogShowing = false;
+        Navigator.of(context).pop(); // Close loading dialog
+      }
       // Show error message
       _model.phoneNumberError = state.errorMessage;
       emit(UpdateLoginScreenUIEvent(_model));
@@ -369,50 +405,6 @@ class _LoginScreenSceneState
     ));
   }
 
-  void _initializeVLensSDK(BuildContext context) {
-    // Configure VLens SDK
-    final sdkConfig = SdkConfig(
-      transactionId: DateTime.now().millisecondsSinceEpoch.toString(),
-      isLivenessOnly: false,
-      isNationalIdOnly: false,
-      env: EnvironmentConfig(
-        apiBaseUrl: "https://api.vlenseg.com",
-        accessToken: "", // TODO: Get access token from login response
-        refreshToken: "", // TODO: Get refresh token from login response
-        apiKey: "W70qYFzumZYn9nPqZXdZ39eRjpW5qRPrZ4jlxlG6c", // TODO: Replace with your API key
-        tenancyName: "silverkey2", // TODO: Replace with your tenancy name
-      ),
-      defaultLocale: "ar", // Arabic locale
-      colors: ColorsConfig(
-        light: ColorConfig(
-          accent: "#4E5A78",
-          primary: "#397374",
-          secondary: "#FF4081",
-          background: "#FEFEFE",
-          dark: "#000000",
-          light: "#FFFFFF",
-        ),
-        dark: ColorConfig(
-          accent: "#FFC107",
-          primary: "#2196F3",
-          secondary: "#FF4081",
-          background: "#000000",
-          dark: "#FFFFFF",
-          light: "#000000",
-        ),
-      ),
-      errorMessages: [
-        ApiError(
-          errorCode: 101,
-          errorMessageEn: "Network error",
-          errorMessageAr: "خطأ في الشبكة",
-        ),
-      ],
-    );
-
-    // Initialize VLens SDK - this will automatically navigate to FlowController
-    VLensManager().init(context, sdkConfig);
-  }
 }
 
 // Custom painter for wavy background

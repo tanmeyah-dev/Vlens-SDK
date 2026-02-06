@@ -31,11 +31,15 @@ class _VerificationSuccessDialogState extends State<VerificationSuccessDialog> {
       if (mounted) {
         Navigator.of(context).pop(); // Close success dialog
         // Use a small delay to ensure dialog is fully closed before navigation
-        Future.delayed(const Duration(milliseconds: 100), () {
-          // Navigate to username security code screen
+        Future.delayed(const Duration(milliseconds: 300), () {
+          // Navigate to email input screen
           final navContext = widget.navigationContext ?? context;
           if (navContext.mounted) {
-            Navigator.of(navContext).pushNamed(RoutePath.usernameSecurityCode);
+            print('🧭 Navigating to email input screen...');
+            Navigator.of(navContext).pushNamed(RoutePath.emailInput);
+            print('✅ Navigation completed');
+          } else {
+            print('⚠️ Navigation context not mounted');
           }
           widget.onDismiss?.call(); // Call the callback if provided
         });
