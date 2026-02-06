@@ -347,30 +347,39 @@ class _LoginScreenSceneState
         });
       }
     } else if (state is OnLoginSuccessState) {
+      // Status code is 200 - navigate to home screen
       // Hide loading dialog if showing
       if (_isLoadingDialogShowing) {
         _isLoadingDialogShowing = false;
         Navigator.of(context).pop(); // Close loading dialog
       }
-      // Response is already printed in terminal by BLoC
-      // No navigation needed
+      // Navigate to home screen only when status code is 200
+      if (mounted && context.mounted) {
+        Navigator.of(context).pushReplacementNamed(RoutePath.home);
+      }
     } else if (state is OnLoginErrorState) {
+      // Status code is NOT 200 - stay on login screen and show error
       // Hide loading dialog if showing
       if (_isLoadingDialogShowing) {
         _isLoadingDialogShowing = false;
         Navigator.of(context).pop(); // Close loading dialog
       }
-      // Show error message
+      // Clear previous errors
+      _model.phoneNumberError = null;
+      _model.passwordError = null;
+      // Set error message from API response
       _model.phoneNumberError = state.errorMessage;
       emit(UpdateLoginScreenUIEvent(_model));
-      // Show snackbar with error message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(state.errorMessage),
-          backgroundColor: AppColors.error,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      // Show snackbar with error message from API response
+      if (mounted && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(state.errorMessage),
+            backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
       // Use a post-frame callback to ensure UI is updated before validation
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_model.formKey.currentState != null && mounted) {

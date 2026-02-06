@@ -6,4 +6,5 @@ class RoutePath {
   static const String usernameSecurityCode = '/username-security-code';
   static const String mobileNumber = '/mobile-number';
   static const String emailInput = '/email-input';
+  static const String home = '/home';
 }

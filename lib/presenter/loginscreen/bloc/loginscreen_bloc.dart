@@ -116,9 +116,10 @@ class LoginScreenBloc extends BaseBloc {
       print('═══════════════════════════════════════════════════════');
       print('');
 
+      // Only navigate to home if status code is exactly 200
       if (response.statusCode == 200) {
         // Success - parse response
-        print('✅ Login API successful');
+        print('✅ Login API successful - Status Code: 200');
         
         try {
           // Parse response
@@ -151,6 +152,7 @@ class LoginScreenBloc extends BaseBloc {
           
           _model.isLoading = false;
           emit(UpdateLoginScreenUI(_model));
+          // Only emit success state when status code is 200
           emit(OnLoginSuccessState());
         } catch (e, stackTrace) {
           print('');
@@ -169,29 +171,92 @@ class LoginScreenBloc extends BaseBloc {
           emit(OnLoginErrorState('فشل في معالجة الاستجابة من الخادم'));
         }
       } else {
-        // Error response
+        // Status code is NOT 200 - stay on login screen and show error
+        print('❌ Login API failed - Status Code: ${response.statusCode}');
         String errorMessage = 'فشل في تسجيل الدخول';
         
         try {
           if (response.body.isNotEmpty) {
             final errorBody = jsonDecode(response.body);
+            // Try multiple common error message fields
             errorMessage = errorBody['message'] ?? 
+                          errorBody['Message'] ??
                           errorBody['error'] ?? 
+                          errorBody['Error'] ??
                           errorBody['errorMessage'] ??
+                          errorBody['ErrorMessage'] ??
                           errorBody['error_message'] ??
+                          errorBody['errorMessage'] ??
                           errorBody['data']?['message'] ??
+                          errorBody['data']?['Message'] ??
                           errorBody['data']?['error'] ??
+                          errorBody['data']?['Error'] ??
+                          errorBody['errors']?[0]?['message'] ??
+                          errorBody['errors']?[0]?['Message'] ??
+                          (errorBody['errors'] is List && (errorBody['errors'] as List).isNotEmpty 
+                            ? errorBody['errors'][0].toString() 
+                            : null) ??
                           'فشل في تسجيل الدخول';
+            
+            // If errorMessage is still default, try to get any string value from response
+            if (errorMessage == 'فشل في تسجيل الدخول' && errorBody is Map) {
+              final values = errorBody.values.where((v) => v is String && v.isNotEmpty).toList();
+              if (values.isNotEmpty) {
+                errorMessage = values.first.toString();
+              }
+            }
+          } else {
+            // No body, use status code based message
+            switch (response.statusCode) {
+              case 400:
+                errorMessage = 'طلب غير صالح';
+                break;
+              case 401:
+                errorMessage = 'غير مصرح - يرجى التحقق من بيانات الدخول';
+                break;
+              case 403:
+                errorMessage = 'غير مصرح بالوصول';
+                break;
+              case 404:
+                errorMessage = 'المسار غير موجود';
+                break;
+              case 500:
+                errorMessage = 'خطأ في الخادم';
+                break;
+              default:
+                errorMessage = 'فشل في تسجيل الدخول (رمز الخطأ: ${response.statusCode})';
+            }
           }
         } catch (e) {
           print('⚠️ Error parsing error response: $e');
+          print('⚠️ Response body: ${response.body}');
+          // Use status code based message if parsing fails
+          switch (response.statusCode) {
+            case 400:
+              errorMessage = 'طلب غير صالح';
+              break;
+            case 401:
+              errorMessage = 'غير مصرح - يرجى التحقق من بيانات الدخول';
+              break;
+            case 403:
+              errorMessage = 'غير مصرح بالوصول';
+              break;
+            case 404:
+              errorMessage = 'المسار غير موجود';
+              break;
+            case 500:
+              errorMessage = 'خطأ في الخادم';
+              break;
+            default:
+              errorMessage = 'فشل في تسجيل الدخول (رمز الخطأ: ${response.statusCode})';
+          }
         }
 
-        print('❌ Login API failed with status code: ${response.statusCode}');
-        print('❌ Error message: $errorMessage');
+        print('❌ Error message extracted: $errorMessage');
         
         _model.isLoading = false;
         emit(UpdateLoginScreenUI(_model));
+        // Emit error state - user stays on login screen
         emit(OnLoginErrorState(errorMessage));
       }
     } catch (e) {
