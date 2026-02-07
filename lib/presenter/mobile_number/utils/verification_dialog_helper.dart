@@ -4,21 +4,34 @@ import '../widget/verification_dialog.dart';
 class VerificationDialogHelper {
   static void showVerificationDialog(
     BuildContext context,
-    String lastTwoDigits,
-  ) {
+    String lastTwoDigits, {
+    String? mobileNumber,
+    String? phoneNumberOtpRequestId,
+    String? transactionId,
+  }) {
     showGeneralDialog(
       context: context,
       barrierDismissible: false,
       barrierColor: Colors.black.withOpacity(0.5),
       transitionDuration: const Duration(milliseconds: 300),
+      // Use MediaQuery to ensure dialog respects keyboard insets
+      useRootNavigator: false,
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
-        return VerificationDialog(
-          lastTwoDigits: lastTwoDigits,
-          parentContext: context, // Pass original context for navigation
-          onConfirm: (pin) {
-            // This callback will be called after success dialog dismisses
-            // The navigation is handled in the success dialog's onDismiss
-          },
+        return MediaQuery.removePadding(
+          context: dialogContext,
+          removeTop: false,
+          removeBottom: false,
+          child: VerificationDialog(
+            lastTwoDigits: lastTwoDigits,
+            mobileNumber: mobileNumber,
+            phoneNumberOtpRequestId: phoneNumberOtpRequestId,
+            transactionId: transactionId,
+            parentContext: context, // Pass original context for navigation
+            onConfirm: (pin) {
+              // This callback will be called after success dialog dismisses
+              // The navigation is handled in the success dialog's onDismiss
+            },
+          ),
         );
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {

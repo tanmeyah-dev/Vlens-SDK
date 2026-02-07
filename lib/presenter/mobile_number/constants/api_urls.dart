@@ -1,0 +1,85 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+
+/// Helper class to get the correct API base URL based on the platform
+/// For Android Emulator: uses 10.0.2.2 (maps to host's localhost)
+/// For iOS Simulator: uses localhost
+/// For Physical Devices: uses the actual IP address
+class ApiUrls {
+  // Base IP address for local development server
+  static const String _localServerIp = '192.168.51.187';
+  static const String _localServerPort = '8088';
+  
+  // Set to true if you're using a physical device (not emulator/simulator)
+  // Set to false if you're using Android emulator or iOS simulator
+  static bool usePhysicalDeviceIp = false;
+  
+  // Set to false if your server uses HTTP instead of HTTPS
+  // Set to true if your server uses HTTPS (default)
+  static bool useHttps = true;
+  
+  /// Get the protocol (http or https)
+  static String get _protocol => useHttps ? 'https' : 'http';
+  
+  /// Get the base URL for local development server
+  /// Automatically adjusts based on platform
+  static String getLocalBaseUrl() {
+    final protocol = _protocol;
+    
+    if (kIsWeb) {
+      // Web platform - use localhost
+      return '$protocol://localhost:$_localServerPort';
+    }
+    
+    if (Platform.isAndroid) {
+      if (usePhysicalDeviceIp) {
+        // Physical Android device - use actual IP (must be on same network)
+        return '$protocol://$_localServerIp:$_localServerPort';
+      } else {
+        // Android Emulator uses 10.0.2.2 to access host's localhost
+        return '$protocol://10.0.2.2:$_localServerPort';
+      }
+    } else if (Platform.isIOS) {
+      if (usePhysicalDeviceIp) {
+        // Physical iOS device - use actual IP (must be on same network)
+        return '$protocol://$_localServerIp:$_localServerPort';
+      } else {
+        // iOS Simulator uses localhost
+        return '$protocol://localhost:$_localServerPort';
+      }
+    }
+    
+    // Default fallback
+    return '$protocol://$_localServerIp:$_localServerPort';
+  }
+  
+  /// Get the full URL for verify phone API
+  static String getVerifyPhoneUrl() {
+    return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/verify/phone';
+  }
+  
+  /// Get the full URL for create user API
+  /// Production API endpoint
+  static String getCreateUserUrl() {
+    return 'https://api.vlenseg.com/api/DigitalIdentity/Register/StepCreate';
+  }
+  
+  /// Check if running on emulator/simulator
+  static bool isRunningOnEmulator() {
+    if (kIsWeb) return false;
+    if (Platform.isAndroid) {
+      // Android emulator typically uses 10.0.2.2
+      // You can add more sophisticated detection if needed
+      return true; // Assume emulator for now
+    } else if (Platform.isIOS) {
+      // iOS simulator
+      return true;
+    }
+    return false;
+  }
+  
+  /// Get URL for physical device (use actual IP)
+  static String getPhysicalDeviceUrl() {
+    return 'https://$_localServerIp:$_localServerPort';
+  }
+}

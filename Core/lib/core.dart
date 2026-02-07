@@ -42,3 +42,5 @@ export 'extensions/widget_extension.dart';
 
 // Export utils
 export 'utils/ui.dart';
+export 'utils/cache/verification_cache.dart';
+export 'utils/network/http_headers_helper.dart';

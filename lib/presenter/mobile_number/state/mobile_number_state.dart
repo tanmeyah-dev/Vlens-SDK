@@ -7,5 +7,25 @@ class UpdateMobileNumberUI extends RenderDataState<MobileNumberModel> {
 }
 
 class OnMobileNumberSavedState extends NonRenderState {
-  OnMobileNumberSavedState();
+  final String? phoneNumberOtpRequestId;
+  final String? transactionId;
+
+  OnMobileNumberSavedState({
+    this.phoneNumberOtpRequestId,
+    this.transactionId,
+  });
+}
+
+class OnMobileNumberLoadingState extends NonRenderState {
+  OnMobileNumberLoadingState();
+}
+
+class OnMobileNumberErrorState extends NonRenderState {
+  final String errorMessage;
+
+  OnMobileNumberErrorState(this.errorMessage);
+}
+
+class OnPhoneNumberExistsState extends NonRenderState {
+  OnPhoneNumberExistsState();
 }

@@ -20,14 +20,18 @@ class SecurityCodeGuidelines extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Check validation states
-    final hasNonDigits = createCode.isNotEmpty && 
-                        !SecurityCodeValidator.hasOnlyDigits(createCode);
     final isLessThanMinLength = createCode.isNotEmpty && 
                                 !SecurityCodeValidator.hasMinimumLength(createCode, minLength);
-    final isSequential = createCode.isNotEmpty && 
-                        SecurityCodeValidator.isSequential(createCode);
-    final doNotMatch = createCode.length == minLength && 
-                      confirmCode.length == minLength && 
+    final hasNoUppercase = createCode.isNotEmpty && 
+                          !SecurityCodeValidator.hasUppercaseLetter(createCode);
+    final hasNoLowercase = createCode.isNotEmpty && 
+                          !SecurityCodeValidator.hasLowercaseLetter(createCode);
+    final hasNoNumber = createCode.isNotEmpty && 
+                       !SecurityCodeValidator.hasNumber(createCode);
+    final hasNoSpecialChar = createCode.isNotEmpty && 
+                            !SecurityCodeValidator.hasSpecialCharacter(createCode);
+    final doNotMatch = createCode.isNotEmpty && 
+                      confirmCode.isNotEmpty && 
                       !SecurityCodeValidator.codesMatch(createCode, confirmCode);
 
     return Container(
@@ -67,18 +71,28 @@ class SecurityCodeGuidelines extends StatelessWidget {
           ),
           16.height,
           _GuidelineItem(
-            text: "يجب أن تحتوي على أرقام فقط",
-            showError: hasNonDigits,
-          ),
-          8.height,
-          _GuidelineItem(
-            text: "يجب ألا يقل عن $minLength أرقام",
+            text: "يجب ألا يقل عن $minLength أحرف",
             showError: isLessThanMinLength,
           ),
           8.height,
           _GuidelineItem(
-            text: "تجنب إدخال أرقام متسلسلة في رمز الحماية",
-            showError: isSequential,
+            text: "يجب أن يحتوي على حرف كبير واحد على الأقل (A-Z)",
+            showError: hasNoUppercase,
+          ),
+          8.height,
+          _GuidelineItem(
+            text: "يجب أن يحتوي على حرف صغير واحد على الأقل (a-z)",
+            showError: hasNoLowercase,
+          ),
+          8.height,
+          _GuidelineItem(
+            text: "يجب أن يحتوي على رقم واحد على الأقل (0-9)",
+            showError: hasNoNumber,
+          ),
+          8.height,
+          _GuidelineItem(
+            text: "يجب أن يحتوي على رمز خاص واحد على الأقل (!@#\$%...)",
+            showError: hasNoSpecialChar,
           ),
           8.height,
           _GuidelineItem(

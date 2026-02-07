@@ -9,3 +9,13 @@ class UpdateUsernameSecurityCodeUI extends RenderDataState<UsernameSecurityCodeM
 class OnUsernameSecurityCodeSavedState extends NonRenderState {
   OnUsernameSecurityCodeSavedState();
 }
+
+class OnUsernameSecurityCodeLoadingState extends NonRenderState {
+  OnUsernameSecurityCodeLoadingState();
+}
+
+class OnUsernameSecurityCodeErrorState extends NonRenderState {
+  final String errorMessage;
+  
+  OnUsernameSecurityCodeErrorState(this.errorMessage);
+}
