@@ -44,8 +44,8 @@ class LoginResponseData {
   final String? phoneNumberOtpRequestId;
   final String? emailOtpRequestId;
   final bool isDigitalIdentityVerified;
-  final String accessToken;
-  final String refreshToken;
+  final String? accessToken;
+  final String? refreshToken;
   final String? encryptedAccessToken;
   final int phoneOtpExpireInSeconds;
   final int emailOtpExpireInSeconds;

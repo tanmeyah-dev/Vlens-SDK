@@ -127,8 +127,8 @@ class _LoginScreenSceneState
         child: GestureDetector(
           onTap: () {
             // TODO: Handle skip action
-            Navigator.of(context)
-                .push(MaterialPageRoute(builder: (context) => const HomeScene()));
+            Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const HomeScene()));
           },
           child: AppText(
             "تخطي",
@@ -419,19 +419,23 @@ class _LoginScreenSceneState
     ));
   }
 
-  void _initializeVLensSDK(BuildContext context, LoginResponseData loginResponseData) {
+  void _initializeVLensSDK(
+      BuildContext context, LoginResponseData loginResponseData) {
     // Configure VLens SDK
     final sdkConfig = SdkConfig(
       transactionId: loginResponseData.transactionId,
       isLivenessOnly: false,
+      logoPath: AppAssets.tanmeyah,
       isNationalIdOnly: false,
       env: EnvironmentConfig(
         apiBaseUrl: "https://api.vlenseg.com",
-        accessToken: loginResponseData.accessToken, // TODO: Get access token from login response
-        refreshToken: loginResponseData.refreshToken ?? "", // TODO: Get refresh token from login response
+        accessToken: loginResponseData
+            .accessToken, // TODO: Get access token from login response
+        refreshToken: loginResponseData.refreshToken ??
+            "", // TODO: Get refresh token from login response
         apiKey:
-            "W70qYFzumZYn9nPqZXdZ39eRjpW5qRPrZ4jlxlG6c", // TODO: Replace with your API key
-        tenancyName: "silverkey2", // TODO: Replace with your tenancy name
+            "j1m9DwIywPS1dPCkFUT2hM2IRr10921gq5PBzQID6xI", // TODO: Replace with your API key
+        tenancyName: "tanmeyah-stg", // TODO: Replace with your tenancy name
       ),
       defaultLocale: "ar", // Arabic locale
       colors: ColorsConfig(
@@ -475,6 +479,17 @@ class _LoginScreenSceneState
 
     // Initialize VLens SDK - this will automatically navigate to FlowController
     VLensManager().init(context, sdkConfig);
+    // VLensManager().onFailure = (context, errorCode, errorMsg) {
+    //   print("eeeeeeee");
+    //   print(errorCode);
+    //   print(errorMsg);
+    //   print("failure");
+    // };
+    // VLensManager().onSuccess = (context, extractedData) {
+    //   print("successssssssss");
+    //   print(extractedData);
+    //   print("success");
+    // };
   }
 }
 
