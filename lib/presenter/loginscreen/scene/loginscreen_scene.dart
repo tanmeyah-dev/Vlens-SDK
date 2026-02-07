@@ -11,13 +11,14 @@ import 'package:core/style/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:tan_sdk/presenter/home/scene/home_scene.dart';
+import 'package:tan_sdk/presenter/loginscreen/model/login_response.dart';
 import 'package:vlens/vlens.dart';
 import 'package:vlens/src/data/models/extracted_data.dart';
 import '../bloc/loginscreen_bloc.dart';
 import '../event/loginscreen_event.dart';
 import '../model/loginscreen_model.dart';
 import '../state/loginscreen_state.dart';
-import '../../../routes/route_path.dart';
 import '../utils/phone_validator.dart';
 import '../../username_security_code/widgets/pin_input_field.dart';
 
@@ -126,7 +127,8 @@ class _LoginScreenSceneState
         child: GestureDetector(
           onTap: () {
             // TODO: Handle skip action
-            Navigator.of(context).pushNamed(RoutePath.main);
+            Navigator.of(context)
+                .push(MaterialPageRoute(builder: (context) => const HomeScene()));
           },
           child: AppText(
             "تخطي",
@@ -247,9 +249,8 @@ class _LoginScreenSceneState
         Expanded(
           child: AppButton(
             title: "تسجيل الدخول",
-            textColor: _model.isLoginButtonDisabled
-                ? AppColors.gray
-                : AppColors.white,
+            textColor:
+                _model.isLoginButtonDisabled ? AppColors.gray : AppColors.white,
             onPressed:
                 _model.isLoginButtonDisabled ? null : () => _validation(),
           ),
@@ -358,7 +359,8 @@ class _LoginScreenSceneState
       }
       // Navigate to home screen only when status code is 200
       if (mounted && context.mounted) {
-        Navigator.of(context).pushReplacementNamed(RoutePath.home);
+        _initializeVLensSDK(context, state.loginResponse.data!);
+        // Navigator.of(context).push(MaterialPageRoute(builder: (context) => const HomeScene()));
       }
     } else if (state is OnLoginErrorState) {
       // Status code is NOT 200 - stay on login screen and show error
@@ -417,16 +419,16 @@ class _LoginScreenSceneState
     ));
   }
 
-  void _initializeVLensSDK(BuildContext context) {
+  void _initializeVLensSDK(BuildContext context, LoginResponseData loginResponseData) {
     // Configure VLens SDK
     final sdkConfig = SdkConfig(
-      transactionId: DateTime.now().millisecondsSinceEpoch.toString(),
+      transactionId: loginResponseData.transactionId,
       isLivenessOnly: false,
       isNationalIdOnly: false,
       env: EnvironmentConfig(
         apiBaseUrl: "https://api.vlenseg.com",
-        accessToken: "", // TODO: Get access token from login response
-        refreshToken: "", // TODO: Get refresh token from login response
+        accessToken: loginResponseData.accessToken, // TODO: Get access token from login response
+        refreshToken: loginResponseData.refreshToken ?? "", // TODO: Get refresh token from login response
         apiKey:
             "W70qYFzumZYn9nPqZXdZ39eRjpW5qRPrZ4jlxlG6c", // TODO: Replace with your API key
         tenancyName: "silverkey2", // TODO: Replace with your tenancy name
@@ -468,6 +470,7 @@ class _LoginScreenSceneState
         print("failure");
       },
       getExtractedData: true,
+      disableAutoCapture: true,
     );
 
     // Initialize VLens SDK - this will automatically navigate to FlowController

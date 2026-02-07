@@ -15,8 +15,9 @@ import '../state/mobile_number_state.dart';
 import '../utils/verification_dialog_helper.dart';
 import '../widgets/app_header.dart';
 import '../widgets/mobile_number_field.dart';
-import '../../../routes/route_path.dart';
 import 'package:core/utils/cache/verification_cache.dart';
+
+import '../../loginscreen/scene/loginscreen_scene.dart';
 
 class MobileNumberScene extends StatefulWidget {
   const MobileNumberScene({super.key});
@@ -216,8 +217,8 @@ class _MobileNumberSceneState
       }
       // Phone number exists - navigate to login screen
       print('📱 OnPhoneNumberExistsState received - Navigating to login screen');
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        RoutePath.loginScreen,
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreenScene()),
         (route) => false,
       );
     } else if (state is OnMobileNumberSavedState) {

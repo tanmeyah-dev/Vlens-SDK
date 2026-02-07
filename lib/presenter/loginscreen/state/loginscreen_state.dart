@@ -1,5 +1,6 @@
 import 'package:core/bases/states/base/non_render_state.dart';
 import 'package:core/bases/states/base/render_data_state.dart';
+import 'package:tan_sdk/presenter/loginscreen/model/login_response.dart';
 import '../model/loginscreen_model.dart';
 
 class InitLoginScreen extends RenderDataState<LoginScreenModel> {
@@ -10,7 +11,11 @@ class UpdateLoginScreenUI extends RenderDataState<LoginScreenModel> {
   UpdateLoginScreenUI(super.data);
 }
 
-class OnLoginSuccessState extends NonRenderState {}
+class OnLoginSuccessState extends NonRenderState {
+  final LoginResponse loginResponse;
+  
+  OnLoginSuccessState(this.loginResponse);
+}
 
 class OnLoginErrorState extends NonRenderState {
   final String errorMessage;

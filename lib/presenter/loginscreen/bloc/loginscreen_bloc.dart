@@ -5,6 +5,7 @@ import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:http/http.dart' as http;
 import '../event/loginscreen_event.dart';
 import '../model/loginscreen_model.dart';
+import '../model/login_response.dart';
 import '../state/loginscreen_state.dart';
 import '../utils/device_info_helper.dart';
 
@@ -132,28 +133,32 @@ class LoginScreenBloc extends BaseBloc {
           }
           
           final responseBody = jsonDecode(response.body);
-          print('✅ JSON decoded successfully');
-          print('📋 Response body: $responseBody');
-          
-          // Print formatted response
-          print('');
-          print('═══════════════════════════════════════════════════════');
-          print('📊 LOGIN RESPONSE DATA');
-          print('═══════════════════════════════════════════════════════');
-          if (responseBody is Map<String, dynamic>) {
-            responseBody.forEach((key, value) {
-              print('$key: $value');
-            });
-          } else {
-            print('Response: $responseBody');
+          if (responseBody is! Map<String, dynamic>) {
+            print('⚠️ Invalid response shape');
+            _model.isLoading = false;
+            emit(UpdateLoginScreenUI(_model));
+            emit(OnLoginErrorState('استجابة غير صالحة من الخادم'));
+            return;
           }
-          print('═══════════════════════════════════════════════════════');
-          print('');
-          
+
+          final loginResponse = LoginResponse.fromJson(responseBody);
+          print('✅ Login response parsed successfully');
+          if (loginResponse.data != null) {
+            final d = loginResponse.data!;
+            print('📊 data: hasPendingRequest=${d.hasPendingRequest}, '
+                'maskedPhoneNumber=${d.maskedPhoneNumber}, '
+                'isPhoneNumberConfirmationRequired=${d.isPhoneNumberConfirmationRequired}, '
+                'phoneNumberOtpRequestId=${d.phoneNumberOtpRequestId}, '
+                'transactionId=${d.transactionId}');
+          }
+          if (loginResponse.errorCode != null || loginResponse.errorMessage != null) {
+            print('⚠️ API reported error: ${loginResponse.errorCode} - ${loginResponse.errorMessage}');
+          }
+
           _model.isLoading = false;
           emit(UpdateLoginScreenUI(_model));
           // Only emit success state when status code is 200
-          emit(OnLoginSuccessState());
+          emit(OnLoginSuccessState(loginResponse));
         } catch (e, stackTrace) {
           print('');
           print('═══════════════════════════════════════════════════════');

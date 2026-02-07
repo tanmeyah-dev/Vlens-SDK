@@ -4,7 +4,8 @@ import 'package:core/utils/ui.dart';
 import 'package:core/style/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
-import '../../../../routes/route_path.dart';
+
+import '../../email_input/scene/email_input_scene.dart';
 
 class VerificationSuccessDialog extends StatefulWidget {
   final VoidCallback? onDismiss;
@@ -36,7 +37,9 @@ class _VerificationSuccessDialogState extends State<VerificationSuccessDialog> {
           final navContext = widget.navigationContext ?? context;
           if (navContext.mounted) {
             print('🧭 Navigating to email input screen...');
-            Navigator.of(navContext).pushNamed(RoutePath.emailInput);
+            Navigator.of(navContext).push(
+              MaterialPageRoute(builder: (_) => const EmailInputScene()),
+            );
             print('✅ Navigation completed');
           } else {
             print('⚠️ Navigation context not mounted');

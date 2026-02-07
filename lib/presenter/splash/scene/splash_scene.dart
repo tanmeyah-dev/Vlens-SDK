@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:core/components/image/app_image.dart';
 import 'package:core/utils/ui.dart';
 import 'package:core/style/app_colors.dart';
-import '../../../routes/route_path.dart';
+
+import '../../mobile_number/scene/mobile_number_scene.dart';
 
 class SplashScene extends StatefulWidget {
   const SplashScene({super.key});
@@ -18,7 +19,9 @@ class _SplashSceneState extends State<SplashScene> {
     // Navigate to mobile number screen after 2 seconds
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed(RoutePath.mobileNumber);
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const MobileNumberScene()),
+        );
       }
     });
   }

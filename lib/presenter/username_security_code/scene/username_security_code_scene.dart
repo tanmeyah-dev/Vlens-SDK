@@ -7,7 +7,7 @@ import 'package:core/extensions/widget_extension.dart';
 import 'package:core/utils/ui.dart';
 import 'package:core/style/app_colors.dart';
 import 'package:flutter/material.dart';
-import '../../../routes/route_path.dart';
+import '../../loginscreen/scene/loginscreen_scene.dart';
 import '../../mobile_number/widgets/app_header.dart';
 import '../../mobile_number/widgets/mobile_number_field.dart';
 import '../bloc/username_security_code_bloc.dart';
@@ -257,7 +257,9 @@ class _UsernameSecurityCodeSceneState
         Navigator.of(context).pop(); // Close loading dialog
       }
       // Navigate to login screen
-      Navigator.of(context).pushNamed(RoutePath.loginScreen);
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const LoginScreenScene()),
+      );
     } else if (state is OnUsernameSecurityCodeErrorState) {
       // Hide loading dialog if showing
       if (_isLoadingDialogShowing) {

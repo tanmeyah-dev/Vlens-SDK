@@ -4,7 +4,8 @@ import 'package:core/utils/ui.dart';
 import 'package:core/style/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
-import '../../../../routes/route_path.dart';
+
+import '../../username_security_code/scene/username_security_code_scene.dart';
 
 class EmailVerificationSuccessDialog extends StatefulWidget {
   final VoidCallback? onDismiss;
@@ -35,7 +36,9 @@ class _EmailVerificationSuccessDialogState extends State<EmailVerificationSucces
           // Navigate to username security code screen
           final navContext = widget.navigationContext ?? context;
           if (navContext.mounted) {
-            Navigator.of(navContext).pushNamed(RoutePath.usernameSecurityCode);
+            Navigator.of(navContext).push(
+              MaterialPageRoute(builder: (_) => const UsernameSecurityCodeScene()),
+            );
           }
           widget.onDismiss?.call(); // Call the callback if provided
         });
