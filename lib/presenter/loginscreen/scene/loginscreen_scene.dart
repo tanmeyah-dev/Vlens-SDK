@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
 import 'package:tan_sdk/presenter/home/scene/home_scene.dart';
 import 'package:tan_sdk/presenter/loginscreen/model/login_response.dart';
+import 'package:uuid/uuid.dart';
 import 'package:vlens/vlens.dart';
 import 'package:vlens/src/data/models/extracted_data.dart';
 import '../bloc/loginscreen_bloc.dart';
@@ -423,7 +424,7 @@ class _LoginScreenSceneState
       BuildContext context, LoginResponseData loginResponseData) {
     // Configure VLens SDK
     final sdkConfig = SdkConfig(
-      transactionId: loginResponseData.transactionId,
+      transactionId: const Uuid().v4(),
       isLivenessOnly: false,
       logoPath: AppAssets.tanmeyah,
       isNationalIdOnly: false,
@@ -464,11 +465,13 @@ class _LoginScreenSceneState
         ),
       ],
       onSuccess: (ExtractedData? p1) {
+        ///TODO here you will navigate user to new screen with the extracted data
         print(p1);
         print("success");
         print(p1?.idFrontData?.firstName);
       },
       onFailure: (String errorCode, String errorMsg) {
+        ///TODO here you will show error to user
         print(errorCode);
         print(errorMsg);
         print("failure");
