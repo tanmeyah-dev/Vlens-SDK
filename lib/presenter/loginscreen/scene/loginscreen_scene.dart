@@ -10,12 +10,16 @@ import 'package:core/utils/ui.dart';
 import 'package:core/style/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:iconsax_flutter/iconsax_flutter.dart';
+import '../../home/scene/home_scene.dart';
+import '../model/login_response.dart';
+import 'package:vlens/vlens.dart';
 import '../bloc/loginscreen_bloc.dart';
 import '../event/loginscreen_event.dart';
 import '../model/loginscreen_model.dart';
 import '../state/loginscreen_state.dart';
-import '../../../routes/route_path.dart';
 import '../utils/phone_validator.dart';
+import '../utils/verify_user_otp_dialog_helper.dart';
 import '../../username_security_code/widgets/pin_input_field.dart';
 
 class LoginScreenScene extends StatefulWidget {
@@ -44,7 +48,7 @@ class _LoginScreenSceneState
   Widget buildWidget(
       BuildContext context, RenderDataState<LoginScreenModel> state) {
     _model = state.data;
-    
+
     // Add listeners only once to prevent excessive state updates
     if (!_listenersAdded) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -123,7 +127,8 @@ class _LoginScreenSceneState
         child: GestureDetector(
           onTap: () {
             // TODO: Handle skip action
-            Navigator.of(context).pushNamed(RoutePath.main);
+            Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const HomeScene()));
           },
           child: AppText(
             "تخطي",
@@ -244,9 +249,8 @@ class _LoginScreenSceneState
         Expanded(
           child: AppButton(
             title: "تسجيل الدخول",
-            textColor: _model.isLoginButtonDisabled
-                ? AppColors.gray
-                : AppColors.white,
+            textColor:
+                _model.isLoginButtonDisabled ? AppColors.gray : AppColors.white,
             onPressed:
                 _model.isLoginButtonDisabled ? null : () => _validation(),
           ),
@@ -353,9 +357,26 @@ class _LoginScreenSceneState
         _isLoadingDialogShowing = false;
         Navigator.of(context).pop(); // Close loading dialog
       }
-      // Navigate to home screen only when status code is 200
+      // Check if phone number confirmation is required
       if (mounted && context.mounted) {
-        Navigator.of(context).pushReplacementNamed(RoutePath.home);
+        final loginResponseData = state.loginResponse.data!;
+        if (loginResponseData.isPhoneNumberConfirmationRequired == true) {
+          // Show user OTP verification dialog
+          // Get the phone number and password from the model (user entered them during login)
+          final phoneNumber = _model.mobileNumberController.text;
+          final password = _model.passwordController.text;
+          VerifyUserOTPDialogHelper.showVerifyUserOTPDialog(
+            context,
+            phoneNumber: phoneNumber,
+            password: password,
+            maskedPhoneNumber: loginResponseData.maskedPhoneNumber,
+            phoneNumberOtpRequestId: loginResponseData.phoneNumberOtpRequestId,
+            transactionId: loginResponseData.transactionId,
+          );
+        } else {
+          // Initialize VLens SDK if no phone confirmation required
+          _initializeVLensSDK(context, loginResponseData);
+        }
       }
     } else if (state is OnLoginErrorState) {
       // Status code is NOT 200 - stay on login screen and show error
@@ -394,19 +415,19 @@ class _LoginScreenSceneState
     _model.phoneNumberError = null;
     _model.passwordError = null;
     emit(UpdateLoginScreenUIEvent(_model));
-    
+
     // Validate form - if validation fails, Flutter automatically shows errors on TextFormField
     // We need to wait for the UI to update before validating
     await Future.microtask(() {});
-    
+
     final isValid = _model.formKey.currentState!.validate();
-    
+
     if (!isValid) {
       // Validation failed - errors are automatically displayed by TextFormField
       // The form will show red borders and error messages below the fields
       return;
     }
-    
+
     // Only proceed with login if form validation passes
     emit(LoginEvent(
       _model.mobileNumberController.text,
@@ -414,6 +435,91 @@ class _LoginScreenSceneState
     ));
   }
 
+  void _initializeVLensSDK(
+      BuildContext context, LoginResponseData loginResponseData) {
+    // Configure VLens SDK
+    final sdkConfig = SdkConfig(
+      transactionId: loginResponseData.transactionId,
+      isLivenessOnly: false,
+      isNationalIdOnly: false,
+      env: EnvironmentConfig(
+        apiBaseUrl: "https://api.vlenseg.com",
+        accessToken: loginResponseData.accessToken ?? "",
+        refreshToken: loginResponseData.refreshToken ?? "",
+        apiKey:
+            "j1m9DwIywPS1dPCkFUT2hM2IRr10921gq5PBzQID6xI", // TODO: Replace with your API key
+        tenancyName: "tanmeyah-stg", // TODO: Replace with your tenancy name
+      ),
+      defaultLocale: "ar", // Arabic locale
+      colors: ColorsConfig(
+        light: ColorConfig(
+          accent: "#4E5A78",
+          primary: "#397374",
+          secondary: "#FF4081",
+          background: "#FEFEFE",
+          dark: "#000000",
+          light: "#FFFFFF",
+        ),
+        dark: ColorConfig(
+          accent: "#FFC107",
+          primary: "#2196F3",
+          secondary: "#FF4081",
+          background: "#000000",
+          dark: "#FFFFFF",
+          light: "#000000",
+        ),
+      ),
+      errorMessages: [
+        ApiError(
+          errorCode: 101,
+          errorMessageEn: "Network error",
+          errorMessageAr: "خطأ في الشبكة",
+        ),
+      ],
+    );
+
+    // Get VLensManager instance and set callbacks BEFORE init()
+    final vlensManager = VLensManager();
+
+    // Set callbacks BEFORE init() to ensure our handlers are used
+    vlensManager.onSuccess = () {
+      print("✅ VLens SDK success - verification completed");
+      // Navigate to home screen after VLens SDK success
+      if (mounted && context.mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const HomeScene()),
+        );
+      }
+    };
+
+    vlensManager.onFailure = (String error) {
+      print("❌ VLens SDK failure: $error");
+      // Show error to user
+      if (mounted && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('خطأ في التحقق: $error'),
+            backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    };
+
+    // Initialize VLens SDK - this will automatically navigate to FlowController
+    vlensManager.init(context, sdkConfig);
+    // VLensManager().onFailure = (context, errorCode, errorMsg) {
+    //   print("eeeeeeee");
+    //   print(errorCode);
+    //   print(errorMsg);
+    //   print("failure");
+    // };
+    // VLensManager().onSuccess = (context, extractedData) {
+    //   print("successssssssss");
+    //   print(extractedData);
+    //   print("success");
+    // };
+  }
 }
 
 // Custom painter for wavy background
