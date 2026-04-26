@@ -14,6 +14,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../../../utils/sdk_http_client.dart';
 import '../../../routes/route_path.dart';
+import '../../mobile_number/constants/api_urls.dart';
 import '../model/step_verify_email_response.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 
@@ -46,8 +47,7 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
   bool _isLoading = false;
   String? _errorMessage;
   
-  /// Production API URL for verify email
-  static const String _apiUrlVerify = 'https://192.168.51.187:8088/vlens/api/v1/digital/identity/email/verify-otp';
+  String get _apiUrlVerify => ApiUrls.getVerifyEmailOtpUrl();
 
   @override
   void initState() {

@@ -20,6 +20,12 @@ class VerificationCache {
     await prefs.setString(_keyMobileNumber, mobileNumber);
   }
 
+  /// Persist mobile alone (e.g. when OTP ids are missing but user already entered the number).
+  Future<void> setMobileNumber(String mobileNumber) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyMobileNumber, mobileNumber.trim());
+  }
+
   /// Save email verification data
   Future<void> setEmailVerificationData({
     required String emailOtpRequestId,

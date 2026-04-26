@@ -7,6 +7,7 @@ import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import 'package:http/http.dart' as http;
 import '../../../utils/sdk_http_client.dart';
+import '../../mobile_number/constants/api_urls.dart';
 import '../event/email_input_event.dart';
 import '../model/email_input_model.dart';
 import '../model/send_email_otp_response.dart';
@@ -15,8 +16,7 @@ import '../state/email_input_state.dart';
 class EmailInputBloc extends BaseBloc {
   final EmailInputModel _model;
   
-  static const String _apiUrlStepVerifyEmail =
-      'https://192.168.51.187:8088/vlens/api/v1/digital/identity/email/send-otp';
+  String get _apiUrlStepVerifyEmail => ApiUrls.getSendEmailOtpUrl();
 
   EmailInputBloc(this._model)
       : super(initialState: InitScreen(_model)) {

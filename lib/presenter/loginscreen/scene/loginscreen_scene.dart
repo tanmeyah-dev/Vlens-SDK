@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:core/bases/base_state.dart';
 import 'package:core/bases/states/base/base_state.dart';
 import 'package:core/bases/states/base/render_data_state.dart';
@@ -8,6 +10,7 @@ import 'package:core/components/textField/app_textfield.dart';
 import 'package:core/extensions/widget_extension.dart';
 import 'package:core/utils/ui.dart';
 import 'package:core/style/app_colors.dart';
+import 'package:core/utils/cache/verification_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
@@ -392,13 +395,25 @@ class _LoginScreenSceneState
         if (loginResponseData.isPhoneNumberConfirmationRequired == true) {
           final phoneNumber = _model.mobileNumberController.text;
           final password = _model.passwordController.text;
+          final otpReqId = loginResponseData.phoneNumberOtpRequestId;
+          final txId = loginResponseData.transactionId;
+          if (otpReqId != null &&
+              otpReqId.isNotEmpty &&
+              txId != null &&
+              txId.isNotEmpty) {
+            unawaited(VerificationCache().setVerificationData(
+              phoneNumberOtpRequestId: otpReqId,
+              transactionId: txId,
+              mobileNumber: phoneNumber,
+            ));
+          }
           VerifyUserOTPDialogHelper.showVerifyUserOTPDialog(
             context,
             phoneNumber: phoneNumber,
             password: password,
             maskedPhoneNumber: loginResponseData.maskedPhoneNumber,
-            phoneNumberOtpRequestId: loginResponseData.phoneNumberOtpRequestId,
-            transactionId: loginResponseData.transactionId,
+            phoneNumberOtpRequestId: otpReqId,
+            transactionId: txId,
           );
         } else {
           _initializeVLensSDK(context, loginResponseData);

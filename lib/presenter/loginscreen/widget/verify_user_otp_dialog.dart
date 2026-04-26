@@ -88,7 +88,20 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
   }
 
   Future<void> _verifyOTP() async {
+    print('');
+    print('═══════════════════════════════════════════════════════');
+    print('🔐 VERIFY USER OTP START');
+    print('═══════════════════════════════════════════════════════');
+    print('OTP Length: ${pinController.text.length}');
+    print('Has Phone (widget): ${widget.phoneNumber?.isNotEmpty == true}');
+    print('Has Password (widget): ${widget.password?.isNotEmpty == true}');
+    print(
+        'Has phoneNumberOtpRequestId (widget): ${widget.phoneNumberOtpRequestId?.isNotEmpty == true}');
+    print('═══════════════════════════════════════════════════════');
+    print('');
+
     if (pinController.text.length != 6) {
+      print('❌ OTP validation failed: OTP must be 6 digits');
       _showError('يرجى إدخال الكود المكون من ٦ أرقام');
       return;
     }
@@ -104,22 +117,37 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
 
     if (phoneNumber == null || phoneNumber.isEmpty) {
       _showError('رقم الموبايل مطلوب');
+      print('❌ OTP validation failed: phone number is missing');
       return;
     }
 
     if (password == null || password.isEmpty) {
       _showError('كلمة المرور مطلوبة');
+      print('❌ OTP validation failed: password is missing');
       return;
     }
 
     if (phoneNumberOtpRequestId == null || phoneNumberOtpRequestId.isEmpty) {
-      phoneNumberOtpRequestId =
-          await VerificationCache().getPhoneNumberOtpRequestId();
+      phoneNumberOtpRequestId = await VerificationCache().getPhoneNumberOtpRequestId();
+      print('ℹ️ OTP request id from cache: $phoneNumberOtpRequestId');
     }
 
     if (phoneNumberOtpRequestId == null || phoneNumberOtpRequestId.isEmpty) {
-      _showError('phoneNumberOtpRequestId مطلوب');
-      return;
+      print(
+        '⚠️ phoneNumberOtpRequestId missing; recovering via login (no OTP) request…',
+      );
+      phoneNumberOtpRequestId = await _recoverPhoneNumberOtpRequestIdFromLogin(
+        phoneNumber: phoneNumber,
+        password: password,
+      );
+      if (phoneNumberOtpRequestId == null || phoneNumberOtpRequestId.isEmpty) {
+        _showError(
+          'تعذر الحصول على معرف التحقق. أعد تسجيل الدخول أو تأكد من رد الخادم.',
+        );
+        print('❌ OTP validation failed: phoneNumberOtpRequestId still missing after login recovery');
+        return;
+      }
+      print('✅ Recovered phoneNumberOtpRequestId from login response');
     }
 
     setState(() {
@@ -201,6 +229,7 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
       print('📥 LOGIN API RESPONSE (WITH OTP)');
       print('═══════════════════════════════════════════════════════');
       print('Status Code: ${response.statusCode}');
+      print('Headers: ${response.headers}');
       print('Body: ${response.body}');
       print('═══════════════════════════════════════════════════════');
       print('');
@@ -255,6 +284,7 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
       } else {
         // Status code is NOT 200 - show error
         String errorMessage = 'فشل في تسجيل الدخول';
+        print('⚠️ Non-200 response received in OTP verify login flow');
         try {
           if (response.body.isNotEmpty) {
             final errorBody = jsonDecode(response.body);
@@ -268,6 +298,7 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
                 errorBody['data']?['message'] ??
                 errorBody['data']?['error'] ??
                 'فشل في تسجيل الدخول';
+            print('⚠️ Parsed non-200 error body: $errorBody');
           } else {
             switch (response.statusCode) {
               case 400:
@@ -288,8 +319,10 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
           }
         } catch (e) {
           print('⚠️ Error parsing error response: $e');
+          print('⚠️ Raw non-200 body (unparsed): ${response.body}');
         }
 
+        print('❌ OTP login failed. Final error message: $errorMessage');
         _showError(errorMessage);
       }
     } catch (e) {
@@ -305,13 +338,87 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
         userFriendlyMessage = 'حدث خطأ أثناء التحقق. يرجى المحاولة مرة أخرى';
       }
 
+      print('❌ OTP verify caught exception type: ${e.runtimeType}');
+      print('❌ OTP verify exception details: $e');
+      print('❌ OTP verify user-facing error: $userFriendlyMessage');
       _showError(userFriendlyMessage);
     } finally {
+      print('═══════════════════════════════════════════════════════');
+      print('🔐 VERIFY USER OTP END');
+      print('═══════════════════════════════════════════════════════');
+      print('');
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  /// Same as initial login body (no OTP) — server should return `phoneNumberOtpRequestId`
+  /// when phone confirmation is required. Avoids `phone/send-otp` (417 for existing users).
+  Future<String?> _recoverPhoneNumberOtpRequestIdFromLogin({
+    required String phoneNumber,
+    required String password,
+  }) async {
+    try {
+      final deviceId = await DeviceInfoHelper.getDeviceId();
+      final location = await DeviceInfoHelper.getCurrentLocation();
+      final requestBody = jsonEncode({
+        'phoneNumber': phoneNumber,
+        'password': password,
+        'geoLocation': {
+          'latitude': location['latitude'],
+          'longitude': location['longitude'],
+        },
+        'imei': deviceId,
+      });
+      final headers = HttpHeadersHelper.getDefaultHeaders();
+
+      print('');
+      print('═══════════════════════════════════════════════════════');
+      print('📤 LOGIN RECOVERY (no OTP) — fetch phoneNumberOtpRequestId');
+      print('═══════════════════════════════════════════════════════');
+      print('URL: $_apiUrlLogin');
+      print('Body: $requestBody');
+
+      final response = await SdkHttpClient.post(
+        Uri.parse(_apiUrlLogin),
+        headers: headers,
+        body: requestBody,
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('Request timeout');
+        },
+      );
+
+      print('Status: ${response.statusCode}');
+      print('Body: ${response.body}');
+      print('═══════════════════════════════════════════════════════');
+      print('');
+
+      if (response.body.isEmpty) return null;
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) return null;
+      final loginResponse = LoginResponse.fromJson(
+        Map<String, dynamic>.from(decoded),
+      );
+      final id = loginResponse.data?.phoneNumberOtpRequestId?.trim();
+      final tx = loginResponse.data?.transactionId?.trim();
+      if (id != null && id.isNotEmpty) {
+        unawaited(
+          VerificationCache().setVerificationData(
+            phoneNumberOtpRequestId: id,
+            transactionId: tx ?? '',
+            mobileNumber: phoneNumber,
+          ),
+        );
+      }
+      return id;
+    } catch (e) {
+      print('❌ Login recovery failed: $e');
+      return null;
     }
   }
 
@@ -436,6 +543,10 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
               decoration: BoxDecoration(
                 color: AppColors.white,
                 borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: AppColors.primary,
+                  width: 1,
+                ),
               ),
               padding: const EdgeInsets.all(24),
               child: SingleChildScrollView(
@@ -443,11 +554,28 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    AppText(
-                      "تأكيد رقم الموبايل",
-                      color: AppColors.primary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () => Navigator.of(context).pop(),
+                          child: Icon(
+                            Icons.close,
+                            color: AppColors.primary,
+                            size: 22,
+                          ),
+                        ),
+                        Expanded(
+                          child: Center(
+                            child: AppText(
+                              "تأكيد رقم الموبايل",
+                              color: AppColors.primary,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 22),
+                      ],
                     ),
                     16.height,
                     AppText(
@@ -472,22 +600,35 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
                             width: 1,
                           ),
                         ),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(
-                              Icons.error_outline,
-                              color: AppColors.error,
-                              size: 20,
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.error_outline,
+                                  color: AppColors.error,
+                                  size: 20,
+                                ),
+                                8.width,
+                                Expanded(
+                                  child: AppText(
+                                    'خطأ في الاتصال',
+                                    color: AppColors.error,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    textAlign: TextAlign.start,
+                                  ),
+                                ),
+                              ],
                             ),
-                            8.width,
-                            Expanded(
-                              child: AppText(
-                                _errorMessage!,
-                                color: AppColors.error,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w400,
-                                textAlign: TextAlign.start,
-                              ),
+                            8.height,
+                            AppText(
+                              _errorMessage!,
+                              color: AppColors.error,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                              textAlign: TextAlign.start,
                             ),
                           ],
                         ),

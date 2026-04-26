@@ -12,7 +12,7 @@ class ApiUrls {
   
   // Set to true if you're using a physical device (not emulator/simulator)
   // Set to false if you're using Android emulator or iOS simulator
-  static bool usePhysicalDeviceIp = false;
+  static bool usePhysicalDeviceIp = true;
   
   // Set to false if your server uses HTTP instead of HTTPS
   // Set to true if your server uses HTTPS (default)
@@ -60,12 +60,32 @@ class ApiUrls {
   
   /// Create user (vlens); same host as other fixed local endpoints in the SDK.
   static String getCreateUserUrl() {
-    return 'https://$_localServerIp:$_localServerPort/vlens/api/v1/digital/identity/create-user';
+    return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/create-user';
   }
 
   /// Login (vlens).
   static String getLoginUrl() {
-    return 'https://$_localServerIp:$_localServerPort/vlens/api/v1/digital/identity/login';
+    return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/login';
+  }
+
+  static String getIdentityCheckUrl() {
+    return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/check';
+  }
+
+  static String getSendPhoneOtpUrl() {
+    return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/phone/send-otp';
+  }
+
+  static String getVerifyPhoneOtpUrl() {
+    return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/phone/verify-otp';
+  }
+
+  static String getSendEmailOtpUrl() {
+    return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/email/send-otp';
+  }
+
+  static String getVerifyEmailOtpUrl() {
+    return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/email/verify-otp';
   }
   
   /// Check if running on emulator/simulator
@@ -84,6 +104,6 @@ class ApiUrls {
   
   /// Get URL for physical device (use actual IP)
   static String getPhysicalDeviceUrl() {
-    return 'https://$_localServerIp:$_localServerPort';
+    return '$_protocol://$_localServerIp:$_localServerPort';
   }
 }

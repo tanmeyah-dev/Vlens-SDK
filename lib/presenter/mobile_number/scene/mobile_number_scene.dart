@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:core/bases/base_state.dart';
 import 'package:core/bases/states/base/base_state.dart';
 import 'package:core/bases/states/base/render_data_state.dart';
@@ -241,17 +243,22 @@ class _MobileNumberSceneState
         _isLoadingDialogMounted = false;
         Navigator.of(context, rootNavigator: false).pop(); // Close loading dialog
       }
-      // Save phoneNumberOtpRequestId and transactionId to cache
+      // Always cache the typed mobile number so register/create-user can read it
+      // even when the API omits OTP ids on some platforms.
+      final mobileNumber = _mobileNumberModel.mobileNumberController.text.trim();
+      if (mobileNumber.isNotEmpty) {
+        unawaited(VerificationCache().setMobileNumber(mobileNumber));
+        print('💾 Saved to cache - mobileNumber: $mobileNumber');
+      }
+      // Save phoneNumberOtpRequestId and transactionId when both exist
       if (state.phoneNumberOtpRequestId != null && state.transactionId != null) {
-        final mobileNumber = _mobileNumberModel.mobileNumberController.text;
-        VerificationCache().setVerificationData(
+        unawaited(VerificationCache().setVerificationData(
           phoneNumberOtpRequestId: state.phoneNumberOtpRequestId!,
           transactionId: state.transactionId!,
           mobileNumber: mobileNumber,
-        );
+        ));
         print('💾 Saved to cache - phoneNumberOtpRequestId: ${state.phoneNumberOtpRequestId}');
         print('💾 Saved to cache - transactionId: ${state.transactionId}');
-        print('💾 Saved to cache - mobileNumber: $mobileNumber');
       }
       // Show verification dialog on success (phoneNumberExists == false)
       print(

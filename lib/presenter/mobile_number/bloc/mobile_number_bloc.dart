@@ -5,6 +5,7 @@ import 'package:core/bases/states/base/init_screen.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:http/http.dart' as http;
 import '../../../utils/sdk_http_client.dart';
+import '../constants/api_urls.dart';
 import '../event/mobile_number_event.dart';
 import '../model/mobile_number_model.dart';
 import '../model/mobile_number_response.dart';
@@ -13,10 +14,8 @@ import '../state/mobile_number_state.dart';
 
 class MobileNumberBloc extends BaseBloc {
   final MobileNumberModel _mobileNumberModel;
-  static const String _apiUrlCheck =
-      'https://192.168.51.187:8088/vlens/api/v1/digital/identity/check';
-  static const String _apiUrlStepVerifyPhone =
-      'https://192.168.51.187:8088/vlens/api/v1/digital/identity/phone/send-otp';
+  String get _apiUrlCheck => ApiUrls.getIdentityCheckUrl();
+  String get _apiUrlStepVerifyPhone => ApiUrls.getSendPhoneOtpUrl();
   
   // Flag to prevent duplicate API calls
   bool _isRequestInProgress = false;

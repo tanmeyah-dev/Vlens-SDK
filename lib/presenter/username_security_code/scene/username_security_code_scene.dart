@@ -355,7 +355,10 @@ class _RegisterSceneState
         );
         return;
       }
-      final mobileNumber = widget.mobileNumber ?? _cachedMobileNumber ?? '';
+      var mobileNumber = widget.mobileNumber ?? _cachedMobileNumber ?? '';
+      if (mobileNumber.isEmpty) {
+        mobileNumber = (await VerificationCache().getMobileNumber())?.trim() ?? '';
+      }
       final email = _model.usernameController.text.trim().isNotEmpty
           ? _model.usernameController.text.trim()
           : (_cachedEmail ?? '');

@@ -14,6 +14,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../../../../routes/route_path.dart';
 import '../../../utils/sdk_http_client.dart';
+import '../constants/api_urls.dart';
 import '../utils/verification_success_dialog_helper.dart';
 import '../model/step_verify_phone_response.dart';
 import 'package:core/utils/cache/verification_cache.dart';
@@ -51,12 +52,10 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
   String? _errorMessage;
 
   /// API URL for sending/resending OTP.
-  static const String _apiUrlSendOtp =
-      'https://192.168.51.187:8088/vlens/api/v1/digital/identity/phone/send-otp';
+  String get _apiUrlSendOtp => ApiUrls.getSendPhoneOtpUrl();
 
   /// API URL for verifying OTP code.
-  static const String _apiUrlVerifyOtp =
-      'https://192.168.51.187:8088/vlens/api/v1/digital/identity/phone/verify-otp';
+  String get _apiUrlVerifyOtp => ApiUrls.getVerifyPhoneOtpUrl();
 
   @override
   void initState() {

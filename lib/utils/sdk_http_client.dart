@@ -1,15 +1,12 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
 /// HTTP client for SDK API calls.
 ///
-/// In **debug**, HTTPS to private / loopback hosts can skip certificate
-/// validation (self-signed dev servers). In **release**, validation is strict
-/// unless you opt in with:
-/// `flutter build apk --release --dart-define=ALLOW_INSECURE_TLS=true`
+/// HTTPS to private / loopback hosts can skip certificate validation
+/// (self-signed dev servers) in all build modes.
 ///
 /// For production or store builds, use a CA-trusted certificate on the server
 /// instead of relying on insecure TLS.
@@ -80,11 +77,6 @@ class SdkHttpClient {
     }
   }
 
-  static const bool _allowInsecureTlsViaDefine = bool.fromEnvironment(
-    'ALLOW_INSECURE_TLS',
-    defaultValue: false,
-  );
-
   static bool _isPrivateOrLocalDevHost(String host) {
     final h = host.toLowerCase();
     return h == 'localhost' ||
@@ -94,11 +86,10 @@ class SdkHttpClient {
         h.startsWith('172.');
   }
 
-  /// Use [IOClient] with [badCertificateCallback] only for known dev hosts and
-  /// only when debug mode or explicit dart-define allows it.
+  /// Use [IOClient] with [badCertificateCallback] only for known private dev hosts.
   static bool _shouldAllowInsecureTls(Uri uri) {
     if (uri.scheme != 'https') return false;
     if (!_isPrivateOrLocalDevHost(uri.host)) return false;
-    return kDebugMode || _allowInsecureTlsViaDefine;
+    return true;
   }
 }

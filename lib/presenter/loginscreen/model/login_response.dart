@@ -42,6 +42,13 @@ class LoginResponse {
 
   factory LoginResponse.fromJson(Map<String, dynamic> json) {
     LoginResponseData? data;
+
+    void mergeRootIfMissing(Map<String, dynamic> raw, String key) {
+      if (raw[key] == null && json[key] != null) {
+        raw[key] = json[key];
+      }
+    }
+
     if (json['data'] is Map) {
       final raw = Map<String, dynamic>.from(json['data'] as Map);
       // Some gateways put tokens on the root; merge into `data` for one shape.
@@ -51,7 +58,30 @@ class LoginResponse {
       if (raw['refreshToken'] == null && json['refreshToken'] != null) {
         raw['refreshToken'] = json['refreshToken'];
       }
+      // Same for phone OTP flow: some backends return these on root, not inside `data`.
+      for (final key in [
+        'phoneNumberOtpRequestId',
+        'phoneOtpRequestId',
+        'phone_number_otp_request_id',
+        'PhoneNumberOtpRequestId',
+        'transactionId',
+        'TransactionId',
+        'maskedPhoneNumber',
+        'isPhoneNumberConfirmationRequired',
+        'isPhoneConfirmationRequired',
+      ]) {
+        mergeRootIfMissing(raw, key);
+      }
       data = LoginResponseData.fromJson(raw);
+    } else {
+      // Flat envelope: treat whole JSON as `data` when it looks like login payload.
+      final hasLoginShape = json.containsKey('isPhoneNumberConfirmationRequired') ||
+          json.containsKey('phoneNumberOtpRequestId') ||
+          json.containsKey('phoneOtpRequestId') ||
+          json.containsKey('maskedPhoneNumber');
+      if (hasLoginShape) {
+        data = LoginResponseData.fromJson(Map<String, dynamic>.from(json));
+      }
     }
 
     final tokenOk = (data?.accessToken ?? '').trim().isNotEmpty ||
@@ -171,6 +201,16 @@ class LoginResponseData {
   }
 
   factory LoginResponseData.fromJson(Map<String, dynamic> json) {
+    String? pickString(List<String> keys) {
+      for (final key in keys) {
+        final value = json[key];
+        if (value == null) continue;
+        final asString = value.toString().trim();
+        if (asString.isNotEmpty) return asString;
+      }
+      return null;
+    }
+
     return LoginResponseData(
       hasPendingRequest: _bool(json['hasPendingRequest']),
       maskedPhoneNumber: json['maskedPhoneNumber']?.toString(),
@@ -178,11 +218,20 @@ class LoginResponseData {
           _bool(json['isEmailConfirmationRequired']),
       isEmailConfirmed: _bool(json['isEmailConfirmed']),
       isPhoneNumberConfirmationRequired:
-          _bool(json['isPhoneNumberConfirmationRequired']),
+          _bool(json['isPhoneNumberConfirmationRequired']) ||
+              _bool(json['isPhoneConfirmationRequired']) ||
+              _bool(json['IsPhoneNumberConfirmationRequired']),
       isPhoneNumberConfirmed: _bool(json['isPhoneNumberConfirmed']),
       phoneNumberOtp:
           (json['phoneNumberOtp'] ?? json['phoneOtp'])?.toString(),
-      phoneNumberOtpRequestId: json['phoneNumberOtpRequestId']?.toString(),
+      phoneNumberOtpRequestId: pickString([
+        'phoneNumberOtpRequestId',
+        'phoneOtpRequestId',
+        'phone_number_otp_request_id',
+        'PhoneNumberOtpRequestId',
+        'PhoneOtpRequestId',
+        'phoneNumberOTPRequestId',
+      ]),
       emailOtpRequestId: json['emailOtpRequestId']?.toString(),
       isDigitalIdentityVerified: _bool(json['isDigitalIdentityVerified']),
       accessToken: json['accessToken']?.toString(),

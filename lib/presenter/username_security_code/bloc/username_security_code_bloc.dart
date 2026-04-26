@@ -100,6 +100,12 @@ class UsernameSecurityCodeBloc extends BaseBloc {
         email = (await VerificationCache().getEmail())?.trim() ?? '';
       }
 
+      var phoneNumber = event.mobileNumber.trim();
+      if (phoneNumber.isEmpty) {
+        phoneNumber = (await VerificationCache().getMobileNumber())?.trim() ?? '';
+        print('📦 phoneNumber was empty on event; from cache: ${phoneNumber.isNotEmpty ? "found" : "still empty"}');
+      }
+
       // Prepare request body (vlens create-user: no phoneNumberOtpRequestId / transactionId)
       final requestBody = jsonEncode({
         'password': event.securityCode,
@@ -111,7 +117,7 @@ class UsernameSecurityCodeBloc extends BaseBloc {
         },
         'imei': imei,
         'imsi': imsi,
-        'phoneNumber': event.mobileNumber,
+        'phoneNumber': phoneNumber,
         'skipEmail': false,
       });
 
