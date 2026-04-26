@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants/security_code_constants.dart';
 import '../utils/security_code_validator.dart';
-import '../../mobile_number/utils/phone_validator.dart';
 
 class UsernameSecurityCodeModel {
   final TextEditingController usernameController = TextEditingController();
@@ -36,7 +35,13 @@ class UsernameSecurityCodeModel {
   }
 
   bool isUsernameValid() {
-    return PhoneValidator.validate(usernameController.text) == null;
+    final value = usernameController.text.trim();
+    if (value.isEmpty) {
+      return false;
+    }
+    final emailRegex =
+        RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+    return emailRegex.hasMatch(value);
   }
 
   bool isFormValid() {

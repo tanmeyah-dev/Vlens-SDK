@@ -58,10 +58,14 @@ class ApiUrls {
     return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/verify/phone';
   }
   
-  /// Get the full URL for create user API
-  /// Production API endpoint
+  /// Create user (vlens); same host as other fixed local endpoints in the SDK.
   static String getCreateUserUrl() {
-    return 'https://api.vlenseg.com/api/DigitalIdentity/Register/StepCreate';
+    return 'https://$_localServerIp:$_localServerPort/vlens/api/v1/digital/identity/create-user';
+  }
+
+  /// Login (vlens).
+  static String getLoginUrl() {
+    return 'https://$_localServerIp:$_localServerPort/vlens/api/v1/digital/identity/login';
   }
   
   /// Check if running on emulator/simulator

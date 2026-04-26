@@ -6,16 +6,17 @@ import 'package:core/bases/states/general_state/general_render_state.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import 'package:http/http.dart' as http;
+import '../../../utils/sdk_http_client.dart';
 import '../event/email_input_event.dart';
 import '../model/email_input_model.dart';
-import '../model/step_verify_email_response.dart';
+import '../model/send_email_otp_response.dart';
 import '../state/email_input_state.dart';
 
 class EmailInputBloc extends BaseBloc {
   final EmailInputModel _model;
   
   static const String _apiUrlStepVerifyEmail =
-      'https://api.vlenseg.com/api/DigitalIdentity/Register/StepVerifyEmail';
+      'https://192.168.51.187:8088/vlens/api/v1/digital/identity/email/send-otp';
 
   EmailInputBloc(this._model)
       : super(initialState: InitScreen(_model)) {
@@ -55,7 +56,7 @@ class EmailInputBloc extends BaseBloc {
       // Make API call with better error handling
       http.Response response;
       try {
-        response = await http.post(
+        response = await SdkHttpClient.post(
           Uri.parse(_apiUrlStepVerifyEmail),
           headers: HttpHeadersHelper.getDefaultHeaders(),
           body: requestBody,
@@ -113,55 +114,77 @@ class EmailInputBloc extends BaseBloc {
           print('✅ JSON decoded successfully');
           print('📋 Response body: $responseBody');
           
-          final stepVerifyEmailResponse = StepVerifyEmailResponse.fromJson(
+          final sendEmailOtpResponse = SendEmailOtpResponse.fromJson(
             responseBody is Map<String, dynamic> 
                 ? responseBody 
                 : <String, dynamic>{},
           );
           
-          print('✅ StepVerifyEmailResponse model created successfully');
+          print('✅ SendEmailOtpResponse model created successfully');
           
           print('');
           print('═══════════════════════════════════════════════════════');
-          print('📊 STEP VERIFY EMAIL RESPONSE MODEL');
+          print('📊 SEND EMAIL OTP RESPONSE MODEL');
           print('═══════════════════════════════════════════════════════');
-          print('Success: ${stepVerifyEmailResponse.success}');
-          print('EmailOtpRequestId: ${stepVerifyEmailResponse.emailOtpRequestId ?? "N/A"}');
-          print('TransactionId: ${stepVerifyEmailResponse.transactionId ?? "N/A"}');
+          print('Code: ${sendEmailOtpResponse.code ?? "N/A"}');
+          print('Message: ${sendEmailOtpResponse.message ?? "N/A"}');
+          print('Success: ${sendEmailOtpResponse.success}');
+          print('emailConfirmed: ${sendEmailOtpResponse.data?.emailConfirmed}');
+          print('EmailOtpRequestId: ${sendEmailOtpResponse.data?.emailOtpRequestId ?? "N/A"}');
+          print('TransactionId: ${sendEmailOtpResponse.data?.transactionId ?? "N/A"}');
           print('═══════════════════════════════════════════════════════');
           print('');
           
-          // Check if we have the required IDs to show verification dialog
-          if (stepVerifyEmailResponse.emailOtpRequestId != null && 
-              stepVerifyEmailResponse.emailOtpRequestId!.isNotEmpty &&
-              stepVerifyEmailResponse.transactionId != null && 
-              stepVerifyEmailResponse.transactionId!.isNotEmpty) {
-            // Save emailOtpRequestId and transactionId to cache
+          if (!sendEmailOtpResponse.success) {
+            _model.isLoading = false;
+            emit(UpdateEmailInputUI(_model));
+            emit(OnEmailErrorState(
+                sendEmailOtpResponse.message ?? 'فشل في التحقق من الإيميل'));
+            return;
+          }
+
+          // Always persist trimmed email for username / create-user screens.
+          final trimmedEmail = event.email.trim();
+          await VerificationCache().setEmail(trimmedEmail);
+
+          final isEmailConfirmed =
+              sendEmailOtpResponse.data?.emailConfirmed ?? false;
+          final emailOtpRequestId = sendEmailOtpResponse.data?.emailOtpRequestId;
+          final transactionId = sendEmailOtpResponse.data?.transactionId;
+
+          // Save IDs when present (some API versions may omit them).
+          if (emailOtpRequestId != null &&
+              emailOtpRequestId.isNotEmpty &&
+              transactionId != null &&
+              transactionId.isNotEmpty) {
             await VerificationCache().setEmailVerificationData(
-              emailOtpRequestId: stepVerifyEmailResponse.emailOtpRequestId!,
-              transactionId: stepVerifyEmailResponse.transactionId!,
-              email: event.email,
+              emailOtpRequestId: emailOtpRequestId,
+              transactionId: transactionId,
+              email: trimmedEmail,
             );
             
             print('💾 Saved email verification data to cache:');
-            print('💾 emailOtpRequestId: ${stepVerifyEmailResponse.emailOtpRequestId}');
-            print('💾 transactionId: ${stepVerifyEmailResponse.transactionId}');
-            print('💾 email: ${event.email}');
-            
-            // Emit state to show verification dialog
-            _model.isLoading = false;
-            emit(UpdateEmailInputUI(_model));
-            emit(OnEmailVerificationRequiredState(
-              email: event.email,
-              emailOtpRequestId: stepVerifyEmailResponse.emailOtpRequestId!,
-              transactionId: stepVerifyEmailResponse.transactionId!,
-            ));
+            print('💾 emailOtpRequestId: $emailOtpRequestId');
+            print('💾 transactionId: $transactionId');
+            print('💾 email: $trimmedEmail');
           } else {
-            // Missing required IDs
-            print('❌ StepVerifyEmail API response missing required fields');
-            _model.isLoading = false;
-            emit(UpdateEmailInputUI(_model));
-            emit(OnEmailErrorState('فشل في الحصول على بيانات التحقق من الإيميل'));
+            print('ℹ️ send-otp response did not include emailOtpRequestId/transactionId');
+          }
+            
+          // Emit state based on confirmation status.
+          _model.isLoading = false;
+          emit(UpdateEmailInputUI(_model));
+
+          if (isEmailConfirmed) {
+            print('✅ Email already confirmed - navigating to username security screen');
+            emit(OnEmailConfirmedState());
+          } else {
+            print('✅ Email not confirmed - showing verification dialog');
+            emit(OnEmailVerificationRequiredState(
+              email: trimmedEmail,
+              emailOtpRequestId: emailOtpRequestId,
+              transactionId: transactionId,
+            ));
           }
         } catch (e, stackTrace) {
           print('');
@@ -237,4 +260,5 @@ class EmailInputBloc extends BaseBloc {
       emit(OnEmailErrorState(userFriendlyMessage));
     }
   }
+
 }

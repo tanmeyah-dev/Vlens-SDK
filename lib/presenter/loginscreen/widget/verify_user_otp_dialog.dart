@@ -11,6 +11,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import '../../../utils/sdk_http_client.dart';
+import '../../mobile_number/constants/api_urls.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import 'package:vlens/vlens.dart';
 import '../utils/device_info_helper.dart';
@@ -48,9 +50,7 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
   bool _isLoading = false;
   String? _errorMessage;
 
-  /// Production API URL for Login
-  static const String _apiUrlLogin =
-      'https://api.vlenseg.com/api/DigitalIdentity/Login';
+  String get _apiUrlLogin => ApiUrls.getLoginUrl();
 
   @override
   void initState() {
@@ -145,7 +145,7 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
           'longitude': location['longitude'],
         },
         'imei': deviceId,
-        'phoneNumberOtp': pinController.text,
+        'phoneOtp': pinController.text,
         'phoneNumberOtpRequestId': phoneNumberOtpRequestId,
       });
 
@@ -170,7 +170,7 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
 
       http.Response response;
       try {
-        response = await http
+        response = await SdkHttpClient
             .post(
           Uri.parse(_apiUrlLogin),
           headers: headers,
@@ -212,11 +212,12 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
             return;
           }
 
-          final responseBody = jsonDecode(response.body);
-          if (responseBody is! Map<String, dynamic>) {
+          final decoded = jsonDecode(response.body);
+          if (decoded is! Map) {
             _showError('استجابة غير صالحة من الخادم');
             return;
           }
+          final responseBody = Map<String, dynamic>.from(decoded as Map);
 
           final loginResponse = LoginResponse.fromJson(responseBody);
           print('✅ Login response parsed successfully');
@@ -224,14 +225,17 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
           // Check if login was successful
           if (loginResponse.isSuccess && loginResponse.data != null) {
             // Success - close dialog and initialize VLens SDK
+            if (!mounted) return;
             Navigator.of(context).pop();
             final navigationContext = widget.parentContext ?? context;
             if (navigationContext.mounted) {
-              _initializeVLensSDK(navigationContext, loginResponse.data!);
+              _initializeVLensSDK(
+                  navigationContext, loginResponse.data!);
             }
           } else {
             // Login failed - show error
-            final errorMessage = loginResponse.errorMessage ??
+            final errorMessage = loginResponse.message ??
+                loginResponse.errorMessage ??
                 loginResponse.errorCode ??
                 'فشل في تسجيل الدخول';
             _showError(errorMessage);
@@ -330,12 +334,14 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
       BuildContext context, LoginResponseData loginResponseData) {
     // Configure VLens SDK
     final sdkConfig = SdkConfig(
-      transactionId: loginResponseData.transactionId,
+      transactionId: loginResponseData.transactionId ?? '',
       isLivenessOnly: false,
       isNationalIdOnly: false,
       env: EnvironmentConfig(
         apiBaseUrl: "https://api.vlenseg.com",
-        accessToken: loginResponseData.accessToken ?? "",
+        accessToken: (loginResponseData.accessToken?.trim().isNotEmpty == true)
+            ? loginResponseData.accessToken!
+            : (loginResponseData.encryptedAccessToken ?? ""),
         refreshToken: loginResponseData.refreshToken ?? "",
         apiKey: "j1m9DwIywPS1dPCkFUT2hM2IRr10921gq5PBzQID6xI",
         tenancyName: "tanmeyah-stg",
@@ -366,37 +372,31 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
           errorMessageAr: "خطأ في الشبكة",
         ),
       ],
+      onSuccess: (extractedData) {
+        print("✅ VLens SDK success - verification completed");
+        if (context.mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const HomeScene()),
+          );
+        }
+      },
+      onFailure: (errorCode, errorMsg) {
+        print("❌ VLens SDK failure: [$errorCode] $errorMsg");
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('خطأ في التحقق: $errorMsg'),
+              backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      },
+      getExtractedData: true,
     );
 
-    // Get VLensManager instance and set callbacks BEFORE init()
+    // Initialize VLens SDK - callbacks are passed via sdkConfig.
     final vlensManager = VLensManager();
-    
-    // Set callbacks BEFORE init() to ensure our handlers are used
-    vlensManager.onSuccess = () {
-      print("✅ VLens SDK success - verification completed");
-      // Navigate to home screen after VLens SDK success
-      if (context.mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomeScene()),
-        );
-      }
-    };
-    
-    vlensManager.onFailure = (String error) {
-      print("❌ VLens SDK failure: $error");
-      // Show error to user
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('خطأ في التحقق: $error'),
-            backgroundColor: AppColors.error,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-    };
-
-    // Initialize VLens SDK - this will automatically navigate to FlowController
     vlensManager.init(context, sdkConfig);
   }
 

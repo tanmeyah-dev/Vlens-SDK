@@ -11,7 +11,8 @@ class VerificationDialogHelper {
   }) {
     showGeneralDialog(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true,
+      barrierLabel: 'Close',
       barrierColor: Colors.black.withOpacity(0.5),
       transitionDuration: const Duration(milliseconds: 300),
       // Use MediaQuery to ensure dialog respects keyboard insets
@@ -21,7 +22,7 @@ class VerificationDialogHelper {
           context: dialogContext,
           removeTop: false,
           removeBottom: false,
-          child: VerificationDialog(
+          child: PhoneVerificationDialog(
             lastTwoDigits: lastTwoDigits,
             mobileNumber: mobileNumber,
             phoneNumberOtpRequestId: phoneNumberOtpRequestId,

@@ -2,22 +2,21 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:core/bases/base_bloc.dart';
 import 'package:core/bases/states/base/init_screen.dart';
-import 'package:core/bases/states/general_state/general_render_state.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
-import 'package:core/utils/cache/verification_cache.dart';
 import 'package:http/http.dart' as http;
+import '../../../utils/sdk_http_client.dart';
 import '../event/mobile_number_event.dart';
 import '../model/mobile_number_model.dart';
 import '../model/mobile_number_response.dart';
-import '../model/step_verify_phone_response.dart';
+import '../model/send_phone_otp_response.dart';
 import '../state/mobile_number_state.dart';
 
 class MobileNumberBloc extends BaseBloc {
   final MobileNumberModel _mobileNumberModel;
   static const String _apiUrlCheck =
-      'https://api.vlenseg.com/api/DigitalIdentity/CheckExistenceOfEmailOrPhone';
+      'https://192.168.51.187:8088/vlens/api/v1/digital/identity/check';
   static const String _apiUrlStepVerifyPhone =
-      'https://api.vlenseg.com/api/DigitalIdentity/Register/StepVerifyPhone';
+      'https://192.168.51.187:8088/vlens/api/v1/digital/identity/phone/send-otp';
   
   // Flag to prevent duplicate API calls
   bool _isRequestInProgress = false;
@@ -102,7 +101,7 @@ class MobileNumberBloc extends BaseBloc {
       print('🔢 Request ID: $currentRequestId');
 
       
-      final response = await http.post(
+      final response = await SdkHttpClient.post(
         Uri.parse(_apiUrlCheck),
         headers: HttpHeadersHelper.getDefaultHeaders(),
         body: requestBody,
@@ -149,36 +148,21 @@ class MobileNumberBloc extends BaseBloc {
           print('📊 RESPONSE MODEL');
           print('═══════════════════════════════════════════════════════');
           print('Success: ${mobileNumberResponse.success}');
-          print('Error Code: ${mobileNumberResponse.errorCode ?? "N/A"}');
-          print('Error Message: ${mobileNumberResponse.errorMessage ?? "N/A"}');
-          print('Error Descriptions: ${mobileNumberResponse.errorDescriptions ?? "N/A"}');
-          print('Data - isEmailExists: ${mobileNumberResponse.data?.isEmailExists ?? "N/A"}');
-          print('Data - isPhoneNumberExists: ${mobileNumberResponse.data?.isPhoneNumberExists ?? "N/A"}');
+          print('Code: ${mobileNumberResponse.code ?? "N/A"}');
+          print('Message: ${mobileNumberResponse.message ?? "N/A"}');
+          print(
+              'Data - emailExists: ${mobileNumberResponse.data?.emailExists ?? "N/A"}');
+          print(
+              'Data - phoneNumberExists: ${mobileNumberResponse.data?.phoneNumberExists ?? "N/A"}');
           print('═══════════════════════════════════════════════════════');
           print('');
           
 
-          // Extract phoneNumberOtpRequestId, transactionId, isPhoneNumberExists, and isEmailExists from response
-          String? phoneNumberOtpRequestId;
-          String? transactionId;
+          final phoneNumberExists =
+              mobileNumberResponse.data?.phoneNumberExists ?? false;
+          print('📋 Extracted phoneNumberExists: $phoneNumberExists');
           
-          // Get isPhoneNumberExists and isEmailExists from the model's data object
-          final phoneNumberExists = mobileNumberResponse.data?.isPhoneNumberExists ?? false;
-          final emailExists = mobileNumberResponse.data?.isEmailExists ?? false;
-          
-          // Check root level for phoneNumberOtpRequestId and transactionId (if they exist)
-          final responseBodyMap = responseBody is Map<String, dynamic> ? responseBody : null;
-          if (responseBodyMap != null) {
-            phoneNumberOtpRequestId = responseBodyMap['phoneNumberOtpRequestId']?.toString();
-            transactionId = responseBodyMap['transactionId']?.toString();
-          }
-          
-          print('📋 Extracted phoneNumberOtpRequestId: $phoneNumberOtpRequestId');
-          print('📋 Extracted transactionId: $transactionId');
-          print('📋 Extracted isPhoneNumberExists: $phoneNumberExists');
-          print('📋 Extracted isEmailExists: $emailExists');
-          
-          // Check success and existence flags
+          // Check success and phone existence flag
           if (mobileNumberResponse.success == true) {
             print('✅✅✅ First API call successful - Success is true ✅✅✅');
             
@@ -189,28 +173,23 @@ class MobileNumberBloc extends BaseBloc {
             _currentRequestCompleter = null;
             emit(UpdateMobileNumberUI(_mobileNumberModel));
             
-            // Check if phone number OR email exists
-            if (phoneNumberExists == true || emailExists == true) {
-              // Phone number or email exists - navigate to login screen (DO NOT show verification dialog)
-              print('📱 Phone number or email exists (isPhoneNumberExists=$phoneNumberExists, isEmailExists=$emailExists) - Navigating to login screen');
+            // phone exists -> login screen
+            if (phoneNumberExists == true) {
+              print('📱 phoneNumberExists=true - Navigating to login screen');
               emit(OnPhoneNumberExistsState());
               return; // Important: return early to prevent showing verification dialog
-            } else if (phoneNumberExists == false || emailExists == false) {
-              // Phone number or email doesn't exist - call StepVerifyPhone API
-              print('📱 Phone number or email doesn\'t exist (isPhoneNumberExists=$phoneNumberExists, isEmailExists=$emailExists) - Calling StepVerifyPhone API');
+            } else {
+              // phone doesn't exist -> send OTP
+              print(
+                  '📱 phoneNumberExists=false - Calling send OTP API and then opening verification dialog');
               
               // Call StepVerifyPhone API
-              await _callStepVerifyPhone(event.mobileNumber, emit);
-            } else {
-              // Unexpected state - default to calling StepVerifyPhone API
-              print('⚠️ Unexpected state (isPhoneNumberExists=$phoneNumberExists, isEmailExists=$emailExists) - Defaulting to calling StepVerifyPhone API');
               await _callStepVerifyPhone(event.mobileNumber, emit);
             }
           } else {
             // Success field is false - show error
             print('❌ API call returned success=false');
-            final errorMessage = mobileNumberResponse.errorMessage ?? 
-                mobileNumberResponse.errorDescriptions ??
+            final errorMessage = mobileNumberResponse.message ??
                 'فشل التحقق من رقم الموبايل';
             emit(OnMobileNumberErrorState(errorMessage));
           }
@@ -262,8 +241,7 @@ class MobileNumberBloc extends BaseBloc {
                 : <String, dynamic>{},
           );
           
-          final finalErrorMessage = errorResponse.errorMessage ?? 
-              errorResponse.errorDescriptions ??
+          final finalErrorMessage = errorResponse.message ??
               errorMessage;
           emit(OnMobileNumberErrorState(finalErrorMessage));
         } catch (e) {
@@ -350,7 +328,7 @@ class MobileNumberBloc extends BaseBloc {
 
 
       // Make API call
-      final response = await http.post(
+      final response = await SdkHttpClient.post(
         Uri.parse(_apiUrlStepVerifyPhone),
         headers: HttpHeadersHelper.getDefaultHeaders(),
         body: requestBody,
@@ -370,10 +348,10 @@ class MobileNumberBloc extends BaseBloc {
       print('═══════════════════════════════════════════════════════');
       print('');
       if (response.statusCode == 200) {
-        // Parse response using model
+        // Parse send-otp response using dedicated model
         try {
           final responseBody = jsonDecode(response.body);
-          final stepVerifyPhoneResponse = StepVerifyPhoneResponse.fromJson(
+          final sendOtpResponse = SendPhoneOtpResponse.fromJson(
             responseBody is Map<String, dynamic> 
                 ? responseBody 
                 : <String, dynamic>{},
@@ -381,56 +359,35 @@ class MobileNumberBloc extends BaseBloc {
 
           print('');
           print('═══════════════════════════════════════════════════════');
-          print('📊 STEP VERIFY PHONE RESPONSE MODEL');
+          print('📊 SEND OTP RESPONSE MODEL');
           print('═══════════════════════════════════════════════════════');
-          print('Success: ${stepVerifyPhoneResponse.success}');
-          print('PhoneNumberOtpRequestId: ${stepVerifyPhoneResponse.phoneNumberOtpRequestId ?? "N/A"}');
-          print('TransactionId: ${stepVerifyPhoneResponse.transactionId ?? "N/A"}');
-          print('Error Code: ${stepVerifyPhoneResponse.errorCode ?? "N/A"}');
-          print('Error Message: ${stepVerifyPhoneResponse.errorMessage ?? "N/A"}');
+          print('Code: ${sendOtpResponse.code ?? "N/A"}');
+          print('Message: ${sendOtpResponse.message ?? "N/A"}');
+          print('Success: ${sendOtpResponse.success}');
+          print('phoneOtpExpireInSeconds: ${sendOtpResponse.data?.phoneOtpExpireInSeconds ?? "N/A"}');
+          print('isPhoneNumberConfirmed: ${sendOtpResponse.data?.isPhoneNumberConfirmed}');
           print('═══════════════════════════════════════════════════════');
           print('');
 
-          // For the first call (sending OTP), we only need phoneNumberOtpRequestId and transactionId
-          // isPhoneNumberConfirmed is only set to true in the second call (verifying OTP)
-          final hasRequiredFields = stepVerifyPhoneResponse.phoneNumberOtpRequestId != null &&
-              stepVerifyPhoneResponse.phoneNumberOtpRequestId!.isNotEmpty &&
-              stepVerifyPhoneResponse.transactionId != null &&
-              stepVerifyPhoneResponse.transactionId!.isNotEmpty;
+          final isApiSuccessful = sendOtpResponse.success;
+          final isPhoneNumberConfirmed =
+              sendOtpResponse.data?.isPhoneNumberConfirmed ?? false;
           
-          print('📋 Checking response for first StepVerifyPhone call:');
-          print('📋 Has phoneNumberOtpRequestId: ${stepVerifyPhoneResponse.phoneNumberOtpRequestId != null && stepVerifyPhoneResponse.phoneNumberOtpRequestId!.isNotEmpty}');
-          print('📋 Has transactionId: ${stepVerifyPhoneResponse.transactionId != null && stepVerifyPhoneResponse.transactionId!.isNotEmpty}');
-          print('📋 isPhoneNumberConfirmed: ${stepVerifyPhoneResponse.isPhoneNumberConfirmed}');
-          print('📋 Has required fields: $hasRequiredFields');
+          print('📋 Checking response for send-otp call:');
+          print('📋 API success: $isApiSuccessful');
+          print('📋 isPhoneNumberConfirmed: $isPhoneNumberConfirmed');
           
-          // Check if response is successful - for first call, we only need phoneNumberOtpRequestId and transactionId
-          if (hasRequiredFields) {
-            // Save to local storage (VerificationCache)
-            await VerificationCache().setVerificationData(
-              phoneNumberOtpRequestId: stepVerifyPhoneResponse.phoneNumberOtpRequestId!,
-              transactionId: stepVerifyPhoneResponse.transactionId!,
-              mobileNumber: mobileNumber,
-            );
-
-            print('💾 Saved to VerificationCache:');
-            print('💾 phoneNumberOtpRequestId: ${stepVerifyPhoneResponse.phoneNumberOtpRequestId}');
-            print('💾 transactionId: ${stepVerifyPhoneResponse.transactionId}');
-            print('💾 mobileNumber: $mobileNumber');
-
-            // Emit success state to show verification dialog
-            print('✅ StepVerifyPhone API successful (OTP sent) - Showing verification dialog');
-            emit(OnMobileNumberSavedState(
-              phoneNumberOtpRequestId: stepVerifyPhoneResponse.phoneNumberOtpRequestId!,
-              transactionId: stepVerifyPhoneResponse.transactionId!,
-            ));
+          if (isApiSuccessful) {
+            if (isPhoneNumberConfirmed) {
+              print('✅ Phone already confirmed - navigating to login screen');
+              emit(OnPhoneNumberExistsState());
+            } else {
+              print('✅ Phone not confirmed - showing verification dialog');
+              emit(OnMobileNumberSavedState());
+            }
           } else {
-            // Response doesn't have required fields
-            print('❌ StepVerifyPhone API response missing required fields');
-            print('❌ phoneNumberOtpRequestId: ${stepVerifyPhoneResponse.phoneNumberOtpRequestId ?? "null"}');
-            print('❌ transactionId: ${stepVerifyPhoneResponse.transactionId ?? "null"}');
-          final errorMessage = stepVerifyPhoneResponse.errorMessage ??
-                stepVerifyPhoneResponse.errorDescriptions ??
+            print('❌ StepVerifyPhone API unsuccessful response');
+            final errorMessage = sendOtpResponse.message ??
                 'فشل في الحصول على بيانات التحقق من الخادم';
             emit(OnMobileNumberErrorState(errorMessage));
           }

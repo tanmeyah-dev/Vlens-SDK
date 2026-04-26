@@ -12,9 +12,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import '../../../utils/sdk_http_client.dart';
+import '../../../routes/route_path.dart';
 import '../model/step_verify_email_response.dart';
 import 'package:core/utils/cache/verification_cache.dart';
-import '../utils/email_verification_success_dialog_helper.dart';
 
 class EmailVerificationDialog extends StatefulWidget {
   final String email;
@@ -46,7 +47,7 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
   String? _errorMessage;
   
   /// Production API URL for verify email
-  static const String _apiUrlVerify = 'https://api.vlenseg.com/api/DigitalIdentity/Register/StepVerifyEmail';
+  static const String _apiUrlVerify = 'https://192.168.51.187:8088/vlens/api/v1/digital/identity/email/verify-otp';
 
   @override
   void initState() {
@@ -138,7 +139,7 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
       // Make API call
       http.Response response;
       try {
-        response = await http.post(
+        response = await SdkHttpClient.post(
           Uri.parse(_apiUrlVerify),
           headers: HttpHeadersHelper.getDefaultHeaders(),
           body: requestBody,
@@ -353,44 +354,16 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
       return;
     }
 
-    // Get emailOtpRequestId and transactionId from widget or cache
-    String? emailOtpRequestId = widget.emailOtpRequestId;
-    String? transactionId = widget.transactionId;
-    
-    // If not provided in widget, try to get from cache
-    if (emailOtpRequestId == null || emailOtpRequestId.isEmpty) {
-      emailOtpRequestId = await VerificationCache().getEmailOtpRequestId();
-    } else {
-    }
-    
-    if (transactionId == null || transactionId.isEmpty) {
-      transactionId = await VerificationCache().getTransactionId();
-    } else {
-    }
-    
-    // Validate that we have the required IDs
-    if (emailOtpRequestId == null || emailOtpRequestId.isEmpty) {
-      _showError('emailOtpRequestId مطلوب');
-      return;
-    }
-    
-    if (transactionId == null || transactionId.isEmpty) {
-      _showError('transactionId مطلوب');
-      return;
-    }
-
     setState(() {
       _isLoading = true;
       _errorMessage = null; // Clear previous errors
     });
 
     try {
-      // Prepare request body with all required fields
+      // Prepare request body for verify-otp API.
       final requestBody = jsonEncode({
         'email': widget.email,
         'emailOtp': pinController.text,
-        'emailOtpRequestId': emailOtpRequestId,
-        'transactionId': transactionId,
       });
 
       final headers = HttpHeadersHelper.getDefaultHeaders();
@@ -407,15 +380,13 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
       print('Body: $requestBody');
       print('Email: ${widget.email}');
       print('Email OTP: ${pinController.text}');
-      print('Email OTP Request ID: $emailOtpRequestId');
-      print('Transaction ID: $transactionId');
       print('═══════════════════════════════════════════════════════');
       print('');
 
       // Make API call with better error handling
       http.Response response;
       try {
-        response = await http.post(
+        response = await SdkHttpClient.post(
           Uri.parse(_apiUrlVerify),
           headers: HttpHeadersHelper.getDefaultHeaders(),
           body: requestBody,
@@ -475,16 +446,26 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
             print('📋 Response body type: ${responseBody.runtimeType}');
             print('📋 Response body content: $responseBody');
             
-            // Check for error_message in raw response body first
+            // Check for explicit error fields only.
             String? rawErrorMessage;
+            bool? rawSuccess;
             if (responseBody is Map<String, dynamic>) {
+              final successValue = responseBody['success'];
+              if (successValue is bool) {
+                rawSuccess = successValue;
+              } else if (successValue != null) {
+                rawSuccess = successValue.toString().toLowerCase() == 'true';
+              }
+
               rawErrorMessage = responseBody['error_message']?.toString() ?? 
                                 responseBody['errorMessage']?.toString() ??
-                                responseBody['message']?.toString();
+                                responseBody['error']?.toString();
             }
             
-            // If error_message exists, show it and stop navigation
-            if (rawErrorMessage != null && rawErrorMessage.isNotEmpty) {
+            // Only block on explicit error when API says success=false.
+            if (rawErrorMessage != null &&
+                rawErrorMessage.isNotEmpty &&
+                rawSuccess == false) {
               print('❌ Error message detected in raw response - Showing error and staying on verification dialog');
               print('❌ Error message: $rawErrorMessage');
               
@@ -530,39 +511,41 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
 
             // Check if response is successful
             if (stepVerifyEmailResponse.success) {
-              print('✅ StepVerifyEmail API successful - Showing success dialog');
-              
+              print('✅ StepVerifyEmail API successful - Navigating to create user screen');
+
+              // Always persist verified email for downstream screens.
+              final verifiedEmail = widget.email.trim();
+              await VerificationCache().setEmail(verifiedEmail);
+
               // Use response values if available, otherwise fall back to widget values
               final finalEmailOtpRequestId = stepVerifyEmailResponse.emailOtpRequestId ?? 
                   widget.emailOtpRequestId ?? '';
               final finalTransactionId = stepVerifyEmailResponse.transactionId ?? 
                   widget.transactionId ?? '';
               
-              // Save to cache if we have valid values
+              // Save full verification row when IDs exist (create-user API may need them).
               if (finalEmailOtpRequestId.isNotEmpty && finalTransactionId.isNotEmpty) {
                 await VerificationCache().setEmailVerificationData(
                   emailOtpRequestId: finalEmailOtpRequestId,
                   transactionId: finalTransactionId,
-                  email: widget.email,
+                  email: verifiedEmail,
                 );
                 print('💾 Saved to cache from StepVerifyEmail API:');
                 print('💾 emailOtpRequestId: $finalEmailOtpRequestId');
                 print('💾 transactionId: $finalTransactionId');
-                print('💾 email: ${widget.email}');
+                print('💾 email: $verifiedEmail');
               }
               
-              // Success - close verification dialog and show success dialog
+              // Success - close verification dialog and navigate directly.
               Navigator.of(context).pop();
               final successContext = widget.parentContext ?? context;
               SchedulerBinding.instance.addPostFrameCallback((_) {
                 if (successContext.mounted) {
-                  EmailVerificationSuccessDialogHelper.showEmailVerificationSuccessDialog(
-                    successContext,
-                    onDismiss: () {
-                      // Callback after success dialog dismisses and navigates
-                      widget.onConfirm(pinController.text);
-                    },
+                  Navigator.of(successContext).pushNamed(
+                    RoutePath.usernameSecurityCode,
+                    arguments: verifiedEmail,
                   );
+                  widget.onConfirm(pinController.text);
                 }
               });
             } else {
@@ -716,6 +699,7 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
   void _showError(String message) {
     if (mounted) {
       setState(() {
+        _isLoading = false;
         _errorMessage = message;
       });
       // Clear error message after 4 seconds
@@ -772,12 +756,28 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                  // Title
-                  AppText(
-                    "تأكيد الإيميل الخاص بك",
-                    color: AppColors.error,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.of(context).pop(),
+                        child: Icon(
+                          Icons.close,
+                          color: AppColors.primary,
+                          size: 22,
+                        ),
+                      ),
+                      Expanded(
+                        child: Center(
+                          child: AppText(
+                            "تأكيد الإيميل الخاص بك",
+                            color: AppColors.error,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 22),
+                    ],
                   ),
                   16.height,
                   // Instructions

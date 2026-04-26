@@ -7,17 +7,14 @@ class EnableSaveButtonEvent extends BaseEvent {
 }
 
 class SaveUsernameSecurityCodeEvent extends BaseEvent {
-  final String username;
+  /// Verified email from the email step / cache (read-only on screen).
+  final String email;
   final String securityCode;
-  final String phoneNumberOtpRequestId;
-  final String transactionId;
   final String mobileNumber;
 
   SaveUsernameSecurityCodeEvent(
-    this.username,
+    this.email,
     this.securityCode, {
-    required this.phoneNumberOtpRequestId,
-    required this.transactionId,
     required this.mobileNumber,
   });
 }

@@ -62,6 +62,12 @@ class VerificationCache {
     return prefs.getString(_keyEmail);
   }
 
+  /// Persist email alone (e.g. when OTP APIs omit request/transaction IDs).
+  Future<void> setEmail(String email) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyEmail, email);
+  }
+
   /// Clear all verification data
   Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();

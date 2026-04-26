@@ -18,6 +18,9 @@ class PinInputField extends StatelessWidget {
   final List<TextInputFormatter>? formatter;
   final TextInputType? keyboardType;
   final TextAlign textAlign;
+  final Widget? startSuffix;
+  final Widget? endSuffix;
+  final VoidCallback? onSuffixTap;
 
   const PinInputField({
     super.key,
@@ -32,6 +35,9 @@ class PinInputField extends StatelessWidget {
     this.formatter,
     this.keyboardType,
     this.textAlign = TextAlign.start,
+    this.startSuffix,
+    this.endSuffix,
+    this.onSuffixTap,
   });
 
   @override
@@ -59,6 +65,9 @@ class PinInputField extends StatelessWidget {
               maxLength: maxLength,
               inputFormatters: formatter,
               textAlign: textAlign,
+              startSuffix: startSuffix,
+              endSuffix: endSuffix,
+              onSuffixTap: onSuffixTap,
               onChanged: (_) => onChanged?.call(),
             ),
           ),

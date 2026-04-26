@@ -15,9 +15,12 @@ class AppTextField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final int? maxLength;
   final bool enabled;
+  final bool readOnly;
+  final bool enableInteractiveSelection;
   final TextDirection? textDirection;
   final TextAlign? textAlign;
 
+  final Widget? startSuffix;
   final Widget? endSuffix;
   final VoidCallback? onSuffixTap;
 
@@ -33,8 +36,11 @@ class AppTextField extends StatelessWidget {
     this.onChanged,
     this.maxLength,
     this.enabled = true,
+    this.readOnly = false,
+    this.enableInteractiveSelection = true,
     this.textDirection,
     this.textAlign,
+    this.startSuffix,
     this.endSuffix,
     this.onSuffixTap,
   });
@@ -63,6 +69,8 @@ class AppTextField extends StatelessWidget {
           onChanged: onChanged,
           maxLength: maxLength,
           enabled: enabled,
+          readOnly: readOnly,
+          enableInteractiveSelection: enableInteractiveSelection,
           textDirection: textDirection,
           textAlign: textAlign ?? TextAlign.start,
           style: const TextStyle(
@@ -130,6 +138,12 @@ class AppTextField extends StatelessWidget {
               vertical: 15,
             ),
             counterText: maxLength != null ? "" : null,
+            prefixIcon: startSuffix != null
+                ? GestureDetector(
+                    onTap: onSuffixTap,
+                    child: startSuffix,
+                  )
+                : null,
             suffixIcon: endSuffix != null
                 ? GestureDetector(
                     onTap: onSuffixTap,

@@ -27,6 +27,14 @@ class MobileNumberField extends StatefulWidget {
 class _MobileNumberFieldState extends State<MobileNumberField> {
   String _previousMobileNumber = '';
 
+  void _setControllerTextSafely(String text, int desiredOffset) {
+    final safeOffset = desiredOffset.clamp(0, text.length);
+    widget.controller.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: safeOffset),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -46,86 +54,89 @@ class _MobileNumberFieldState extends State<MobileNumberField> {
           children: [
             // Mobile number field (appears on left in RTL)
             Expanded(
-              child: TextFormField(
-                controller: widget.controller,
-                keyboardType: TextInputType.phone,
-                maxLength: 11,
-                textDirection: TextDirection.rtl,
-                textAlign: TextAlign.right,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                ],
-                style: TextStyle(
-                  color: AppColors.black,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 14,
-                ),
-                decoration: InputDecoration(
-                  hintText: MobileNumberConstants.mobileNumberHint,
-                  hintStyle: TextStyle(
-                    color: AppColors.hintGray,
+              child: SizedBox(
+                height: 86,
+                child: TextFormField(
+                  controller: widget.controller,
+                  keyboardType: TextInputType.phone,
+                  maxLength: 11,
+                  textDirection: TextDirection.rtl,
+                  textAlign: TextAlign.right,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                  ],
+                  style: TextStyle(
+                    color: AppColors.black,
+                    fontWeight: FontWeight.w500,
                     fontSize: 14,
                   ),
-                  filled: true,
-                  fillColor: AppColors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
-                      color: AppColors.border1,
-                      width: 1,
+                  decoration: InputDecoration(
+                    hintText: MobileNumberConstants.mobileNumberHint,
+                    hintStyle: TextStyle(
+                      color: AppColors.hintGray,
+                      fontSize: 14,
                     ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
-                      color: AppColors.border1,
-                      width: 1,
+                    filled: true,
+                    fillColor: AppColors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: AppColors.border1,
+                        width: 1,
+                      ),
                     ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
-                      color: AppColors.primary,
-                      width: 1,
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: AppColors.border1,
+                        width: 1,
+                      ),
                     ),
-                  ),
-                  disabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
-                      color: AppColors.border1,
-                      width: 1,
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: AppColors.primary,
+                        width: 1,
+                      ),
                     ),
-                  ),
-                  errorBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
+                    disabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: AppColors.border1,
+                        width: 1,
+                      ),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: AppColors.error,
+                        width: 1,
+                      ),
+                    ),
+                    focusedErrorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: AppColors.error,
+                        width: 1,
+                      ),
+                    ),
+                    errorStyle: TextStyle(
                       color: AppColors.error,
-                      width: 1,
+                      fontSize: 12,
+                      height: 1.2,
                     ),
-                  ),
-                  focusedErrorBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
-                      color: AppColors.error,
-                      width: 1,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 15,
+                      vertical: 15,
                     ),
+                    counterText: "",
                   ),
-                  errorStyle: TextStyle(
-                    color: AppColors.error,
-                    fontSize: 12,
-                    height: 1.2,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 15,
-                    vertical: 15,
-                  ),
-                  counterText: "",
+                  validator: widget.validator ??
+                      (value) => PhoneValidator.validate(widget.controller.text),
+                  onChanged: (value) {
+                    _handlePhoneNumberChange(value);
+                  },
                 ),
-                validator: widget.validator ??
-                    (value) => PhoneValidator.validate(widget.controller.text),
-                onChanged: (value) {
-                  _handlePhoneNumberChange(value);
-                },
               ),
             ),
             8.width,
@@ -151,13 +162,10 @@ class _MobileNumberFieldState extends State<MobileNumberField> {
     // Check if user tried to add "0" at the beginning when there's already "0"
     if (_previousMobileNumber.startsWith('0') && value.startsWith('00')) {
       // Ignore the duplicate "0" - revert to previous text
-      final cursorPosition = controller.selection.baseOffset > 0
+      final desiredCursorPosition = controller.selection.baseOffset > 0
           ? controller.selection.baseOffset - 1
           : 0;
-      controller.value = TextEditingValue(
-        text: _previousMobileNumber,
-        selection: TextSelection.collapsed(offset: cursorPosition),
-      );
+      _setControllerTextSafely(_previousMobileNumber, desiredCursorPosition);
       widget.onChanged(_previousMobileNumber);
       return;
     }
@@ -165,11 +173,8 @@ class _MobileNumberFieldState extends State<MobileNumberField> {
     // If text doesn't start with "0" and is not empty, add "0" at the beginning
     if (!currentText.startsWith('0') && currentText.isNotEmpty) {
       final newText = '0$currentText';
-      final cursorPosition = controller.selection.baseOffset + 1;
-      controller.value = TextEditingValue(
-        text: newText,
-        selection: TextSelection.collapsed(offset: cursorPosition),
-      );
+      final desiredCursorPosition = controller.selection.baseOffset + 1;
+      _setControllerTextSafely(newText, desiredCursorPosition);
       _previousMobileNumber = newText;
       widget.onChanged(newText);
     } else {

@@ -13,11 +13,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../../../../routes/route_path.dart';
+import '../../../utils/sdk_http_client.dart';
 import '../utils/verification_success_dialog_helper.dart';
 import '../model/step_verify_phone_response.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 
-class VerificationDialog extends StatefulWidget {
+class PhoneVerificationDialog extends StatefulWidget {
   final String lastTwoDigits;
   final String? mobileNumber;
   final String? phoneNumberOtpRequestId;
@@ -25,7 +26,7 @@ class VerificationDialog extends StatefulWidget {
   final Function(String) onConfirm;
   final BuildContext? parentContext;
 
-  const VerificationDialog({
+  const PhoneVerificationDialog({
     super.key,
     required this.lastTwoDigits,
     this.mobileNumber,
@@ -36,10 +37,11 @@ class VerificationDialog extends StatefulWidget {
   });
 
   @override
-  State<VerificationDialog> createState() => _VerificationDialogState();
+  State<PhoneVerificationDialog> createState() =>
+      _PhoneVerificationDialogState();
 }
 
-class _VerificationDialogState extends State<VerificationDialog> {
+class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
   int countdown = 30;
   bool canResend = false;
   Timer? countdownTimer;
@@ -48,9 +50,13 @@ class _VerificationDialogState extends State<VerificationDialog> {
   bool _isLoading = false;
   String? _errorMessage;
 
-  /// Production API URL for verify phone
-  static const String _apiUrlVerify =
-      'https://api.vlenseg.com/api/DigitalIdentity/Register/StepVerifyPhone';
+  /// API URL for sending/resending OTP.
+  static const String _apiUrlSendOtp =
+      'https://192.168.51.187:8088/vlens/api/v1/digital/identity/phone/send-otp';
+
+  /// API URL for verifying OTP code.
+  static const String _apiUrlVerifyOtp =
+      'https://192.168.51.187:8088/vlens/api/v1/digital/identity/phone/verify-otp';
 
   @override
   void initState() {
@@ -115,7 +121,7 @@ class _VerificationDialogState extends State<VerificationDialog> {
       print('═══════════════════════════════════════════════════════');
       print('📤 RESEND OTP API REQUEST');
       print('═══════════════════════════════════════════════════════');
-      print('URL: $_apiUrlVerify');
+      print('URL: $_apiUrlSendOtp');
       print('Method: POST');
       print('Headers: ${HttpHeadersHelper.getDefaultHeaders()}');
       print('Body: $requestBody');
@@ -126,9 +132,8 @@ class _VerificationDialogState extends State<VerificationDialog> {
       // Make API call
       http.Response response;
       try {
-        response = await http
-            .post(
-          Uri.parse(_apiUrlVerify),
+        response = await SdkHttpClient.post(
+          Uri.parse(_apiUrlSendOtp),
           headers: HttpHeadersHelper.getDefaultHeaders(),
           body: requestBody,
         )
@@ -145,13 +150,13 @@ class _VerificationDialogState extends State<VerificationDialog> {
         print('❌ CONNECTION ERROR - SocketException');
         print('═══════════════════════════════════════════════════════');
         print('Error: ${e.message}');
-        print('URL Attempted: $_apiUrlVerify');
+        print('URL Attempted: $_apiUrlSendOtp');
         print('═══════════════════════════════════════════════════════');
         print('');
         rethrow;
       } catch (e) {
         print('❌ Connection error: $e');
-        print('❌ URL attempted: $_apiUrlVerify');
+        print('❌ URL attempted: $_apiUrlSendOtp');
         rethrow;
       }
 
@@ -381,44 +386,18 @@ class _VerificationDialogState extends State<VerificationDialog> {
       return;
     }
 
-    // Get phoneNumberOtpRequestId and transactionId from widget or cache
-    String? phoneNumberOtpRequestId = widget.phoneNumberOtpRequestId;
-    String? transactionId = widget.transactionId;
-
-    // If not provided in widget, try to get from cache
-    if (phoneNumberOtpRequestId == null || phoneNumberOtpRequestId.isEmpty) {
-      phoneNumberOtpRequestId =
-          await VerificationCache().getPhoneNumberOtpRequestId();
-    } else {}
-
-    if (transactionId == null || transactionId.isEmpty) {
-      transactionId = await VerificationCache().getTransactionId();
-    } else {}
-
-    // Validate that we have the required IDs
-    if (phoneNumberOtpRequestId == null || phoneNumberOtpRequestId.isEmpty) {
-      _showError('phoneNumberOtpRequestId مطلوب');
-      return;
-    }
-
-    if (transactionId == null || transactionId.isEmpty) {
-      _showError('transactionId مطلوب');
-      return;
-    }
-
     setState(() {
       _isLoading = true;
       _errorMessage = null; // Clear previous errors
     });
 
     try {
-      // Prepare request body with all required fields
-      final requestBody = jsonEncode({
+      // Verify API contract: only phoneNumber and phoneNumberOtp are required.
+      final requestPayload = <String, dynamic>{
         'phoneNumber': widget.mobileNumber,
-        'phoneNumberOtp': pinController.text,
-        'phoneNumberOtpRequestId': phoneNumberOtpRequestId,
-        'transactionId': transactionId,
-      });
+        'phoneOtp': pinController.text,
+      };
+      final requestBody = jsonEncode(requestPayload);
 
       final headers = HttpHeadersHelper.getDefaultHeaders();
 
@@ -426,7 +405,7 @@ class _VerificationDialogState extends State<VerificationDialog> {
       print('═══════════════════════════════════════════════════════');
       print('📤 STEP VERIFY PHONE API REQUEST');
       print('═══════════════════════════════════════════════════════');
-      print('URL: $_apiUrlVerify');
+      print('URL: $_apiUrlVerifyOtp');
       print('Method: POST');
       print('Headers: $headers');
       print('ApiKey: ${headers['ApiKey']}');
@@ -434,17 +413,14 @@ class _VerificationDialogState extends State<VerificationDialog> {
       print('Body: $requestBody');
       print('Phone Number: ${widget.mobileNumber}');
       print('Phone Number OTP: ${pinController.text}');
-      print('Phone Number OTP Request ID: $phoneNumberOtpRequestId');
-      print('Transaction ID: $transactionId');
       print('═══════════════════════════════════════════════════════');
       print('');
 
       // Make API call with better error handling
       http.Response response;
       try {
-        response = await http
-            .post(
-          Uri.parse(_apiUrlVerify),
+        response = await SdkHttpClient.post(
+          Uri.parse(_apiUrlVerifyOtp),
           headers: HttpHeadersHelper.getDefaultHeaders(),
           body: requestBody,
         )
@@ -464,13 +440,13 @@ class _VerificationDialogState extends State<VerificationDialog> {
         print('Error: ${e.message}');
         print('Address: ${e.address}');
         print('Port: ${e.port}');
-        print('URL Attempted: $_apiUrlVerify');
+        print('URL Attempted: $_apiUrlVerifyOtp');
         print('═══════════════════════════════════════════════════════');
         print('');
         rethrow;
       } catch (e) {
         print('❌ Connection error: $e');
-        print('❌ URL attempted: $_apiUrlVerify');
+        print('❌ URL attempted: $_apiUrlVerifyOtp');
         rethrow;
       }
 
@@ -505,10 +481,18 @@ class _VerificationDialogState extends State<VerificationDialog> {
             print('📋 Response body type: ${responseBody.runtimeType}');
             print('📋 Response body content: $responseBody');
 
-            // Check for error_message in raw response body first
-            // Priority: error_message > errorMessage > message > error > data.message > data.error
+            // Check for explicit error fields in raw response body first.
+            // Do not treat generic `message` as an error when success=true.
             String? rawErrorMessage;
+            bool? rawSuccess;
             if (responseBody is Map<String, dynamic>) {
+              final rawSuccessValue = responseBody['success'];
+              if (rawSuccessValue is bool) {
+                rawSuccess = rawSuccessValue;
+              } else if (rawSuccessValue != null) {
+                rawSuccess = rawSuccessValue.toString().toLowerCase() == 'true';
+              }
+
               // Helper function to safely extract string value
               String? getStringValue(String key) {
                 final value = responseBody[key];
@@ -520,7 +504,6 @@ class _VerificationDialogState extends State<VerificationDialog> {
               // Check top-level fields first
               rawErrorMessage = getStringValue('error_message') ??
                   getStringValue('errorMessage') ??
-                  getStringValue('message') ??
                   getStringValue('error');
 
               // If not found, check nested data object
@@ -537,14 +520,15 @@ class _VerificationDialogState extends State<VerificationDialog> {
 
                   rawErrorMessage = getDataStringValue('error_message') ??
                       getDataStringValue('errorMessage') ??
-                      getDataStringValue('message') ??
                       getDataStringValue('error');
                 }
               }
             }
 
-            // If error_message exists, show it and stop navigation
-            if (rawErrorMessage != null && rawErrorMessage.isNotEmpty) {
+            // Show explicit error only when API indicates failure.
+            if (rawErrorMessage != null &&
+                rawErrorMessage.isNotEmpty &&
+                rawSuccess == false) {
               print(
                   '❌ Error message detected in raw response - Showing error and staying on verification dialog');
               print('❌ Error message from API: $rawErrorMessage');
@@ -566,6 +550,9 @@ class _VerificationDialogState extends State<VerificationDialog> {
             print('═══════════════════════════════════════════════════════');
             print('📊 STEP VERIFY PHONE RESPONSE MODEL');
             print('═══════════════════════════════════════════════════════');
+            print('Code: ${stepVerifyPhoneResponse.code ?? "N/A"}');
+            print('Message: ${stepVerifyPhoneResponse.message ?? "N/A"}');
+            print('API Success: ${stepVerifyPhoneResponse.apiSuccess ?? "N/A"}');
             print('Success: ${stepVerifyPhoneResponse.success}');
             print(
                 'PhoneNumberOtpRequestId: ${stepVerifyPhoneResponse.phoneNumberOtpRequestId ?? "N/A"}');
@@ -577,24 +564,14 @@ class _VerificationDialogState extends State<VerificationDialog> {
             print('═══════════════════════════════════════════════════════');
             print('');
 
-            // Check for error_message in parsed model
+            // Check parsed dedicated error fields only.
             String? errorMessage =
                 stepVerifyPhoneResponse.errorMessage?.trim() ??
                     stepVerifyPhoneResponse.errorDescriptions?.trim();
 
-            // If error_message exists, show it and stop navigation
-            if (errorMessage != null && errorMessage.isNotEmpty) {
-              print(
-                  '❌ Error message detected in model - Showing error and staying on verification dialog');
-              print('❌ Error message from API: $errorMessage');
-
-              // Show the error message from API response
-              _showError(errorMessage);
-              return; // Stop here, don't navigate
-            }
-
-            // Check if response is successful - must have phoneNumberOtpRequestId and transactionId
-            if (stepVerifyPhoneResponse.success) {
+            // Verify endpoint is successful when API returns success=true.
+            final isVerificationSuccessful = stepVerifyPhoneResponse.success;
+            if (isVerificationSuccessful) {
               print(
                   '✅ StepVerifyPhone API successful - Navigating to username security code screen');
               // Use response values if available, otherwise fall back to widget values
@@ -640,11 +617,10 @@ class _VerificationDialogState extends State<VerificationDialog> {
                 }
               });
             } else {
-              // Response doesn't have required fields
-              print('❌ StepVerifyPhone API response missing required fields');
+              print('❌ StepVerifyPhone API verification failed');
 
               final defaultErrorMessage = errorMessage ??
-                  stepVerifyPhoneResponse.errorDescriptions ??
+                  stepVerifyPhoneResponse.message ??
                   'فشل في التحقق من رقم الموبايل. يرجى التحقق من الكود المدخل';
               _showError(defaultErrorMessage);
             }
@@ -838,6 +814,7 @@ class _VerificationDialogState extends State<VerificationDialog> {
   void _showError(String message) {
     if (mounted) {
       setState(() {
+        _isLoading = false;
         _errorMessage = message;
       });
       // Clear error message after 4 seconds
@@ -889,12 +866,28 @@ class _VerificationDialogState extends State<VerificationDialog> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Title
-                    AppText(
-                      "تأكيد رقم الموبايل",
-                      color: AppColors.primary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () => Navigator.of(context).pop(),
+                          child: Icon(
+                            Icons.close,
+                            color: AppColors.primary,
+                            size: 22,
+                          ),
+                        ),
+                        Expanded(
+                          child: Center(
+                            child: AppText(
+                              "تأكيد رقم الموبايل",
+                              color: AppColors.primary,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 22),
+                      ],
                     ),
                     16.height,
                     // Instructions

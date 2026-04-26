@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 
 class AppHeader extends StatelessWidget {
   final VoidCallback? onBackPressed;
+  final bool showBackButton;
 
   const AppHeader({
     super.key,
     this.onBackPressed,
+    this.showBackButton = true,
   });
 
   @override
@@ -36,17 +38,18 @@ class AppHeader extends StatelessWidget {
             ),
           ),
           // Arrow on the right side
-          Align(
-            alignment: Alignment.centerRight,
-            child: GestureDetector(
-              onTap: onBackPressed ?? () => Navigator.of(context).pop(),
-              child: Icon(
-                Icons.arrow_back_ios_new,
-                size: iconSize,
-                color: AppColors.primary,
+          if (showBackButton)
+            Align(
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                onTap: onBackPressed ?? () => Navigator.of(context).pop(),
+                child: Icon(
+                  Icons.arrow_back_ios_new,
+                  size: iconSize,
+                  color: AppColors.primary,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

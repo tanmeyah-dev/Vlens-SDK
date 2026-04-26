@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'sdk_http_client.dart';
 
 /// HTTP client wrapper that automatically logs all requests and responses.
 class HttpLogger {
@@ -145,7 +146,7 @@ class HttpLogger {
     );
 
     try {
-      final response = await http.get(url, headers: headers);
+      final response = await SdkHttpClient.get(url, headers: headers);
       logResponse(
         requestNumber: requestNumber,
         statusCode: response.statusCode,
@@ -175,7 +176,8 @@ class HttpLogger {
     );
 
     try {
-      final response = await http.post(url, headers: headers, body: body);
+      final response =
+          await SdkHttpClient.post(url, headers: headers, body: body);
       logResponse(
         requestNumber: requestNumber,
         statusCode: response.statusCode,
@@ -205,7 +207,8 @@ class HttpLogger {
     );
 
     try {
-      final response = await http.put(url, headers: headers, body: body);
+      final response =
+          await SdkHttpClient.put(url, headers: headers, body: body);
       logResponse(
         requestNumber: requestNumber,
         statusCode: response.statusCode,
@@ -233,7 +236,7 @@ class HttpLogger {
     );
 
     try {
-      final response = await http.delete(url, headers: headers);
+      final response = await SdkHttpClient.delete(url, headers: headers);
       logResponse(
         requestNumber: requestNumber,
         statusCode: response.statusCode,

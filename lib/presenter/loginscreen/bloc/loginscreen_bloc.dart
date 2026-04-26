@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:core/bases/base_bloc.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:http/http.dart' as http;
+import '../../../utils/sdk_http_client.dart';
+import '../../mobile_number/constants/api_urls.dart';
 import '../event/loginscreen_event.dart';
 import '../model/loginscreen_model.dart';
 import '../model/login_response.dart';
@@ -12,8 +14,7 @@ import '../utils/device_info_helper.dart';
 class LoginScreenBloc extends BaseBloc {
   final LoginScreenModel _model;
   
-  static const String _apiUrlLogin =
-      'https://api.vlenseg.com/api/DigitalIdentity/Login';
+  String get _apiUrlLogin => ApiUrls.getLoginUrl();
 
   LoginScreenBloc(this._model)
       : super(initialState: InitLoginScreen(data: _model)) {
@@ -78,7 +79,7 @@ class LoginScreenBloc extends BaseBloc {
       // Make API call with better error handling
       http.Response response;
       try {
-        response = await http.post(
+        response = await SdkHttpClient.post(
           Uri.parse(_apiUrlLogin),
           headers: HttpHeadersHelper.getDefaultHeaders(),
           body: requestBody,
@@ -132,32 +133,41 @@ class LoginScreenBloc extends BaseBloc {
             return;
           }
           
-          final responseBody = jsonDecode(response.body);
-          if (responseBody is! Map<String, dynamic>) {
+          final decoded = jsonDecode(response.body);
+          if (decoded is! Map) {
             print('⚠️ Invalid response shape');
             _model.isLoading = false;
             emit(UpdateLoginScreenUI(_model));
             emit(OnLoginErrorState('استجابة غير صالحة من الخادم'));
             return;
           }
+          final responseBody = Map<String, dynamic>.from(decoded as Map);
 
           final loginResponse = LoginResponse.fromJson(responseBody);
           print('✅ Login response parsed successfully');
           if (loginResponse.data != null) {
             final d = loginResponse.data!;
-            print('📊 data: hasPendingRequest=${d.hasPendingRequest}, '
-                'maskedPhoneNumber=${d.maskedPhoneNumber}, '
+            print('📊 data: success=${loginResponse.success}, code=${loginResponse.code}, '
+                'hasPendingRequest=${d.hasPendingRequest}, '
                 'isPhoneNumberConfirmationRequired=${d.isPhoneNumberConfirmationRequired}, '
                 'phoneNumberOtpRequestId=${d.phoneNumberOtpRequestId}, '
                 'transactionId=${d.transactionId}');
           }
-          if (loginResponse.errorCode != null || loginResponse.errorMessage != null) {
-            print('⚠️ API reported error: ${loginResponse.errorCode} - ${loginResponse.errorMessage}');
+
+          if (!loginResponse.isBusinessSuccess(httpStatus: response.statusCode)) {
+            final msg = loginResponse.message?.trim().isNotEmpty == true
+                ? loginResponse.message!.trim()
+                : (loginResponse.errorMessage?.trim().isNotEmpty == true
+                    ? loginResponse.errorMessage!.trim()
+                    : 'فشل في تسجيل الدخول');
+            _model.isLoading = false;
+            emit(UpdateLoginScreenUI(_model));
+            emit(OnLoginErrorState(msg));
+            return;
           }
 
           _model.isLoading = false;
           emit(UpdateLoginScreenUI(_model));
-          // Only emit success state when status code is 200
           emit(OnLoginSuccessState(loginResponse));
         } catch (e, stackTrace) {
           print('');

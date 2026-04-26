@@ -7,11 +7,14 @@ import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../../../utils/sdk_http_client.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import '../../mobile_number/constants/api_urls.dart';
 import '../event/username_security_code_event.dart';
+import '../model/create_user_response.dart';
 import '../model/username_security_code_model.dart';
 import '../state/username_security_code_state.dart';
+import '../../loginscreen/utils/device_info_helper.dart';
 
 class UsernameSecurityCodeBloc extends BaseBloc {
   final UsernameSecurityCodeModel _model;
@@ -80,37 +83,10 @@ class UsernameSecurityCodeBloc extends BaseBloc {
         imsi = 'fallback_imsi_${DateTime.now().millisecondsSinceEpoch}';
       }
 
-      // Get location
-      // TODO: Add geolocator package to pubspec.yaml
-      // import 'package:geolocator/geolocator.dart';
-      double? latitude;
-      double? longitude;
-
-      try {
-        // TODO: Implement location retrieval when geolocator is added
-        // bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-        // if (serviceEnabled) {
-        //   LocationPermission permission = await Geolocator.checkPermission();
-        //   if (permission == LocationPermission.denied) {
-        //     permission = await Geolocator.requestPermission();
-        //   }
-        //   if (permission != LocationPermission.denied &&
-        //       permission != LocationPermission.deniedForever) {
-        //     Position position = await Geolocator.getCurrentPosition(
-        //       desiredAccuracy: LocationAccuracy.low,
-        //     );
-        //     latitude = position.latitude;
-        //     longitude = position.longitude;
-        //   }
-        // }
-        print('⚠️ Location not available - add geolocator package');
-      } catch (e) {
-        print('⚠️ Error getting location: $e');
-      }
-
-      // Use default values if location is null
-      final finalLatitude = latitude ?? 1.0;
-      final finalLongitude = longitude ?? 1.0;
+      // Get geolocation (with safe fallback from helper when unavailable)
+      final location = await DeviceInfoHelper.getCurrentLocation();
+      final finalLatitude = location['latitude'] ?? 1.0;
+      final finalLongitude = location['longitude'] ?? 1.0;
 
       // Get emailOtpRequestId from cache
       String? emailOtpRequestId = await VerificationCache().getEmailOtpRequestId();
@@ -119,20 +95,24 @@ class UsernameSecurityCodeBloc extends BaseBloc {
       // Use empty string if not found in cache
       final finalEmailOtpRequestId = emailOtpRequestId ?? '';
 
-      // Prepare request body
+      var email = event.email.trim();
+      if (email.isEmpty) {
+        email = (await VerificationCache().getEmail())?.trim() ?? '';
+      }
+
+      // Prepare request body (vlens create-user: no phoneNumberOtpRequestId / transactionId)
       final requestBody = jsonEncode({
         'password': event.securityCode,
+        'email': email,
         'emailOtpRequestId': finalEmailOtpRequestId,
-        'phoneNumberOtpRequestId': event.phoneNumberOtpRequestId,
         'geoLocation': {
           'latitude': finalLatitude,
           'longitude': finalLongitude,
         },
         'imei': imei,
         'imsi': imsi,
-        'phoneNumber': event.username, // Using username from usernameController.text
+        'phoneNumber': event.mobileNumber,
         'skipEmail': false,
-        'transactionId': event.transactionId,
       });
 
       print('');
@@ -143,15 +123,14 @@ class UsernameSecurityCodeBloc extends BaseBloc {
       print('Method: POST');
       print('Body: $requestBody');
       print('Email OTP Request ID: $finalEmailOtpRequestId');
-      print('Phone Number OTP Request ID: ${event.phoneNumberOtpRequestId}');
-      print('Transaction ID: ${event.transactionId}');
+      print('Email: $email');
       print('═══════════════════════════════════════════════════════');
       print('');
 
       // Make API call with better error handling
       http.Response response;
       try {
-        response = await http.post(
+        response = await SdkHttpClient.post(
           Uri.parse(_apiUrlCreateUser),
           headers: HttpHeadersHelper.getDefaultHeaders(),
           body: requestBody,
@@ -189,20 +168,38 @@ class UsernameSecurityCodeBloc extends BaseBloc {
       print('═══════════════════════════════════════════════════════');
       print('');
 
-      if (response.statusCode == 200) {
-        emit(OnUsernameSecurityCodeSavedState());
-      } else {
-        String errorMessage = 'فشل إنشاء المستخدم';
+      CreateUserResponse? parsed;
+      if (response.body.isNotEmpty) {
         try {
-          if (response.body.isNotEmpty) {
-            final errorBody = jsonDecode(response.body);
-            errorMessage = errorBody['message'] ??
-                errorBody['error'] ??
-                errorBody['errorMessage'] ??
-                errorMessage;
+          final map = jsonDecode(response.body);
+          if (map is Map<String, dynamic>) {
+            parsed = CreateUserResponse.fromJson(map);
           }
         } catch (e) {
-          print('⚠️ Error parsing error response: $e');
+          print('⚠️ Error parsing create-user response: $e');
+        }
+      }
+
+      if (parsed != null &&
+          parsed.isBusinessSuccess(httpStatus: response.statusCode)) {
+        emit(OnUsernameSecurityCodeSavedState(parsed));
+      } else {
+        String errorMessage = 'فشل إنشاء المستخدم';
+        final parsedMsg = parsed?.message?.trim();
+        if (parsedMsg != null && parsedMsg.isNotEmpty) {
+          errorMessage = parsedMsg;
+        } else if (response.body.isNotEmpty) {
+          try {
+            final errorBody = jsonDecode(response.body);
+            if (errorBody is Map<String, dynamic>) {
+              errorMessage = errorBody['message']?.toString() ??
+                  errorBody['error']?.toString() ??
+                  errorBody['errorMessage']?.toString() ??
+                  errorMessage;
+            }
+          } catch (e) {
+            print('⚠️ Error parsing error response: $e');
+          }
         }
         emit(OnUsernameSecurityCodeErrorState(errorMessage));
       }

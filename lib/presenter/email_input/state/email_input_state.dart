@@ -22,12 +22,16 @@ class OnEmailErrorState extends NonRenderState {
 
 class OnEmailVerificationRequiredState extends NonRenderState {
   final String email;
-  final String emailOtpRequestId;
-  final String transactionId;
+  final String? emailOtpRequestId;
+  final String? transactionId;
   
   OnEmailVerificationRequiredState({
     required this.email,
-    required this.emailOtpRequestId,
-    required this.transactionId,
+    this.emailOtpRequestId,
+    this.transactionId,
   });
+}
+
+class OnEmailConfirmedState extends NonRenderState {
+  OnEmailConfirmedState();
 }

@@ -105,7 +105,7 @@ class _MobileNumberSceneState
   }
 
   Widget header() {
-    return const AppHeader();
+    return const AppHeader(showBackButton: false);
   }
 
   Widget instructions() {
@@ -168,6 +168,7 @@ class _MobileNumberSceneState
   }
 
   bool _isLoadingDialogShowing = false;
+  bool _isLoadingDialogMounted = false;
 
   @override
   void listenToState(BuildContext context, BaseStates state) {
@@ -180,26 +181,35 @@ class _MobileNumberSceneState
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && context.mounted && _isLoadingDialogShowing) {
             try {
+              _isLoadingDialogMounted = true;
               showDialog(
                 context: context,
+                useRootNavigator: false,
                 barrierDismissible: false,
                 barrierColor: Colors.black54,
                 builder: (dialogContext) => const Dialog(
                   backgroundColor: Colors.transparent,
                   elevation: 0,
                   child: Center(
-                    child: CircularProgressIndicator(),
+                    child: CircularProgressIndicator(
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(AppColors.primary),
+                    ),
                   ),
                 ),
-              );
+              ).then((_) {
+                _isLoadingDialogMounted = false;
+              });
               print('✅ Loading dialog shown successfully');
             } catch (e) {
               print('❌ Error showing loading dialog: $e');
               _isLoadingDialogShowing = false;
+              _isLoadingDialogMounted = false;
             }
           } else {
             print('⚠️ Cannot show dialog - context not mounted');
             _isLoadingDialogShowing = false;
+            _isLoadingDialogMounted = false;
           }
         });
       } else {
@@ -210,9 +220,10 @@ class _MobileNumberSceneState
       emit(UpdateLoadingStateEvent(false));
       
       // Hide loading dialog if showing
-      if (_isLoadingDialogShowing) {
+      if (_isLoadingDialogShowing && _isLoadingDialogMounted) {
         _isLoadingDialogShowing = false;
-        Navigator.of(context).pop(); // Close loading dialog
+        _isLoadingDialogMounted = false;
+        Navigator.of(context, rootNavigator: false).pop(); // Close loading dialog
       }
       // Phone number exists - navigate to login screen
       print('📱 OnPhoneNumberExistsState received - Navigating to login screen');
@@ -225,9 +236,10 @@ class _MobileNumberSceneState
       emit(UpdateLoadingStateEvent(false));
       
       // Hide loading dialog if showing
-      if (_isLoadingDialogShowing) {
+      if (_isLoadingDialogShowing && _isLoadingDialogMounted) {
         _isLoadingDialogShowing = false;
-        Navigator.of(context).pop(); // Close loading dialog
+        _isLoadingDialogMounted = false;
+        Navigator.of(context, rootNavigator: false).pop(); // Close loading dialog
       }
       // Save phoneNumberOtpRequestId and transactionId to cache
       if (state.phoneNumberOtpRequestId != null && state.transactionId != null) {
@@ -253,9 +265,10 @@ class _MobileNumberSceneState
       emit(UpdateLoadingStateEvent(false));
       
       // Hide loading dialog if showing
-      if (_isLoadingDialogShowing) {
+      if (_isLoadingDialogShowing && _isLoadingDialogMounted) {
         _isLoadingDialogShowing = false;
-        Navigator.of(context).pop(); // Close loading dialog
+        _isLoadingDialogMounted = false;
+        Navigator.of(context, rootNavigator: false).pop(); // Close loading dialog
       }
       // Show error message
       ScaffoldMessenger.of(context).showSnackBar(

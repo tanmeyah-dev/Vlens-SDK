@@ -1,38 +1,114 @@
-/// API response for DigitalIdentity/Login.
+/// vlens login: `POST .../digital/identity/login`
+///
+/// Example envelope:
+/// `{ "code": 0, "message": "...", "success": true, "data": { ... } }`
+/// Some responses omit root `code` / `message` / `success` and only return `data`.
 class LoginResponse {
+  final int? code;
+  final String? message;
+  final bool success;
   final LoginResponseData? data;
+
+  /// Legacy / alternate error shape at root.
   final String? errorCode;
   final String? errorMessage;
   final List<String>? errorDescriptions;
 
   const LoginResponse({
+    this.code,
+    this.message,
+    required this.success,
     this.data,
     this.errorCode,
     this.errorMessage,
     this.errorDescriptions,
   });
 
+  static int? _parseInt(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString());
+  }
+
+  static bool _parseBool(dynamic v, {required bool ifNull}) {
+    if (v == null) return ifNull;
+    if (v is bool) return v;
+    final s = v.toString().toLowerCase();
+    if (s == 'true') return true;
+    if (s == 'false') return false;
+    return ifNull;
+  }
+
   factory LoginResponse.fromJson(Map<String, dynamic> json) {
+    LoginResponseData? data;
+    if (json['data'] is Map) {
+      final raw = Map<String, dynamic>.from(json['data'] as Map);
+      // Some gateways put tokens on the root; merge into `data` for one shape.
+      if (raw['accessToken'] == null && json['accessToken'] != null) {
+        raw['accessToken'] = json['accessToken'];
+      }
+      if (raw['refreshToken'] == null && json['refreshToken'] != null) {
+        raw['refreshToken'] = json['refreshToken'];
+      }
+      data = LoginResponseData.fromJson(raw);
+    }
+
+    final tokenOk = (data?.accessToken ?? '').trim().isNotEmpty ||
+        (data?.encryptedAccessToken ?? '').trim().isNotEmpty;
+    final success = _parseBool(json['success'], ifNull: tokenOk);
+
+    List<String>? descriptions;
+    final raw = json['error_descriptions'];
+    if (raw is List) {
+      descriptions = raw.map((e) => e.toString()).toList();
+    }
+
     return LoginResponse(
-      data: json['data'] != null
-          ? LoginResponseData.fromJson(
-              json['data'] as Map<String, dynamic>,
-            )
-          : null,
+      code: _parseInt(json['code']),
+      message: json['message']?.toString(),
+      success: success,
+      data: data,
       errorCode: json['error_code']?.toString(),
       errorMessage: json['error_message']?.toString(),
-      errorDescriptions: json['error_descriptions'] != null
-          ? (json['error_descriptions'] as List<dynamic>)
-              .map((e) => e.toString())
-              .toList()
-          : null,
+      errorDescriptions: descriptions,
     );
   }
 
-  bool get isSuccess => errorCode == null && errorMessage == null;
+  /// Used after OTP re-login in [VerifyUserOTPDialog].
+  bool get isSuccess {
+    if (data == null) return false;
+    if (errorCode != null && errorCode!.trim().isNotEmpty) return false;
+    if (errorMessage != null && errorMessage!.trim().isNotEmpty) return false;
+    final d = data!;
+    return success ||
+        (d.accessToken ?? '').trim().isNotEmpty ||
+        (d.encryptedAccessToken ?? '').trim().isNotEmpty;
+  }
+
+  /// HTTP 200 + parseable business success for navigation.
+  ///
+  /// Do **not** treat `code != 0` alone as failure: some APIs use `code: 200`
+  /// or other non-zero OK values. Rely on [success], bearer token, or
+  /// [encryptedAccessToken] inside [data].
+  bool isBusinessSuccess({required int httpStatus}) {
+    if (httpStatus != 200) return false;
+    final d = data;
+    if (d == null) return false;
+    if (errorCode != null && errorCode!.trim().isNotEmpty) return false;
+    if (errorMessage != null && errorMessage!.trim().isNotEmpty) return false;
+
+    final hasBearer = (d.accessToken ?? '').trim().isNotEmpty;
+    final hasEncrypted = (d.encryptedAccessToken ?? '').trim().isNotEmpty;
+    if (success || hasBearer || hasEncrypted) return true;
+
+    // No positive signal: treat numeric `code` only then (0 = OK, null = unknown).
+    if (code != null && code != 0) return false;
+    return false;
+  }
 }
 
-/// Inner "data" object of the login response.
+/// `data` object from login / login-with-OTP.
 class LoginResponseData {
   final bool hasPendingRequest;
   final String? maskedPhoneNumber;
@@ -47,13 +123,13 @@ class LoginResponseData {
   final String? accessToken;
   final String? refreshToken;
   final String? encryptedAccessToken;
-  final int phoneOtpExpireInSeconds;
-  final int emailOtpExpireInSeconds;
+  final int? phoneOtpExpireInSeconds;
+  final int? emailOtpExpireInSeconds;
   final String? userName;
   final String? userFullName;
   final dynamic user;
   final String? redirectUri;
-  final String transactionId;
+  final String? transactionId;
 
   const LoginResponseData({
     this.hasPendingRequest = false,
@@ -66,47 +142,59 @@ class LoginResponseData {
     this.phoneNumberOtpRequestId,
     this.emailOtpRequestId,
     this.isDigitalIdentityVerified = false,
-    required this.accessToken,
-    required this.refreshToken,
+    this.accessToken,
+    this.refreshToken,
     this.encryptedAccessToken,
-    this.phoneOtpExpireInSeconds = 0,
-    this.emailOtpExpireInSeconds = 0,
+    this.phoneOtpExpireInSeconds,
+    this.emailOtpExpireInSeconds,
     this.userName,
     this.userFullName,
     this.user,
     this.redirectUri,
-    required this.transactionId,
+    this.transactionId,
   });
+
+  static bool _bool(dynamic v, {bool fallback = false}) {
+    if (v == null) return fallback;
+    if (v is bool) return v;
+    final s = v.toString().toLowerCase();
+    if (s == 'true') return true;
+    if (s == 'false') return false;
+    return fallback;
+  }
+
+  static int? _int(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString());
+  }
 
   factory LoginResponseData.fromJson(Map<String, dynamic> json) {
     return LoginResponseData(
-      hasPendingRequest: json['hasPendingRequest'] as bool? ?? false,
-      maskedPhoneNumber: json['maskedPhoneNumber'] as String?,
+      hasPendingRequest: _bool(json['hasPendingRequest']),
+      maskedPhoneNumber: json['maskedPhoneNumber']?.toString(),
       isEmailConfirmationRequired:
-          json['isEmailConfirmationRequired'] as bool? ?? false,
-      isEmailConfirmed: json['isEmailConfirmed'] as bool? ?? false,
+          _bool(json['isEmailConfirmationRequired']),
+      isEmailConfirmed: _bool(json['isEmailConfirmed']),
       isPhoneNumberConfirmationRequired:
-          json['isPhoneNumberConfirmationRequired'] as bool? ?? false,
-      isPhoneNumberConfirmed:
-          json['isPhoneNumberConfirmed'] as bool? ?? false,
-      phoneNumberOtp: json['phoneNumberOtp'] as String?,
-      phoneNumberOtpRequestId:
-          json['phoneNumberOtpRequestId'] as String?,
-      emailOtpRequestId: json['emailOtpRequestId'] as String?,
-      isDigitalIdentityVerified:
-          json['isDigitalIdentityVerified'] as bool? ?? false,
-      accessToken: json['accessToken'],
-      refreshToken: json['refreshToken'],
-      encryptedAccessToken: json['encryptedAccessToken'] as String?,
-      phoneOtpExpireInSeconds:
-          json['phoneOtpExpireInSeconds'] as int? ?? 0,
-      emailOtpExpireInSeconds:
-          json['emailOtpExpireInSeconds'] as int? ?? 0,
-      userName: json['userName'] as String?,
-      userFullName: json['userFullName'] as String?,
+          _bool(json['isPhoneNumberConfirmationRequired']),
+      isPhoneNumberConfirmed: _bool(json['isPhoneNumberConfirmed']),
+      phoneNumberOtp:
+          (json['phoneNumberOtp'] ?? json['phoneOtp'])?.toString(),
+      phoneNumberOtpRequestId: json['phoneNumberOtpRequestId']?.toString(),
+      emailOtpRequestId: json['emailOtpRequestId']?.toString(),
+      isDigitalIdentityVerified: _bool(json['isDigitalIdentityVerified']),
+      accessToken: json['accessToken']?.toString(),
+      refreshToken: json['refreshToken']?.toString(),
+      encryptedAccessToken: json['encryptedAccessToken']?.toString(),
+      phoneOtpExpireInSeconds: _int(json['phoneOtpExpireInSeconds']),
+      emailOtpExpireInSeconds: _int(json['emailOtpExpireInSeconds']),
+      userName: json['userName']?.toString(),
+      userFullName: json['userFullName']?.toString(),
       user: json['user'],
-      redirectUri: json['redirectUri'] as String?,
-      transactionId: json['transactionId'],
+      redirectUri: json['redirectUri']?.toString(),
+      transactionId: json['transactionId']?.toString(),
     );
   }
 }

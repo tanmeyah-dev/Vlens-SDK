@@ -33,7 +33,19 @@ class _LoginScreenSceneState
     extends BaseState<LoginScreenScene, LoginScreenBloc, LoginScreenModel> {
   late LoginScreenModel _model;
   bool _listenersAdded = false;
+  bool _isPasswordVisible = false;
   bool _isLoadingDialogShowing = false;
+  bool _loginLoadingActive = false;
+  BuildContext? _loginLoadingDialogContext;
+
+  void _dismissLoginLoadingOverlay() {
+    final dialogCtx = _loginLoadingDialogContext;
+    if (dialogCtx != null && dialogCtx.mounted) {
+      Navigator.of(dialogCtx).pop();
+    }
+    _loginLoadingDialogContext = null;
+    _isLoadingDialogShowing = false;
+  }
 
   @override
   void dispose() {
@@ -207,7 +219,16 @@ class _LoginScreenSceneState
       label: "كلمة المرور",
       controller: _model.passwordController,
       focusNode: _model.passwordFocusNode,
-      obscureText: true,
+      obscureText: !_isPasswordVisible,
+      startSuffix: Icon(
+        _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
+        color: AppColors.gray,
+      ),
+      onSuffixTap: () {
+        setState(() {
+          _isPasswordVisible = !_isPasswordVisible;
+        });
+      },
       keyboardType: TextInputType.visiblePassword,
       textAlign: TextAlign.right,
       validator: (value) {
@@ -323,46 +344,52 @@ class _LoginScreenSceneState
   @override
   void listenToState(BuildContext context, BaseStates state) {
     if (state is OnLoginLoadingState) {
-      // Show loading dialog immediately
       if (!_isLoadingDialogShowing) {
         _isLoadingDialogShowing = true;
-        // Use post frame callback to ensure context is ready
+        _loginLoadingActive = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && context.mounted && _isLoadingDialogShowing) {
-            try {
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                barrierColor: Colors.black54,
-                builder: (dialogContext) => const Dialog(
+          if (!mounted || !context.mounted || !_loginLoadingActive) {
+            _isLoadingDialogShowing = false;
+            return;
+          }
+          try {
+            showDialog<void>(
+              context: context,
+              barrierDismissible: false,
+              barrierColor: Colors.black54,
+              builder: (dialogContext) {
+                _loginLoadingDialogContext = dialogContext;
+                return const Dialog(
                   backgroundColor: Colors.transparent,
                   elevation: 0,
                   child: Center(
-                    child: CircularProgressIndicator(),
+                    child: CircularProgressIndicator(
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(AppColors.primary),
+                    ),
                   ),
-                ),
-              );
-            } catch (e) {
-              _isLoadingDialogShowing = false;
-            }
-          } else {
+                );
+              },
+            ).whenComplete(() {
+              _loginLoadingDialogContext = null;
+            });
+          } catch (e) {
             _isLoadingDialogShowing = false;
+            _loginLoadingActive = false;
           }
         });
       }
     } else if (state is OnLoginSuccessState) {
-      // Status code is 200 - navigate to home screen
-      // Hide loading dialog if showing
-      if (_isLoadingDialogShowing) {
-        _isLoadingDialogShowing = false;
-        Navigator.of(context).pop(); // Close loading dialog
+      _loginLoadingActive = false;
+      _dismissLoginLoadingOverlay();
+      final loginResponseData = state.loginResponse.data;
+      if (loginResponseData == null || !mounted || !context.mounted) {
+        return;
       }
-      // Check if phone number confirmation is required
-      if (mounted && context.mounted) {
-        final loginResponseData = state.loginResponse.data!;
+      // Run after this frame so the loading route is fully popped before VLens/dialog uses Navigator.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !context.mounted) return;
         if (loginResponseData.isPhoneNumberConfirmationRequired == true) {
-          // Show user OTP verification dialog
-          // Get the phone number and password from the model (user entered them during login)
           final phoneNumber = _model.mobileNumberController.text;
           final password = _model.passwordController.text;
           VerifyUserOTPDialogHelper.showVerifyUserOTPDialog(
@@ -374,17 +401,12 @@ class _LoginScreenSceneState
             transactionId: loginResponseData.transactionId,
           );
         } else {
-          // Initialize VLens SDK if no phone confirmation required
           _initializeVLensSDK(context, loginResponseData);
         }
-      }
+      });
     } else if (state is OnLoginErrorState) {
-      // Status code is NOT 200 - stay on login screen and show error
-      // Hide loading dialog if showing
-      if (_isLoadingDialogShowing) {
-        _isLoadingDialogShowing = false;
-        Navigator.of(context).pop(); // Close loading dialog
-      }
+      _loginLoadingActive = false;
+      _dismissLoginLoadingOverlay();
       // Clear previous errors
       _model.phoneNumberError = null;
       _model.passwordError = null;
@@ -439,12 +461,14 @@ class _LoginScreenSceneState
       BuildContext context, LoginResponseData loginResponseData) {
     // Configure VLens SDK
     final sdkConfig = SdkConfig(
-      transactionId: loginResponseData.transactionId,
+      transactionId: loginResponseData.transactionId ?? '',
       isLivenessOnly: false,
       isNationalIdOnly: false,
       env: EnvironmentConfig(
         apiBaseUrl: "https://api.vlenseg.com",
-        accessToken: loginResponseData.accessToken ?? "",
+        accessToken: (loginResponseData.accessToken?.trim().isNotEmpty == true)
+            ? loginResponseData.accessToken!
+            : (loginResponseData.encryptedAccessToken ?? ""),
         refreshToken: loginResponseData.refreshToken ?? "",
         apiKey:
             "j1m9DwIywPS1dPCkFUT2hM2IRr10921gq5PBzQID6xI", // TODO: Replace with your API key
@@ -476,37 +500,31 @@ class _LoginScreenSceneState
           errorMessageAr: "خطأ في الشبكة",
         ),
       ],
+      onSuccess: (extractedData) {
+        print("✅ VLens SDK success - verification completed");
+        if (mounted && context.mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const HomeScene()),
+          );
+        }
+      },
+      onFailure: (errorCode, errorMsg) {
+        print("❌ VLens SDK failure: [$errorCode] $errorMsg");
+        if (mounted && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('خطأ في التحقق: $errorMsg'),
+              backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      },
+      getExtractedData: true,
     );
 
-    // Get VLensManager instance and set callbacks BEFORE init()
+    // Initialize VLens SDK - callbacks are passed via sdkConfig.
     final vlensManager = VLensManager();
-
-    // Set callbacks BEFORE init() to ensure our handlers are used
-    vlensManager.onSuccess = () {
-      print("✅ VLens SDK success - verification completed");
-      // Navigate to home screen after VLens SDK success
-      if (mounted && context.mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomeScene()),
-        );
-      }
-    };
-
-    vlensManager.onFailure = (String error) {
-      print("❌ VLens SDK failure: $error");
-      // Show error to user
-      if (mounted && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('خطأ في التحقق: $error'),
-            backgroundColor: AppColors.error,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-    };
-
-    // Initialize VLens SDK - this will automatically navigate to FlowController
     vlensManager.init(context, sdkConfig);
     // VLensManager().onFailure = (context, errorCode, errorMsg) {
     //   print("eeeeeeee");

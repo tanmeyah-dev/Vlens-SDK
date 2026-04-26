@@ -11,6 +11,7 @@ class VerificationSuccessDialogHelper {
     
     showGeneralDialog(
       context: context,
+      useRootNavigator: false,
       barrierDismissible: true,
       barrierLabel: "إغلاق",
       barrierColor: Colors.black.withOpacity(0.5),

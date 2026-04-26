@@ -12,7 +12,7 @@ class CountryCodeDisplay extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: 100,
-      height: 56,
+      height: 51,
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(10),

@@ -12,6 +12,9 @@
 ///   }
 /// }
 class StepVerifyEmailResponse {
+  final int? code;
+  final String? message;
+  final bool? apiSuccess;
   final String? emailOtpRequestId;
   final String? transactionId;
   final bool? isEmailConfirmed;
@@ -21,6 +24,9 @@ class StepVerifyEmailResponse {
   final Map<String, dynamic>? data;
 
   StepVerifyEmailResponse({
+    this.code,
+    this.message,
+    this.apiSuccess,
     this.emailOtpRequestId,
     this.transactionId,
     this.isEmailConfirmed,
@@ -31,8 +37,11 @@ class StepVerifyEmailResponse {
   });
 
   /// Computed property to determine if the request was successful
-  /// Success is true when we have both emailOtpRequestId and transactionId
+  /// Supports both old ID-based contract and new explicit success flag contract.
   bool get success {
+    if (apiSuccess != null) {
+      return apiSuccess == true;
+    }
     return emailOtpRequestId != null && 
            emailOtpRequestId!.isNotEmpty &&
            transactionId != null && 
@@ -66,8 +75,10 @@ class StepVerifyEmailResponse {
           dataMap['transactionId']?.toString();
       
       // Handle isEmailConfirmed from data object
-      if (isEmailConfirmed == null && dataMap['isEmailConfirmed'] != null) {
-        final value = dataMap['isEmailConfirmed'];
+      if (isEmailConfirmed == null &&
+          (dataMap['isEmailConfirmed'] != null ||
+              dataMap['emailConfirmed'] != null)) {
+        final value = dataMap['isEmailConfirmed'] ?? dataMap['emailConfirmed'];
         if (value is bool) {
           isEmailConfirmed = value;
         } else if (value is String) {
@@ -79,6 +90,11 @@ class StepVerifyEmailResponse {
     }
 
     return StepVerifyEmailResponse(
+      code: json['code'] is int ? json['code'] as int : int.tryParse('${json['code']}'),
+      message: json['message']?.toString(),
+      apiSuccess: json['success'] is bool
+          ? json['success'] as bool
+          : (json['success']?.toString().toLowerCase() == 'true'),
       emailOtpRequestId: emailOtpRequestId,
       transactionId: transactionId,
       isEmailConfirmed: isEmailConfirmed,
@@ -91,6 +107,9 @@ class StepVerifyEmailResponse {
 
   Map<String, dynamic> toJson() {
     return {
+      'code': code,
+      'message': message,
+      'success': apiSuccess,
       'emailOtpRequestId': emailOtpRequestId,
       'transactionId': transactionId,
       'isEmailConfirmed': isEmailConfirmed,

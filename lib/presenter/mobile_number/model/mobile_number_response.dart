@@ -1,75 +1,74 @@
-/// Model for the nested data object in CheckExistenceOfEmailOrPhone API response
+/// Model for the nested data object in identity check API response.
 class CheckExistenceData {
-  final bool isEmailExists;
-  final bool isPhoneNumberExists;
+  final bool phoneNumberExists;
+  final bool emailExists;
 
   CheckExistenceData({
-    required this.isEmailExists,
-    required this.isPhoneNumberExists,
+    required this.phoneNumberExists,
+    required this.emailExists,
   });
 
   factory CheckExistenceData.fromJson(Map<String, dynamic> json) {
+    final rawPhoneNumberExists = json["phoneNumberExists"];
+    final rawEmailExists = json["emailExists"];
+
     return CheckExistenceData(
-      isEmailExists: json["isEmailExists"] ?? false,
-      isPhoneNumberExists: json["isPhoneNumberExists"] ?? false,
+      phoneNumberExists: rawPhoneNumberExists is bool
+          ? rawPhoneNumberExists
+          : rawPhoneNumberExists?.toString().toLowerCase() == 'true',
+      emailExists: rawEmailExists is bool
+          ? rawEmailExists
+          : rawEmailExists?.toString().toLowerCase() == 'true',
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      "isEmailExists": isEmailExists,
-      "isPhoneNumberExists": isPhoneNumberExists,
+      "phoneNumberExists": phoneNumberExists,
+      "emailExists": emailExists,
     };
   }
 }
 
-/// Model for CheckExistenceOfEmailOrPhone API response
-/// Response structure:
-/// {
-///   "data": {
-///     "isEmailExists": false,
-///     "isPhoneNumberExists": false
-///   },
-///   "error_code": null,
-///   "error_message": null,
-///   "error_descriptions": null
-/// }
+/// Model for identity check API response.
 class MobileNumberResponse {
   final CheckExistenceData? data;
-  final String? errorCode;
-  final String? errorMessage;
-  final String? errorDescriptions;
+  final int? code;
+  final String? message;
+  final bool success;
 
   MobileNumberResponse({
     this.data,
-    this.errorCode,
-    this.errorMessage,
-    this.errorDescriptions,
+    this.code,
+    this.message,
+    required this.success,
   });
 
-  /// Computed property to determine if the request was successful
-  /// Success is true when all error fields are null
-  bool get success {
-    return errorCode == null && errorMessage == null && errorDescriptions == null;
-  }
-
   factory MobileNumberResponse.fromJson(Map<String, dynamic> json) {
+    final rawSuccess = json["success"];
+    final parsedSuccess = rawSuccess is bool
+        ? rawSuccess
+        : rawSuccess?.toString().toLowerCase() == 'true';
+
+    final rawCode = json["code"];
+    final parsedCode = rawCode is int ? rawCode : int.tryParse('$rawCode');
+
     return MobileNumberResponse(
-      data: json["data"] != null 
+      data: json["data"] != null
           ? CheckExistenceData.fromJson(json["data"] as Map<String, dynamic>)
           : null,
-      errorCode: json["error_code"]?.toString(),
-      errorMessage: json["error_message"]?.toString(),
-      errorDescriptions: json["error_descriptions"]?.toString(),
+      code: parsedCode,
+      message: json["message"]?.toString(),
+      success: parsedSuccess,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       "data": data?.toJson(),
-      "error_code": errorCode,
-      "error_message": errorMessage,
-      "error_descriptions": errorDescriptions,
+      "code": code,
+      "message": message,
+      "success": success,
     };
   }
 }

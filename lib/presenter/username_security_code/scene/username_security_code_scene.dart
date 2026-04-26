@@ -3,13 +3,13 @@ import 'package:core/bases/states/base/base_state.dart';
 import 'package:core/bases/states/base/render_data_state.dart';
 import 'package:core/components/button/app_button.dart';
 import 'package:core/components/text/app_text.dart';
+import 'package:core/components/textField/app_textfield.dart';
 import 'package:core/extensions/widget_extension.dart';
 import 'package:core/utils/ui.dart';
 import 'package:core/style/app_colors.dart';
 import 'package:flutter/material.dart';
 import '../../../routes/route_path.dart';
 import '../../mobile_number/widgets/app_header.dart';
-import '../../mobile_number/widgets/mobile_number_field.dart';
 import '../bloc/username_security_code_bloc.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import '../constants/security_code_constants.dart';
@@ -20,48 +20,62 @@ import '../utils/security_code_validator.dart';
 import '../widgets/pin_input_field.dart';
 import '../widgets/security_code_guidelines.dart';
 
-class UsernameSecurityCodeScene extends StatefulWidget {
+class RegisterScene extends StatefulWidget {
   final String? phoneNumberOtpRequestId;
   final String? transactionId;
   final String? mobileNumber;
+  /// Email from email step (route argument); falls back to [VerificationCache].
+  final String? verifiedEmail;
 
-  const UsernameSecurityCodeScene({
+  const RegisterScene({
     super.key,
     this.phoneNumberOtpRequestId,
     this.transactionId,
     this.mobileNumber,
+    this.verifiedEmail,
   });
 
   @override
-  State<UsernameSecurityCodeScene> createState() => _UsernameSecurityCodeSceneState();
+  State<RegisterScene> createState() => _RegisterSceneState();
 }
 
-class _UsernameSecurityCodeSceneState
-    extends BaseState<UsernameSecurityCodeScene, UsernameSecurityCodeBloc, UsernameSecurityCodeModel> {
+class _RegisterSceneState
+    extends BaseState<RegisterScene, UsernameSecurityCodeBloc, UsernameSecurityCodeModel> {
   late UsernameSecurityCodeModel _model;
-  String? _cachedPhoneNumberOtpRequestId;
-  String? _cachedTransactionId;
   String? _cachedMobileNumber;
+  String? _cachedEmail;
+  bool _isCreateCodeVisible = false;
+  bool _isConfirmCodeVisible = false;
 
   @override
   void initState() {
     super.initState();
-    _loadCachedData();
+    // Run after first frame so `buildWidget` has assigned `_model`.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadCachedData());
   }
 
   Future<void> _loadCachedData() async {
-    _cachedPhoneNumberOtpRequestId = await VerificationCache().getPhoneNumberOtpRequestId();
-    _cachedTransactionId = await VerificationCache().getTransactionId();
     _cachedMobileNumber = await VerificationCache().getMobileNumber();
+    _cachedEmail = await VerificationCache().getEmail();
+    if (!mounted) return;
+    final routeEmail = widget.verifiedEmail?.trim();
+    final displayEmail = (routeEmail != null && routeEmail.isNotEmpty)
+        ? routeEmail
+        : (_cachedEmail ?? '');
+    _model.usernameController.text = displayEmail;
     print('📥 Loaded from cache:');
-    print('📥 phoneNumberOtpRequestId: $_cachedPhoneNumberOtpRequestId');
-    print('📥 transactionId: $_cachedTransactionId');
     print('📥 mobileNumber: $_cachedMobileNumber');
+    print('📥 email: $_cachedEmail');
+    _checkAndEnableSaveButton();
   }
 
   @override
   Widget buildWidget(BuildContext context, RenderDataState<UsernameSecurityCodeModel> state) {
     _model = state.data;
+    final routeEmail = widget.verifiedEmail?.trim();
+    if (routeEmail != null && routeEmail.isNotEmpty) {
+      _model.usernameController.text = routeEmail;
+    }
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
@@ -119,14 +133,14 @@ class _UsernameSecurityCodeSceneState
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         AppText(
-          "قم بادخال رقم الموبايل",
+          "تأكيد البريد الإلكتروني",
           color: AppColors.primary,
           fontSize: 18,
           fontWeight: FontWeight.w500,
         ),
         4.height,
         AppText(
-          "ورمز حماية",
+          "وإنشاء رمز الحماية",
           color: AppColors.primary,
           fontSize: 18,
           fontWeight: FontWeight.w500,
@@ -136,11 +150,14 @@ class _UsernameSecurityCodeSceneState
   }
 
   Widget mobileNumberFields() {
-    return MobileNumberField(
+    return AppTextField(
+      labelText: "البريد الإلكتروني",
+      hintText: "example@example.com",
       controller: _model.usernameController,
-      onChanged: (value) {
-        _checkAndEnableSaveButton();
-      },
+      keyboardType: TextInputType.emailAddress,
+      enabled: true,
+      readOnly: true,
+      enableInteractiveSelection: false,
     );
   }
 
@@ -149,6 +166,16 @@ class _UsernameSecurityCodeSceneState
       label: "انشاء رمز الحماية",
       controller: _model.createSecurityCodeController,
       focusNode: _model.createSecurityCodeFocusNode,
+      obscureText: !_isCreateCodeVisible,
+      endSuffix: Icon(
+        _isCreateCodeVisible ? Icons.visibility_off : Icons.visibility,
+        color: AppColors.gray,
+      ),
+      onSuffixTap: () {
+        setState(() {
+          _isCreateCodeVisible = !_isCreateCodeVisible;
+        });
+      },
       validator: (value) => SecurityCodeValidator.getValidationError(
         value ?? '',
         SecurityCodeConstants.pinLength,
@@ -169,6 +196,16 @@ class _UsernameSecurityCodeSceneState
       label: "تأكيد رمز الحماية",
       controller: _model.confirmSecurityCodeController,
       focusNode: _model.confirmSecurityCodeFocusNode,
+      obscureText: !_isConfirmCodeVisible,
+      endSuffix: Icon(
+        _isConfirmCodeVisible ? Icons.visibility_off : Icons.visibility,
+        color: AppColors.gray,
+      ),
+      onSuffixTap: () {
+        setState(() {
+          _isConfirmCodeVisible = !_isConfirmCodeVisible;
+        });
+      },
       validator: (value) {
         if (value == null || value.isEmpty) {
           return 'تأكيد رمز الحماية مطلوب';
@@ -213,57 +250,69 @@ class _UsernameSecurityCodeSceneState
   }
 
   bool _isLoadingDialogShowing = false;
+  bool _createUserLoadingActive = false;
+  BuildContext? _loadingDialogContext;
+
+  void _dismissCreateUserLoadingOverlay() {
+    final dialogCtx = _loadingDialogContext;
+    if (dialogCtx != null && dialogCtx.mounted) {
+      Navigator.of(dialogCtx).pop();
+    }
+    _loadingDialogContext = null;
+    _isLoadingDialogShowing = false;
+  }
 
   @override
   void listenToState(BuildContext context, BaseStates state) {
     if (state is OnUsernameSecurityCodeLoadingState) {
-      // Show loading dialog immediately
       if (!_isLoadingDialogShowing) {
         _isLoadingDialogShowing = true;
+        _createUserLoadingActive = true;
         print('⏳ Showing loading dialog...');
-        // Use post frame callback to ensure context is ready
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && context.mounted && _isLoadingDialogShowing) {
-            try {
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                barrierColor: Colors.black54,
-                builder: (dialogContext) => const Dialog(
+          if (!mounted || !context.mounted || !_createUserLoadingActive) {
+            _isLoadingDialogShowing = false;
+            return;
+          }
+          try {
+            showDialog<void>(
+              context: context,
+              barrierDismissible: false,
+              barrierColor: Colors.black54,
+              builder: (dialogContext) {
+                _loadingDialogContext = dialogContext;
+                return const Dialog(
                   backgroundColor: Colors.transparent,
                   elevation: 0,
                   child: Center(
-                    child: CircularProgressIndicator(),
+                    child: CircularProgressIndicator(
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(AppColors.primary),
+                    ),
                   ),
-                ),
-              );
-              print('✅ Loading dialog shown successfully');
-            } catch (e) {
-              print('❌ Error showing loading dialog: $e');
-              _isLoadingDialogShowing = false;
-            }
-          } else {
-            print('⚠️ Cannot show dialog - context not mounted');
+                );
+              },
+            ).whenComplete(() {
+              _loadingDialogContext = null;
+            });
+            print('✅ Loading dialog shown successfully');
+          } catch (e) {
+            print('❌ Error showing loading dialog: $e');
             _isLoadingDialogShowing = false;
+            _createUserLoadingActive = false;
           }
         });
-      } else {
-        print('⚠️ Loading dialog already showing');
       }
     } else if (state is OnUsernameSecurityCodeSavedState) {
-      // Hide loading dialog if showing
-      if (_isLoadingDialogShowing) {
-        _isLoadingDialogShowing = false;
-        Navigator.of(context).pop(); // Close loading dialog
-      }
-      // Navigate to login screen
-      Navigator.of(context).pushNamed(RoutePath.loginScreen);
+      _createUserLoadingActive = false;
+      _dismissCreateUserLoadingOverlay();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !context.mounted) return;
+        Navigator.of(context).pushNamed(RoutePath.loginScreen);
+      });
     } else if (state is OnUsernameSecurityCodeErrorState) {
-      // Hide loading dialog if showing
-      if (_isLoadingDialogShowing) {
-        _isLoadingDialogShowing = false;
-        Navigator.of(context).pop(); // Close loading dialog
-      }
+      _createUserLoadingActive = false;
+      _dismissCreateUserLoadingOverlay();
       // Show error message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -306,24 +355,18 @@ class _UsernameSecurityCodeSceneState
         );
         return;
       }
-      // Use cached values if widget values are not available
-      final phoneNumberOtpRequestId = widget.phoneNumberOtpRequestId ?? 
-          _cachedPhoneNumberOtpRequestId ?? '';
-      final transactionId = widget.transactionId ?? 
-          _cachedTransactionId ?? '';
-      final mobileNumber = widget.mobileNumber ?? 
-          _cachedMobileNumber ?? '';
-      
+      final mobileNumber = widget.mobileNumber ?? _cachedMobileNumber ?? '';
+      final email = _model.usernameController.text.trim().isNotEmpty
+          ? _model.usernameController.text.trim()
+          : (_cachedEmail ?? '');
+
       print('📤 Using values for create-user API:');
-      print('📤 phoneNumberOtpRequestId: $phoneNumberOtpRequestId');
-      print('📤 transactionId: $transactionId');
+      print('📤 email: $email');
       print('📤 mobileNumber: $mobileNumber');
-      
+
       emit(SaveUsernameSecurityCodeEvent(
-        _model.usernameController.text,
+        email,
         _model.createSecurityCodeController.text,
-        phoneNumberOtpRequestId: phoneNumberOtpRequestId,
-        transactionId: transactionId,
         mobileNumber: mobileNumber,
       ));
     }

@@ -8,6 +8,7 @@ import 'package:core/extensions/widget_extension.dart';
 import 'package:core/utils/ui.dart';
 import 'package:core/style/app_colors.dart';
 import 'package:flutter/material.dart';
+import '../../../routes/route_path.dart';
 import '../../mobile_number/widgets/app_header.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import '../bloc/email_input_bloc.dart';
@@ -182,6 +183,7 @@ class _EmailInputSceneState
   }
 
   bool _isLoadingDialogShowing = false;
+  bool _isLoadingDialogMounted = false;
 
   @override
   void listenToState(BuildContext context, BaseStates state) {
@@ -196,24 +198,33 @@ class _EmailInputSceneState
             try {
               showDialog(
                 context: context,
+                useRootNavigator: false,
                 barrierDismissible: false,
                 barrierColor: Colors.black54,
                 builder: (dialogContext) => const Dialog(
                   backgroundColor: Colors.transparent,
                   elevation: 0,
                   child: Center(
-                    child: CircularProgressIndicator(),
+                    child: CircularProgressIndicator(
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(AppColors.primary),
+                    ),
                   ),
                 ),
-              );
+              ).then((_) {
+                _isLoadingDialogMounted = false;
+              });
+              _isLoadingDialogMounted = true;
               print('✅ Loading dialog shown successfully');
             } catch (e) {
               print('❌ Error showing loading dialog: $e');
               _isLoadingDialogShowing = false;
+              _isLoadingDialogMounted = false;
             }
           } else {
             print('⚠️ Cannot show dialog - context not mounted');
             _isLoadingDialogShowing = false;
+            _isLoadingDialogMounted = false;
           }
         });
       } else {
@@ -221,9 +232,10 @@ class _EmailInputSceneState
       }
     } else if (state is OnEmailVerificationRequiredState) {
       // Hide loading dialog if showing
-      if (_isLoadingDialogShowing) {
+      if (_isLoadingDialogShowing && _isLoadingDialogMounted) {
         _isLoadingDialogShowing = false;
-        Navigator.of(context).pop(); // Close loading dialog
+        _isLoadingDialogMounted = false;
+        Navigator.of(context, rootNavigator: false).pop(); // Close loading dialog
       }
       // Show email verification dialog
       print('📧 Showing email verification dialog');
@@ -233,11 +245,24 @@ class _EmailInputSceneState
         emailOtpRequestId: state.emailOtpRequestId,
         transactionId: state.transactionId,
       );
+    } else if (state is OnEmailConfirmedState) {
+      // Hide loading dialog if showing
+      if (_isLoadingDialogShowing && _isLoadingDialogMounted) {
+        _isLoadingDialogShowing = false;
+        _isLoadingDialogMounted = false;
+        Navigator.of(context, rootNavigator: false).pop(); // Close loading dialog
+      }
+      print('📧 Email already confirmed - navigating to username security screen');
+      Navigator.of(context).pushNamed(
+        RoutePath.usernameSecurityCode,
+        arguments: _model.emailController.text.trim(),
+      );
     } else if (state is OnEmailErrorState) {
       // Hide loading dialog if showing
-      if (_isLoadingDialogShowing) {
+      if (_isLoadingDialogShowing && _isLoadingDialogMounted) {
         _isLoadingDialogShowing = false;
-        Navigator.of(context).pop(); // Close loading dialog
+        _isLoadingDialogMounted = false;
+        Navigator.of(context, rootNavigator: false).pop(); // Close loading dialog
       }
       // Show error message
       ScaffoldMessenger.of(context).showSnackBar(

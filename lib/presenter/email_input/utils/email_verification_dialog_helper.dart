@@ -10,7 +10,8 @@ class EmailVerificationDialogHelper {
   }) {
     showGeneralDialog(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true,
+      barrierLabel: 'Close',
       barrierColor: Colors.black.withOpacity(0.5),
       transitionDuration: const Duration(milliseconds: 300),
       // Use MediaQuery to ensure dialog respects keyboard insets
