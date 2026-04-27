@@ -13,7 +13,6 @@ import 'package:core/style/app_colors.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
 import '../../home/scene/home_scene.dart';
 import '../model/login_response.dart';
 import 'package:vlens/vlens.dart';
@@ -392,7 +391,18 @@ class _LoginScreenSceneState
       // Run after this frame so the loading route is fully popped before VLens/dialog uses Navigator.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || !context.mounted) return;
-        if (loginResponseData.isPhoneNumberConfirmationRequired == true) {
+        final needsPhoneOtp = loginResponseData.isPhoneNumberConfirmationRequired == true &&
+            loginResponseData.isPhoneNumberConfirmed != true;
+        final hasUsableToken =
+            (loginResponseData.accessToken?.trim().isNotEmpty == true) ||
+                (loginResponseData.encryptedAccessToken?.trim().isNotEmpty == true);
+
+        print('🧭 Login flow decision: '
+            'needsPhoneOtp=$needsPhoneOtp, '
+            'isPhoneNumberConfirmed=${loginResponseData.isPhoneNumberConfirmed}, '
+            'hasUsableToken=$hasUsableToken');
+
+        if (needsPhoneOtp) {
           final phoneNumber = _model.mobileNumberController.text;
           final password = _model.passwordController.text;
           final otpReqId = loginResponseData.phoneNumberOtpRequestId;
@@ -416,6 +426,25 @@ class _LoginScreenSceneState
             transactionId: txId,
           );
         } else {
+          print('🔑 login success fields used for SDK/session:');
+          print(' - accessToken exists: ${loginResponseData.accessToken?.trim().isNotEmpty == true}');
+          print(' - refreshToken exists: ${loginResponseData.refreshToken?.trim().isNotEmpty == true}');
+          print(' - encryptedAccessToken exists: ${loginResponseData.encryptedAccessToken?.trim().isNotEmpty == true}');
+          print(' - transactionId: ${loginResponseData.transactionId}');
+          print(' - isDigitalIdentityVerified: ${loginResponseData.isDigitalIdentityVerified}');
+          unawaited(
+            VerificationCache().setLoginSession(
+              accessToken: loginResponseData.accessToken,
+              refreshToken: loginResponseData.refreshToken,
+              encryptedAccessToken: loginResponseData.encryptedAccessToken,
+              transactionId: loginResponseData.transactionId,
+              userName: loginResponseData.userName,
+              userFullName: loginResponseData.userFullName,
+            ),
+          );
+          if (!hasUsableToken) {
+            print('⚠️ Login success without usable token, but OTP is not required by backend.');
+          }
           _initializeVLensSDK(context, loginResponseData);
         }
       });
@@ -474,22 +503,36 @@ class _LoginScreenSceneState
 
   void _initializeVLensSDK(
       BuildContext context, LoginResponseData loginResponseData) {
-    // Configure VLens SDK
+    final resolvedAccessToken =
+        (loginResponseData.accessToken?.trim().isNotEmpty == true)
+            ? loginResponseData.accessToken!
+            : (loginResponseData.encryptedAccessToken ?? "");
+    print('');
+    print('═══════════════════════════════════════════════════════');
+    print('🚀 VLENS SDK INITIALIZATION (LOGIN FLOW)');
+    print('═══════════════════════════════════════════════════════');
+    print('transactionId: ${loginResponseData.transactionId}');
+    print('tenancyName: tanmeyah-stg');
+    print('apiBaseUrl: https://api.vlenseg.com');
+    print('accessToken source: ${(loginResponseData.accessToken?.trim().isNotEmpty == true) ? 'accessToken' : 'encryptedAccessToken'}');
+    print('accessToken length: ${resolvedAccessToken.length}');
+    print('refreshToken exists: ${loginResponseData.refreshToken?.trim().isNotEmpty == true}');
+    print('isDigitalIdentityVerified: ${loginResponseData.isDigitalIdentityVerified}');
+    print('═══════════════════════════════════════════════════════');
+    print('');
+
     final sdkConfig = SdkConfig(
       transactionId: loginResponseData.transactionId ?? '',
       isLivenessOnly: false,
       isNationalIdOnly: false,
       env: EnvironmentConfig(
         apiBaseUrl: "https://api.vlenseg.com",
-        accessToken: (loginResponseData.accessToken?.trim().isNotEmpty == true)
-            ? loginResponseData.accessToken!
-            : (loginResponseData.encryptedAccessToken ?? ""),
+        accessToken: resolvedAccessToken,
         refreshToken: loginResponseData.refreshToken ?? "",
-        apiKey:
-            "j1m9DwIywPS1dPCkFUT2hM2IRr10921gq5PBzQID6xI", // TODO: Replace with your API key
-        tenancyName: "tanmeyah-stg", // TODO: Replace with your tenancy name
+        apiKey: "j1m9DwIywPS1dPCkFUT2hM2IRr10921gq5PBzQID6xI",
+        tenancyName: "tanmeyah-stg",
       ),
-      defaultLocale: "ar", // Arabic locale
+      defaultLocale: "ar",
       colors: ColorsConfig(
         light: ColorConfig(
           accent: "#4E5A78",
@@ -538,21 +581,10 @@ class _LoginScreenSceneState
       getExtractedData: true,
     );
 
-    // Initialize VLens SDK - callbacks are passed via sdkConfig.
     final vlensManager = VLensManager();
     vlensManager.init(context, sdkConfig);
-    // VLensManager().onFailure = (context, errorCode, errorMsg) {
-    //   print("eeeeeeee");
-    //   print(errorCode);
-    //   print(errorMsg);
-    //   print("failure");
-    // };
-    // VLensManager().onSuccess = (context, extractedData) {
-    //   print("successssssssss");
-    //   print(extractedData);
-    //   print("success");
-    // };
   }
+
 }
 
 // Custom painter for wavy background

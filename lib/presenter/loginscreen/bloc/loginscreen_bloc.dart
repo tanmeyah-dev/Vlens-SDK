@@ -142,8 +142,29 @@ class LoginScreenBloc extends BaseBloc {
             return;
           }
           final responseBody = Map<String, dynamic>.from(decoded as Map);
+          final rawData = responseBody['data'];
+          if (rawData is Map) {
+            print('🔍 RAW login data keys: ${rawData.keys.toList()}');
+          } else {
+            print('🔍 RAW login data is not Map: ${rawData.runtimeType}');
+          }
 
-          final loginResponse = LoginResponse.fromJson(responseBody);
+          var loginResponse = LoginResponse.fromJson(responseBody);
+          if (loginResponse.data == null && responseBody['data'] is Map) {
+            final fallbackData = LoginResponseData.fromJson(
+              Map<String, dynamic>.from(responseBody['data'] as Map),
+            );
+            loginResponse = LoginResponse(
+              code: loginResponse.code,
+              message: loginResponse.message,
+              success: loginResponse.success,
+              data: fallbackData,
+              errorCode: loginResponse.errorCode,
+              errorMessage: loginResponse.errorMessage,
+              errorDescriptions: loginResponse.errorDescriptions,
+            );
+            print('ℹ️ Applied fallback parser from raw response.data map');
+          }
           print('✅ Login response parsed successfully');
           if (loginResponse.data != null) {
             final d = loginResponse.data!;
@@ -151,7 +172,10 @@ class LoginScreenBloc extends BaseBloc {
                 'hasPendingRequest=${d.hasPendingRequest}, '
                 'isPhoneNumberConfirmationRequired=${d.isPhoneNumberConfirmationRequired}, '
                 'phoneNumberOtpRequestId=${d.phoneNumberOtpRequestId}, '
-                'transactionId=${d.transactionId}');
+                'transactionId=${d.transactionId}, '
+                'accessTokenNull=${d.accessToken == null}, '
+                'refreshTokenNull=${d.refreshToken == null}, '
+                'encryptedAccessTokenNull=${d.encryptedAccessToken == null}');
           }
 
           if (!loginResponse.isBusinessSuccess(httpStatus: response.statusCode)) {

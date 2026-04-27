@@ -43,20 +43,46 @@ class LoginResponse {
   factory LoginResponse.fromJson(Map<String, dynamic> json) {
     LoginResponseData? data;
 
+    Map<String, dynamic>? normalizeMap(dynamic value) {
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) {
+        return value.map(
+          (key, val) => MapEntry(key.toString(), val),
+        );
+      }
+      return null;
+    }
+
     void mergeRootIfMissing(Map<String, dynamic> raw, String key) {
       if (raw[key] == null && json[key] != null) {
         raw[key] = json[key];
       }
     }
 
-    if (json['data'] is Map) {
-      final raw = Map<String, dynamic>.from(json['data'] as Map);
+    final normalizedData = normalizeMap(json['data']);
+    if (normalizedData != null) {
+      final raw = Map<String, dynamic>.from(normalizedData);
       // Some gateways put tokens on the root; merge into `data` for one shape.
       if (raw['accessToken'] == null && json['accessToken'] != null) {
         raw['accessToken'] = json['accessToken'];
       }
       if (raw['refreshToken'] == null && json['refreshToken'] != null) {
         raw['refreshToken'] = json['refreshToken'];
+      }
+      if (raw['encryptedAccessToken'] == null &&
+          json['encryptedAccessToken'] != null) {
+        raw['encryptedAccessToken'] = json['encryptedAccessToken'];
+      }
+      for (final tokenKey in [
+        'token',
+        'Token',
+        'bearerToken',
+        'BearerToken',
+        'jwt',
+        'jwtToken',
+        'idToken',
+      ]) {
+        mergeRootIfMissing(raw, tokenKey);
       }
       // Same for phone OTP flow: some backends return these on root, not inside `data`.
       for (final key in [
@@ -234,9 +260,22 @@ class LoginResponseData {
       ]),
       emailOtpRequestId: json['emailOtpRequestId']?.toString(),
       isDigitalIdentityVerified: _bool(json['isDigitalIdentityVerified']),
-      accessToken: json['accessToken']?.toString(),
+      accessToken: pickString([
+        'accessToken',
+        'token',
+        'Token',
+        'bearerToken',
+        'BearerToken',
+        'jwt',
+        'jwtToken',
+        'idToken',
+      ]),
       refreshToken: json['refreshToken']?.toString(),
-      encryptedAccessToken: json['encryptedAccessToken']?.toString(),
+      encryptedAccessToken: pickString([
+        'encryptedAccessToken',
+        'encryptedToken',
+        'EncryptedAccessToken',
+      ]),
       phoneOtpExpireInSeconds: _int(json['phoneOtpExpireInSeconds']),
       emailOtpExpireInSeconds: _int(json['emailOtpExpireInSeconds']),
       userName: json['userName']?.toString(),

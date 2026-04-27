@@ -3,9 +3,7 @@ import 'package:core/components/text/app_text.dart';
 import 'package:core/extensions/widget_extension.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:core/style/app_colors.dart';
-import 'package:core/utils/ui.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:pinput/pinput.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -51,6 +49,7 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
   String? _errorMessage;
 
   String get _apiUrlLogin => ApiUrls.getLoginUrl();
+  String get _apiUrlLoginVerifyOtp => ApiUrls.getLoginVerifyOtpUrl();
 
   @override
   void initState() {
@@ -183,7 +182,7 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
       print('═══════════════════════════════════════════════════════');
       print('📤 LOGIN API REQUEST (WITH OTP)');
       print('═══════════════════════════════════════════════════════');
-      print('URL: $_apiUrlLogin');
+      print('URL: $_apiUrlLoginVerifyOtp');
       print('Method: POST');
       print('Headers: $headers');
       print('Body: $requestBody');
@@ -200,7 +199,7 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
       try {
         response = await SdkHttpClient
             .post(
-          Uri.parse(_apiUrlLogin),
+          Uri.parse(_apiUrlLoginVerifyOtp),
           headers: headers,
           body: requestBody,
         )
@@ -246,10 +245,32 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
             _showError('استجابة غير صالحة من الخادم');
             return;
           }
-          final responseBody = Map<String, dynamic>.from(decoded as Map);
+          final responseBody = Map<String, dynamic>.from(decoded);
+          final rawData = responseBody['data'];
+          if (rawData is Map) {
+            print('🔍 RAW verify-otp data.accessToken is null: ${rawData['accessToken'] == null}');
+            print('🔍 RAW verify-otp data.refreshToken is null: ${rawData['refreshToken'] == null}');
+            print('🔍 RAW verify-otp data.encryptedAccessToken is null: ${rawData['encryptedAccessToken'] == null}');
+            print('🔍 RAW verify-otp data keys: ${rawData.keys.toList()}');
+          } else {
+            print('🔍 RAW verify-otp data is not Map: ${rawData.runtimeType}');
+          }
 
           final loginResponse = LoginResponse.fromJson(responseBody);
           print('✅ Login response parsed successfully');
+          final parsed = loginResponse.data;
+          print('🔎 verify-otp response keys: ${responseBody.keys.toList()}');
+          if (responseBody['data'] is Map) {
+            print('🔎 verify-otp response data keys: ${(responseBody['data'] as Map).keys.toList()}');
+          }
+          print('🔑 verify-otp fields used for login/session:');
+          print(' - accessToken exists: ${parsed?.accessToken?.trim().isNotEmpty == true}');
+          print(' - refreshToken exists: ${parsed?.refreshToken?.trim().isNotEmpty == true}');
+          print(' - encryptedAccessToken exists: ${parsed?.encryptedAccessToken?.trim().isNotEmpty == true}');
+          print(' - transactionId: ${parsed?.transactionId}');
+          print(' - phoneNumberOtpRequestId: ${parsed?.phoneNumberOtpRequestId}');
+          print(' - isPhoneNumberConfirmationRequired: ${parsed?.isPhoneNumberConfirmationRequired}');
+          print(' - isDigitalIdentityVerified: ${parsed?.isDigitalIdentityVerified}');
 
           // Check if login was successful
           if (loginResponse.isSuccess && loginResponse.data != null) {
@@ -258,8 +279,18 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
             Navigator.of(context).pop();
             final navigationContext = widget.parentContext ?? context;
             if (navigationContext.mounted) {
-              _initializeVLensSDK(
-                  navigationContext, loginResponse.data!);
+              final loginData = loginResponse.data!;
+              unawaited(
+                VerificationCache().setLoginSession(
+                  accessToken: loginData.accessToken,
+                  refreshToken: loginData.refreshToken,
+                  encryptedAccessToken: loginData.encryptedAccessToken,
+                  transactionId: loginData.transactionId,
+                  userName: loginData.userName,
+                  userFullName: loginData.userFullName,
+                ),
+              );
+              _initializeVLensSDK(navigationContext, loginData);
             }
           } else {
             // Login failed - show error
@@ -439,21 +470,36 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
 
   void _initializeVLensSDK(
       BuildContext context, LoginResponseData loginResponseData) {
-    // Configure VLens SDK
+    final resolvedAccessToken =
+        (loginResponseData.accessToken?.trim().isNotEmpty == true)
+            ? loginResponseData.accessToken!
+            : (loginResponseData.encryptedAccessToken ?? "");
+    print('');
+    print('═══════════════════════════════════════════════════════');
+    print('🚀 VLENS SDK INITIALIZATION (OTP FLOW)');
+    print('═══════════════════════════════════════════════════════');
+    print('transactionId: ${loginResponseData.transactionId}');
+    print('tenancyName: tanmeyah-stg');
+    print('apiBaseUrl: https://api.vlenseg.com');
+    print('accessToken source: ${(loginResponseData.accessToken?.trim().isNotEmpty == true) ? 'accessToken' : 'encryptedAccessToken'}');
+    print('accessToken length: ${resolvedAccessToken.length}');
+    print('refreshToken exists: ${loginResponseData.refreshToken?.trim().isNotEmpty == true}');
+    print('isDigitalIdentityVerified: ${loginResponseData.isDigitalIdentityVerified}');
+    print('═══════════════════════════════════════════════════════');
+    print('');
+
     final sdkConfig = SdkConfig(
       transactionId: loginResponseData.transactionId ?? '',
       isLivenessOnly: false,
       isNationalIdOnly: false,
       env: EnvironmentConfig(
         apiBaseUrl: "https://api.vlenseg.com",
-        accessToken: (loginResponseData.accessToken?.trim().isNotEmpty == true)
-            ? loginResponseData.accessToken!
-            : (loginResponseData.encryptedAccessToken ?? ""),
+        accessToken: resolvedAccessToken,
         refreshToken: loginResponseData.refreshToken ?? "",
         apiKey: "j1m9DwIywPS1dPCkFUT2hM2IRr10921gq5PBzQID6xI",
         tenancyName: "tanmeyah-stg",
       ),
-      defaultLocale: "ar", // Arabic locale
+      defaultLocale: "ar",
       colors: ColorsConfig(
         light: ColorConfig(
           accent: "#4E5A78",
@@ -502,7 +548,6 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
       getExtractedData: true,
     );
 
-    // Initialize VLens SDK - callbacks are passed via sdkConfig.
     final vlensManager = VLensManager();
     vlensManager.init(context, sdkConfig);
   }

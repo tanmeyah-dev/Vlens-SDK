@@ -7,6 +7,11 @@ class VerificationCache {
   static const String _keyMobileNumber = 'mobile_number';
   static const String _keyEmailOtpRequestId = 'email_otp_request_id';
   static const String _keyEmail = 'email';
+  static const String _keyAccessToken = 'access_token';
+  static const String _keyRefreshToken = 'refresh_token';
+  static const String _keyEncryptedAccessToken = 'encrypted_access_token';
+  static const String _keyUserName = 'user_name';
+  static const String _keyUserFullName = 'user_full_name';
 
   /// Save phone number verification data
   Future<void> setVerificationData({
@@ -74,6 +79,46 @@ class VerificationCache {
     await prefs.setString(_keyEmail, email);
   }
 
+  /// Persist login user/session data for downstream requests.
+  Future<void> setLoginSession({
+    String? accessToken,
+    String? refreshToken,
+    String? encryptedAccessToken,
+    String? transactionId,
+    String? userName,
+    String? userFullName,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (accessToken != null && accessToken.trim().isNotEmpty) {
+      await prefs.setString(_keyAccessToken, accessToken.trim());
+    }
+    if (refreshToken != null) {
+      await prefs.setString(_keyRefreshToken, refreshToken.trim());
+    }
+    if (encryptedAccessToken != null) {
+      await prefs.setString(_keyEncryptedAccessToken, encryptedAccessToken.trim());
+    }
+    if (transactionId != null) {
+      await prefs.setString(_keyTransactionId, transactionId.trim());
+    }
+    if (userName != null) {
+      await prefs.setString(_keyUserName, userName.trim());
+    }
+    if (userFullName != null) {
+      await prefs.setString(_keyUserFullName, userFullName.trim());
+    }
+  }
+
+  Future<String?> getAccessToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyAccessToken);
+  }
+
+  Future<String?> getEncryptedAccessToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyEncryptedAccessToken);
+  }
+
   /// Clear all verification data
   Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
@@ -82,5 +127,10 @@ class VerificationCache {
     await prefs.remove(_keyMobileNumber);
     await prefs.remove(_keyEmailOtpRequestId);
     await prefs.remove(_keyEmail);
+    await prefs.remove(_keyAccessToken);
+    await prefs.remove(_keyRefreshToken);
+    await prefs.remove(_keyEncryptedAccessToken);
+    await prefs.remove(_keyUserName);
+    await prefs.remove(_keyUserFullName);
   }
 }

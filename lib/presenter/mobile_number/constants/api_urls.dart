@@ -68,6 +68,11 @@ class ApiUrls {
     return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/login';
   }
 
+  /// Login verify OTP (vlens).
+  static String getLoginVerifyOtpUrl() {
+    return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/login/verify-otp';
+  }
+
   static String getIdentityCheckUrl() {
     return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/check';
   }
@@ -87,7 +92,7 @@ class ApiUrls {
   static String getVerifyEmailOtpUrl() {
     return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/email/verify-otp';
   }
-  
+
   /// Check if running on emulator/simulator
   static bool isRunningOnEmulator() {
     if (kIsWeb) return false;
