@@ -482,6 +482,7 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
     print('tenancyName: tanmeyah-stg');
     print('apiBaseUrl: https://api.vlenseg.com');
     print('accessToken source: ${(loginResponseData.accessToken?.trim().isNotEmpty == true) ? 'accessToken' : 'encryptedAccessToken'}');
+    print('accessToken value: $resolvedAccessToken');
     print('accessToken length: ${resolvedAccessToken.length}');
     print('refreshToken exists: ${loginResponseData.refreshToken?.trim().isNotEmpty == true}');
     print('isDigitalIdentityVerified: ${loginResponseData.isDigitalIdentityVerified}');
