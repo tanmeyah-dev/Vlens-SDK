@@ -6,6 +6,7 @@ import 'package:core/utils/cache/verification_cache.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:flutter/material.dart';
 
+import '../../../data/models/extracted_user_data.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../mobile_number/constants/api_urls.dart';
 import 'userinfoone_scene.dart';
@@ -27,12 +28,12 @@ class _DigitalIdentitySuccessSceneState extends State<DigitalIdentitySuccessScen
   bool _isLoadingTypes = true;
   bool _isCheckingEligibility = false;
   String? _errorMessage;
-  dynamic _effectiveExtractedData;
+  ExtractedUserData? _effectiveExtractedData;
 
   @override
   void initState() {
     super.initState();
-    _effectiveExtractedData = widget.extractedData;
+    _effectiveExtractedData = _toExtractedUserData(widget.extractedData);
     print('');
     print('═══════════════════════════════════════════════════════');
     print('📄 DIGITAL IDENTITY SUCCESS SCREEN OPENED');
@@ -51,7 +52,9 @@ class _DigitalIdentitySuccessSceneState extends State<DigitalIdentitySuccessScen
     if (cached != null) return;
 
     try {
-      final normalized = _normalizeData(widget.extractedData);
+      final normalized =
+          _toExtractedUserData(widget.extractedData)?.toJson() ??
+              _normalizeData(widget.extractedData);
       await VerificationCache().setVlensExtractedData(normalized);
       print('💾 Cached extractedData from success screen fallback.');
     } catch (e) {
@@ -121,9 +124,10 @@ class _DigitalIdentitySuccessSceneState extends State<DigitalIdentitySuccessScen
     final cachedTraceBody = await VerificationCache().getVlensTraceResponseBody();
     if (cachedTraceBody == null) return;
     print('📦 Loaded cached VLENS_TRACE response body in success screen.');
+    final parsed = _toExtractedUserData(cachedTraceBody);
     if (_effectiveExtractedData == null && mounted) {
       setState(() {
-        _effectiveExtractedData = cachedTraceBody;
+        _effectiveExtractedData = parsed;
       });
     }
   }
@@ -216,8 +220,10 @@ class _DigitalIdentitySuccessSceneState extends State<DigitalIdentitySuccessScen
     return null;
   }
 
-  List<MapEntry<String, String>> _buildRowsFromExtractedData(dynamic data) {
-    final normalized = _normalizeData(data);
+  List<MapEntry<String, String>> _buildRowsFromExtractedData(
+    ExtractedUserData? data,
+  ) {
+    final normalized = data?.toJson();
     final rows = <MapEntry<String, String>>[];
     _flattenToRows(normalized, rows);
     if (rows.isEmpty) {
@@ -239,6 +245,38 @@ class _DigitalIdentitySuccessSceneState extends State<DigitalIdentitySuccessScen
     } catch (_) {
       return '$value';
     }
+  }
+
+  ExtractedUserData? _toExtractedUserData(dynamic value) {
+    if (value == null) return null;
+    if (value is ExtractedUserData) return value;
+    if (value is ExtractedUserData) {
+      return ExtractedUserData.fromExtractedData(value);
+    }
+    if (value is Map<String, dynamic>) {
+      return ExtractedUserData.fromJson(value);
+    }
+    if (value is Map) {
+      return ExtractedUserData.fromJson(
+        Map<String, dynamic>.from(value),
+      );
+    }
+
+    try {
+      final encoded = jsonEncode(value);
+      final decoded = jsonDecode(encoded);
+      if (decoded is Map<String, dynamic>) {
+        return ExtractedUserData.fromJson(decoded);
+      }
+      if (decoded is Map) {
+        return ExtractedUserData.fromJson(
+          Map<String, dynamic>.from(decoded),
+        );
+      }
+    } catch (_) {
+      // Best effort parser only.
+    }
+    return null;
   }
 
   void _flattenToRows(

@@ -14,6 +14,7 @@ import 'package:core/style/app_colors.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:tan_sdk/data/models/extracted_user_data.dart';
 import 'package:uuid/uuid.dart';
 import '../../home/scene/home_scene.dart';
 import 'digital_identity_success_scene.dart';
@@ -583,15 +584,16 @@ class _LoginScreenSceneState
           errorMessageAr: "خطأ في الشبكة",
         ),
       ],
-      onSuccess: (extractedData) {
+      onSuccess: (data) {
         print("✅ VLens SDK success - verification completed");
         if (mounted && context.mounted) {
-          _cacheVlensSuccessPayload(extractedData).whenComplete(() {
+          ExtractedUserData userData = ExtractedUserData.fromExtractedData(data);
+          _cacheVlensSuccessPayload(userData).whenComplete(() {
             if (!mounted || !context.mounted) return;
             Navigator.of(context, rootNavigator: true).pushReplacement(
               MaterialPageRoute(
                 builder: (_) =>
-                    DigitalIdentitySuccessScene(extractedData: extractedData),
+                    DigitalIdentitySuccessScene(extractedData: userData),
               ),
             );
           });
@@ -631,6 +633,7 @@ class _LoginScreenSceneState
       final normalized = jsonDecode(jsonEncode(extractedData));
       await VerificationCache().setVlensTraceResponseBody(normalized);
     } catch (_) {
+      print("eeeeeeeeee");
       // Best effort cache only.
     }
   }
