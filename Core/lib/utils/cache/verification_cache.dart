@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Cache for storing verification data (OTP request IDs, transaction IDs, etc.)
@@ -12,6 +14,12 @@ class VerificationCache {
   static const String _keyEncryptedAccessToken = 'encrypted_access_token';
   static const String _keyUserName = 'user_name';
   static const String _keyUserFullName = 'user_full_name';
+  static const String _keyLatitude = 'cached_latitude';
+  static const String _keyLongitude = 'cached_longitude';
+  static const String _keyRequestTypeId = 'request_type_id';
+  static const String _keyVlensExtractedData = 'vlens_extracted_data';
+  static const String _keyVlensTraceResponseBody = 'vlens_trace_response_body';
+  static const String _keyLoginResponseData = 'login_response_data';
 
   /// Save phone number verification data
   Future<void> setVerificationData({
@@ -119,6 +127,99 @@ class VerificationCache {
     return prefs.getString(_keyEncryptedAccessToken);
   }
 
+  /// Save geo location to reuse the same coordinates across API calls.
+  Future<void> setGeoLocation({
+    required double latitude,
+    required double longitude,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyLatitude, latitude);
+    await prefs.setDouble(_keyLongitude, longitude);
+  }
+
+  /// Get cached geo location if available.
+  Future<Map<String, double>?> getGeoLocation() async {
+    final prefs = await SharedPreferences.getInstance();
+    final latitude = prefs.getDouble(_keyLatitude);
+    final longitude = prefs.getDouble(_keyLongitude);
+    if (latitude == null || longitude == null) {
+      return null;
+    }
+    return {
+      'latitude': latitude,
+      'longitude': longitude,
+    };
+  }
+
+  /// Persist request type id to use in later screens/flows.
+  Future<void> setRequestTypeId(int requestTypeId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyRequestTypeId, requestTypeId);
+  }
+
+  /// Get cached request type id if available.
+  Future<int?> getRequestTypeId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyRequestTypeId);
+  }
+
+  /// Cache extracted VLens model as JSON for later logins.
+  Future<void> setVlensExtractedData(dynamic extractedData) async {
+    final prefs = await SharedPreferences.getInstance();
+    final encoded = jsonEncode(extractedData);
+    await prefs.setString(_keyVlensExtractedData, encoded);
+  }
+
+  /// Read cached VLens extracted model.
+  Future<dynamic> getVlensExtractedData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keyVlensExtractedData);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return jsonDecode(raw);
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  /// Cache full VLens trace response body.
+  Future<void> setVlensTraceResponseBody(dynamic responseBody) async {
+    final prefs = await SharedPreferences.getInstance();
+    final encoded = jsonEncode(responseBody);
+    await prefs.setString(_keyVlensTraceResponseBody, encoded);
+  }
+
+  /// Read cached full VLens trace response body.
+  Future<dynamic> getVlensTraceResponseBody() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keyVlensTraceResponseBody);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return jsonDecode(raw);
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  /// Cache full login response data model (not only session tokens).
+  Future<void> setLoginResponseData(dynamic loginResponseData) async {
+    final prefs = await SharedPreferences.getInstance();
+    final encoded = jsonEncode(loginResponseData);
+    await prefs.setString(_keyLoginResponseData, encoded);
+  }
+
+  /// Read cached full login response data model.
+  Future<dynamic> getLoginResponseData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keyLoginResponseData);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return jsonDecode(raw);
+    } catch (_) {
+      return raw;
+    }
+  }
+
   /// Clear all verification data
   Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
@@ -132,5 +233,11 @@ class VerificationCache {
     await prefs.remove(_keyEncryptedAccessToken);
     await prefs.remove(_keyUserName);
     await prefs.remove(_keyUserFullName);
+    await prefs.remove(_keyLatitude);
+    await prefs.remove(_keyLongitude);
+    await prefs.remove(_keyRequestTypeId);
+    await prefs.remove(_keyVlensExtractedData);
+    await prefs.remove(_keyVlensTraceResponseBody);
+    await prefs.remove(_keyLoginResponseData);
   }
 }

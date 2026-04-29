@@ -4,3 +4,5 @@ import 'package:core/bases/event/base/base_event.dart';
 class UpdateHomeUIEvent extends BaseEvent {
   // Add parameters as needed
 }
+
+class FetchRequestTypesEvent extends BaseEvent {}

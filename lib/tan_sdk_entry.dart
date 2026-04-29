@@ -16,7 +16,8 @@ class TanSdkEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Navigator(
+    final mediaQuery = MediaQuery.maybeOf(context);
+    final navigator = Navigator(
       initialRoute: RoutePath.splash,
       onGenerateRoute: (settings) {
         switch (settings.name) {
@@ -65,6 +66,18 @@ class TanSdkEntry extends StatelessWidget {
             );
         }
       },
+    );
+
+    if (mediaQuery == null) {
+      return navigator;
+    }
+
+    // Keep SDK flow layout stable for third-party pages with fixed vertical constraints.
+    return MediaQuery(
+      data: mediaQuery.copyWith(
+        textScaler: const TextScaler.linear(1.0),
+      ),
+      child: navigator,
     );
   }
 }

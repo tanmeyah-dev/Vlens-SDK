@@ -229,9 +229,11 @@ class _MobileNumberSceneState
       }
       // Phone number exists - navigate to login screen
       print('📱 OnPhoneNumberExistsState received - Navigating to login screen');
+      final mobileNumber = _mobileNumberModel.mobileNumberController.text.trim();
       Navigator.of(context).pushNamedAndRemoveUntil(
         RoutePath.loginScreen,
         (route) => false,
+        arguments: mobileNumber,
       );
     } else if (state is OnMobileNumberSavedState) {
       // Reset loading state

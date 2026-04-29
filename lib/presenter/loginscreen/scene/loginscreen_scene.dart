@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:core/bases/base_state.dart';
 import 'package:core/bases/states/base/base_state.dart';
@@ -13,7 +14,9 @@ import 'package:core/style/app_colors.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:uuid/uuid.dart';
 import '../../home/scene/home_scene.dart';
+import 'digital_identity_success_scene.dart';
 import '../model/login_response.dart';
 import 'package:vlens/vlens.dart';
 import '../bloc/loginscreen_bloc.dart';
@@ -35,6 +38,7 @@ class _LoginScreenSceneState
     extends BaseState<LoginScreenScene, LoginScreenBloc, LoginScreenModel> {
   late LoginScreenModel _model;
   bool _listenersAdded = false;
+  bool _isPhonePrefilledFromRoute = false;
   bool _isPasswordVisible = false;
   bool _isLoadingDialogShowing = false;
   bool _loginLoadingActive = false;
@@ -62,6 +66,7 @@ class _LoginScreenSceneState
   Widget buildWidget(
       BuildContext context, RenderDataState<LoginScreenModel> state) {
     _model = state.data;
+    _prefillPhoneNumberFromRoute(context);
 
     // Add listeners only once to prevent excessive state updates
     if (!_listenersAdded) {
@@ -122,6 +127,22 @@ class _LoginScreenSceneState
         ),
       ),
     );
+  }
+
+  void _prefillPhoneNumberFromRoute(BuildContext context) {
+    if (_isPhonePrefilledFromRoute) {
+      return;
+    }
+
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is String) {
+      final phoneNumber = args.trim();
+      if (phoneNumber.isNotEmpty) {
+        _model.mobileNumberController.text = phoneNumber;
+      }
+    }
+
+    _isPhonePrefilledFromRoute = true;
   }
 
   Widget _buildBackground() {
@@ -442,9 +463,17 @@ class _LoginScreenSceneState
               userFullName: loginResponseData.userFullName,
             ),
           );
+          unawaited(_cacheLoginResponseData(loginResponseData));
           if (!hasUsableToken) {
             print('⚠️ Login success without usable token, but OTP is not required by backend.');
           }
+
+          if (loginResponseData.isDigitalIdentityVerified == true) {
+            print('✅ Digital identity already verified - opening cached VLens data screen.');
+            unawaited(_openCachedVlensResult(context));
+            return;
+          }
+
           _initializeVLensSDK(context, loginResponseData);
         }
       });
@@ -503,32 +532,27 @@ class _LoginScreenSceneState
 
   void _initializeVLensSDK(
       BuildContext context, LoginResponseData loginResponseData) {
-    final resolvedAccessToken =
-        (loginResponseData.accessToken?.trim().isNotEmpty == true)
-            ? loginResponseData.accessToken!
-            : (loginResponseData.encryptedAccessToken ?? "");
     print('');
     print('═══════════════════════════════════════════════════════');
     print('🚀 VLENS SDK INITIALIZATION (LOGIN FLOW)');
     print('═══════════════════════════════════════════════════════');
-    print('transactionId: ${loginResponseData.transactionId}');
+    print('transactionId from login API: ${loginResponseData.transactionId}');
     print('tenancyName: tanmeyah-stg');
     print('apiBaseUrl: https://api.vlenseg.com');
     print('accessToken source: ${(loginResponseData.accessToken?.trim().isNotEmpty == true) ? 'accessToken' : 'encryptedAccessToken'}');
-    print('accessToken value: $resolvedAccessToken');
-    print('accessToken length: ${resolvedAccessToken.length}');
     print('refreshToken exists: ${loginResponseData.refreshToken?.trim().isNotEmpty == true}');
     print('isDigitalIdentityVerified: ${loginResponseData.isDigitalIdentityVerified}');
     print('═══════════════════════════════════════════════════════');
     print('');
-
+    String transactionId = const Uuid().v4();
+    print('UUID sent to VLens SDK: $transactionId');
     final sdkConfig = SdkConfig(
-      transactionId: loginResponseData.transactionId ?? '',
+      transactionId: transactionId,
       isLivenessOnly: false,
       isNationalIdOnly: false,
       env: EnvironmentConfig(
         apiBaseUrl: "https://api.vlenseg.com",
-        accessToken: resolvedAccessToken,
+        accessToken: loginResponseData.accessToken ?? "",
         refreshToken: loginResponseData.refreshToken ?? "",
         apiKey: "j1m9DwIywPS1dPCkFUT2hM2IRr10921gq5PBzQID6xI",
         tenancyName: "tanmeyah-stg",
@@ -562,9 +586,15 @@ class _LoginScreenSceneState
       onSuccess: (extractedData) {
         print("✅ VLens SDK success - verification completed");
         if (mounted && context.mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const HomeScene()),
-          );
+          _cacheVlensSuccessPayload(extractedData).whenComplete(() {
+            if (!mounted || !context.mounted) return;
+            Navigator.of(context, rootNavigator: true).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) =>
+                    DigitalIdentitySuccessScene(extractedData: extractedData),
+              ),
+            );
+          });
         }
       },
       onFailure: (errorCode, errorMsg) {
@@ -584,6 +614,44 @@ class _LoginScreenSceneState
 
     final vlensManager = VLensManager();
     vlensManager.init(context, sdkConfig);
+  }
+
+  Future<void> _cacheVlensExtractedData(dynamic extractedData) async {
+    try {
+      final normalized = jsonDecode(jsonEncode(extractedData));
+      await VerificationCache().setVlensExtractedData(normalized);
+    } catch (_) {
+      // Best effort cache only.
+    }
+  }
+
+  Future<void> _cacheVlensSuccessPayload(dynamic extractedData) async {
+    await _cacheVlensExtractedData(extractedData);
+    try {
+      final normalized = jsonDecode(jsonEncode(extractedData));
+      await VerificationCache().setVlensTraceResponseBody(normalized);
+    } catch (_) {
+      // Best effort cache only.
+    }
+  }
+
+  Future<void> _cacheLoginResponseData(dynamic loginResponseData) async {
+    try {
+      final normalized = jsonDecode(jsonEncode(loginResponseData));
+      await VerificationCache().setLoginResponseData(normalized);
+    } catch (_) {
+      // Best effort cache only.
+    }
+  }
+
+  Future<void> _openCachedVlensResult(BuildContext context) async {
+    final cachedData = await VerificationCache().getVlensExtractedData();
+    if (!mounted || !context.mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => DigitalIdentitySuccessScene(extractedData: cachedData),
+      ),
+    );
   }
 
 }

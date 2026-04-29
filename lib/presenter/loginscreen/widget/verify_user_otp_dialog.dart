@@ -9,13 +9,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:uuid/uuid.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../mobile_number/constants/api_urls.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import 'package:vlens/vlens.dart';
 import '../utils/device_info_helper.dart';
 import '../model/login_response.dart';
-import '../../home/scene/home_scene.dart';
+import '../scene/digital_identity_success_scene.dart';
 
 class VerifyUserOTPDialog extends StatefulWidget {
   final String? phoneNumber;
@@ -290,6 +291,12 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
                   userFullName: loginData.userFullName,
                 ),
               );
+              unawaited(_cacheLoginResponseData(loginData));
+              if (loginData.isDigitalIdentityVerified == true) {
+                print('✅ Digital identity already verified (OTP flow) - opening cached VLens data screen.');
+                unawaited(_openCachedVlensResult(navigationContext));
+                return;
+              }
               _initializeVLensSDK(navigationContext, loginData);
             }
           } else {
@@ -478,7 +485,7 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
     print('═══════════════════════════════════════════════════════');
     print('🚀 VLENS SDK INITIALIZATION (OTP FLOW)');
     print('═══════════════════════════════════════════════════════');
-    print('transactionId: ${loginResponseData.transactionId}');
+    print('transactionId from login API: ${loginResponseData.transactionId}');
     print('tenancyName: tanmeyah-stg');
     print('apiBaseUrl: https://api.vlenseg.com');
     print('accessToken source: ${(loginResponseData.accessToken?.trim().isNotEmpty == true) ? 'accessToken' : 'encryptedAccessToken'}');
@@ -488,9 +495,17 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
     print('isDigitalIdentityVerified: ${loginResponseData.isDigitalIdentityVerified}');
     print('═══════════════════════════════════════════════════════');
     print('');
+    final apiTransactionId = loginResponseData.transactionId?.trim();
+    final sdkTransactionId = (apiTransactionId != null &&
+            apiTransactionId.isNotEmpty &&
+            apiTransactionId != '00000000-0000-0000-0000-000000000000')
+        ? apiTransactionId
+        : const Uuid().v4();
+    print('TransactionId from API: ${loginResponseData.transactionId}');
+    print('UUID sent to VLens SDK: $sdkTransactionId');
 
     final sdkConfig = SdkConfig(
-      transactionId: loginResponseData.transactionId ?? '',
+      transactionId: sdkTransactionId,
       isLivenessOnly: false,
       isNationalIdOnly: false,
       env: EnvironmentConfig(
@@ -528,10 +543,17 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
       ],
       onSuccess: (extractedData) {
         print("✅ VLens SDK success - verification completed");
-        if (context.mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const HomeScene()),
-          );
+        final navigationContext = widget.parentContext ?? context;
+        if (navigationContext.mounted) {
+          _cacheVlensSuccessPayload(extractedData).whenComplete(() {
+            if (!navigationContext.mounted) return;
+            Navigator.of(navigationContext, rootNavigator: true).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) =>
+                    DigitalIdentitySuccessScene(extractedData: extractedData),
+              ),
+            );
+          });
         }
       },
       onFailure: (errorCode, errorMsg) {
@@ -551,6 +573,44 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
 
     final vlensManager = VLensManager();
     vlensManager.init(context, sdkConfig);
+  }
+
+  Future<void> _cacheVlensExtractedData(dynamic extractedData) async {
+    try {
+      final normalized = jsonDecode(jsonEncode(extractedData));
+      await VerificationCache().setVlensExtractedData(normalized);
+    } catch (_) {
+      // Best effort cache only.
+    }
+  }
+
+  Future<void> _cacheVlensSuccessPayload(dynamic extractedData) async {
+    await _cacheVlensExtractedData(extractedData);
+    try {
+      final normalized = jsonDecode(jsonEncode(extractedData));
+      await VerificationCache().setVlensTraceResponseBody(normalized);
+    } catch (_) {
+      // Best effort cache only.
+    }
+  }
+
+  Future<void> _cacheLoginResponseData(dynamic loginResponseData) async {
+    try {
+      final normalized = jsonDecode(jsonEncode(loginResponseData));
+      await VerificationCache().setLoginResponseData(normalized);
+    } catch (_) {
+      // Best effort cache only.
+    }
+  }
+
+  Future<void> _openCachedVlensResult(BuildContext navigationContext) async {
+    final cachedData = await VerificationCache().getVlensExtractedData();
+    if (!navigationContext.mounted) return;
+    Navigator.of(navigationContext).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => DigitalIdentitySuccessScene(extractedData: cachedData),
+      ),
+    );
   }
 
   @override

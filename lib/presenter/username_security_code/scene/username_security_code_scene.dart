@@ -44,8 +44,17 @@ class _RegisterSceneState
   late UsernameSecurityCodeModel _model;
   String? _cachedMobileNumber;
   String? _cachedEmail;
+  String _fullEmailForRequest = '';
   bool _isCreateCodeVisible = false;
   bool _isConfirmCodeVisible = false;
+
+  String _extractUsernamePrefix(String? value) {
+    final raw = (value ?? '').trim();
+    if (raw.isEmpty) return '';
+    final atIndex = raw.indexOf('@');
+    if (atIndex <= 0) return raw;
+    return raw.substring(0, atIndex).trim();
+  }
 
   @override
   void initState() {
@@ -62,7 +71,8 @@ class _RegisterSceneState
     final displayEmail = (routeEmail != null && routeEmail.isNotEmpty)
         ? routeEmail
         : (_cachedEmail ?? '');
-    _model.usernameController.text = displayEmail;
+    _fullEmailForRequest = displayEmail.trim();
+    _model.usernameController.text = _extractUsernamePrefix(displayEmail);
     print('📥 Loaded from cache:');
     print('📥 mobileNumber: $_cachedMobileNumber');
     print('📥 email: $_cachedEmail');
@@ -74,7 +84,10 @@ class _RegisterSceneState
     _model = state.data;
     final routeEmail = widget.verifiedEmail?.trim();
     if (routeEmail != null && routeEmail.isNotEmpty) {
-      _model.usernameController.text = routeEmail;
+      _fullEmailForRequest = routeEmail;
+      _model.usernameController.text = _extractUsernamePrefix(routeEmail);
+    } else if (_fullEmailForRequest.isEmpty && (_cachedEmail?.trim().isNotEmpty == true)) {
+      _fullEmailForRequest = _cachedEmail!.trim();
     }
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -133,14 +146,7 @@ class _RegisterSceneState
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         AppText(
-          "تأكيد البريد الإلكتروني",
-          color: AppColors.primary,
-          fontSize: 18,
-          fontWeight: FontWeight.w500,
-        ),
-        4.height,
-        AppText(
-          "وإنشاء رمز الحماية",
+          "إنشاء رمز الحماية",
           color: AppColors.primary,
           fontSize: 18,
           fontWeight: FontWeight.w500,
@@ -151,7 +157,7 @@ class _RegisterSceneState
 
   Widget mobileNumberFields() {
     return AppTextField(
-      labelText: "البريد الإلكتروني",
+      labelText: "اسم المستخدم",
       hintText: "example@example.com",
       controller: _model.usernameController,
       keyboardType: TextInputType.emailAddress,
@@ -308,7 +314,32 @@ class _RegisterSceneState
       _dismissCreateUserLoadingOverlay();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || !context.mounted) return;
-        Navigator.of(context).pushNamed(RoutePath.loginScreen);
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) {
+            return AlertDialog(
+              content: const Text(
+                'تهانينا لقد تم انشاء حساب',
+                textAlign: TextAlign.center,
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    if (mounted && context.mounted) {
+                      Navigator.of(context).pushNamedAndRemoveUntil(
+                        RoutePath.loginScreen,
+                        (route) => false,
+                      );
+                    }
+                  },
+                  child: const Text('حسناً'),
+                ),
+              ],
+            );
+          },
+        );
       });
     } else if (state is OnUsernameSecurityCodeErrorState) {
       _createUserLoadingActive = false;
@@ -359,9 +390,9 @@ class _RegisterSceneState
       if (mobileNumber.isEmpty) {
         mobileNumber = (await VerificationCache().getMobileNumber())?.trim() ?? '';
       }
-      final email = _model.usernameController.text.trim().isNotEmpty
-          ? _model.usernameController.text.trim()
-          : (_cachedEmail ?? '');
+      final email = _fullEmailForRequest.trim().isNotEmpty
+          ? _fullEmailForRequest.trim()
+          : (_cachedEmail ?? '').trim();
 
       print('📤 Using values for create-user API:');
       print('📤 email: $email');

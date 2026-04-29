@@ -1,8 +1,14 @@
 import 'dart:io';
+import 'package:core/utils/cache/verification_cache.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:geolocator/geolocator.dart';
 
 class DeviceInfoHelper {
+  static const double _defaultLatitude = 1.0;
+  static const double _defaultLongitude = 1.0;
+  static Map<String, double>? _memoryCachedLocation;
+  static Future<Map<String, double>>? _ongoingLocationRequest;
+
   /// Get device IMEI (Android) or identifierForVendor (iOS)
   static Future<String> getDeviceId() async {
     try {
@@ -28,12 +34,30 @@ class DeviceInfoHelper {
 
   /// Get current geolocation
   static Future<Map<String, double>> getCurrentLocation() async {
+    final cachedInMemory = _memoryCachedLocation;
+    if (cachedInMemory != null) {
+      return cachedInMemory;
+    }
+
+    _ongoingLocationRequest ??= _loadOrFetchAndCacheLocation();
+    final location = await _ongoingLocationRequest!;
+    _ongoingLocationRequest = null;
+    return location;
+  }
+
+  static Future<Map<String, double>> _loadOrFetchAndCacheLocation() async {
+    final persistentCached = await VerificationCache().getGeoLocation();
+    if (persistentCached != null) {
+      _memoryCachedLocation = persistentCached;
+      return persistentCached;
+    }
+
     try {
       // Check if location services are enabled
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         print('Location services are disabled');
-        return {'latitude': 1.0, 'longitude': 1.0};
+        return _cacheAndReturnDefaultLocation();
       }
 
       // Check location permissions
@@ -42,13 +66,13 @@ class DeviceInfoHelper {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
           print('Location permissions are denied');
-          return {'latitude': 1.0, 'longitude': 1.0};
+          return _cacheAndReturnDefaultLocation();
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
         print('Location permissions are permanently denied');
-        return {'latitude': 1.0, 'longitude': 1.0};
+        return _cacheAndReturnDefaultLocation();
       }
 
       // Get current position
@@ -57,14 +81,32 @@ class DeviceInfoHelper {
         timeLimit: const Duration(seconds: 5), // Timeout after 5 seconds
       );
 
-      return {
+      final location = {
         'latitude': position.latitude,
         'longitude': position.longitude,
       };
+      _memoryCachedLocation = location;
+      await VerificationCache().setGeoLocation(
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+      return location;
     } catch (e) {
       print('Error getting location: $e');
-      // Return default values if location cannot be obtained
-      return {'latitude': 1.0, 'longitude': 1.0};
+      return _cacheAndReturnDefaultLocation();
     }
+  }
+
+  static Future<Map<String, double>> _cacheAndReturnDefaultLocation() async {
+    final fallback = {
+      'latitude': _defaultLatitude,
+      'longitude': _defaultLongitude,
+    };
+    _memoryCachedLocation = fallback;
+    await VerificationCache().setGeoLocation(
+      latitude: _defaultLatitude,
+      longitude: _defaultLongitude,
+    );
+    return fallback;
   }
 }

@@ -88,13 +88,6 @@ class UsernameSecurityCodeBloc extends BaseBloc {
       final finalLatitude = location['latitude'] ?? 1.0;
       final finalLongitude = location['longitude'] ?? 1.0;
 
-      // Get emailOtpRequestId from cache
-      String? emailOtpRequestId = await VerificationCache().getEmailOtpRequestId();
-      print('📦 Retrieved emailOtpRequestId from cache: ${emailOtpRequestId != null ? "Found" : "Not found"}');
-      
-      // Use empty string if not found in cache
-      final finalEmailOtpRequestId = emailOtpRequestId ?? '';
-
       var email = event.email.trim();
       if (email.isEmpty) {
         email = (await VerificationCache().getEmail())?.trim() ?? '';
@@ -110,7 +103,6 @@ class UsernameSecurityCodeBloc extends BaseBloc {
       final requestBody = jsonEncode({
         'password': event.securityCode,
         'email': email,
-        'emailOtpRequestId': finalEmailOtpRequestId,
         'geoLocation': {
           'latitude': finalLatitude,
           'longitude': finalLongitude,
@@ -128,7 +120,6 @@ class UsernameSecurityCodeBloc extends BaseBloc {
       print('URL: $_apiUrlCreateUser');
       print('Method: POST');
       print('Body: $requestBody');
-      print('Email OTP Request ID: $finalEmailOtpRequestId');
       print('Email: $email');
       print('═══════════════════════════════════════════════════════');
       print('');

@@ -93,6 +93,23 @@ class ApiUrls {
     return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/email/verify-otp';
   }
 
+  /// Request types list.
+  static String getRequestTypesUrl() {
+    return '${getLocalBaseUrl()}/vlens/api/v1/request/types';
+  }
+
+  /// Request eligibility.
+  static String getRequestEligibilityUrl() {
+    return '${getLocalBaseUrl()}/vlens/api/v1/request/eligibility';
+  }
+
+  /// Request fields by request type id.
+  static String getRequestFieldsUrl({int? requestTypeId}) {
+    final base = '${getLocalBaseUrl()}/vlens/api/v1/request/fields';
+    if (requestTypeId == null) return base;
+    return '$base?requestTypeId=$requestTypeId';
+  }
+
   /// Check if running on emulator/simulator
   static bool isRunningOnEmulator() {
     if (kIsWeb) return false;

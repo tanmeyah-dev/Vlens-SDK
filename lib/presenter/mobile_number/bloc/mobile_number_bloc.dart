@@ -401,12 +401,10 @@ class MobileNumberBloc extends BaseBloc {
         try {
           if (response.body.isNotEmpty) {
             final errorBody = jsonDecode(response.body);
-            errorMessage = errorBody['message'] ?? 
-                          errorBody['error'] ?? 
-                          errorBody['errorMessage'] ??
-                          errorBody['data']?['message'] ??
-                          errorBody['data']?['error'] ??
-                          'فشل في إرسال كود التحقق';
+            final extractedMessage = _extractApiErrorMessage(errorBody);
+            if (extractedMessage != null && extractedMessage.isNotEmpty) {
+              errorMessage = extractedMessage;
+            }
           }
         } catch (e) {
           print('⚠️ Error parsing error response: $e');
@@ -451,8 +449,71 @@ class MobileNumberBloc extends BaseBloc {
       
       print('❌ StepVerifyPhone API error: ${e.toString()}');
       print('❌ User-friendly error: $errorMessage');
-     emit(OnMobileNumberErrorState(errorMessage));
+      emit(OnMobileNumberErrorState(errorMessage));
     }
+  }
+
+  String? _extractApiErrorMessage(dynamic body) {
+    if (body is! Map) return null;
+
+    final map = Map<String, dynamic>.from(body as Map);
+
+    String? readString(Map<String, dynamic> source, List<String> keys) {
+      for (final key in keys) {
+        final value = source[key];
+        if (value is String && value.trim().isNotEmpty) {
+          return value.trim();
+        }
+      }
+      return null;
+    }
+
+    final topLevel = readString(map, const [
+      'error_message',
+      'errorMessage',
+      'message',
+      'Message',
+      'error',
+      'Error',
+      'errorDescription',
+      'errorDescriptions',
+    ]);
+    if (topLevel != null) return topLevel;
+
+    final data = map['data'];
+    if (data is Map) {
+      final nested = readString(Map<String, dynamic>.from(data as Map), const [
+        'error_message',
+        'errorMessage',
+        'message',
+        'Message',
+        'error',
+        'Error',
+        'errorDescription',
+        'errorDescriptions',
+      ]);
+      if (nested != null) return nested;
+    }
+
+    final errors = map['errors'];
+    if (errors is List && errors.isNotEmpty) {
+      final first = errors.first;
+      if (first is String && first.trim().isNotEmpty) return first.trim();
+      if (first is Map) {
+        final nested = readString(Map<String, dynamic>.from(first as Map), const [
+          'message',
+          'Message',
+          'error',
+          'Error',
+          'error_message',
+          'errorMessage',
+          'description',
+        ]);
+        if (nested != null) return nested;
+      }
+    }
+
+    return null;
   }
 
 }

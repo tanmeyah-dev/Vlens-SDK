@@ -48,6 +48,7 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
   String? _errorMessage;
   
   String get _apiUrlVerify => ApiUrls.getVerifyEmailOtpUrl();
+  String get _apiUrlSendOtp => ApiUrls.getSendEmailOtpUrl();
 
   @override
   void initState() {
@@ -128,7 +129,7 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
       print('═══════════════════════════════════════════════════════');
       print('📤 RESEND EMAIL OTP API REQUEST');
       print('═══════════════════════════════════════════════════════');
-      print('URL: $_apiUrlVerify');
+      print('URL: $_apiUrlSendOtp');
       print('Method: POST');
       print('Headers: ${HttpHeadersHelper.getDefaultHeaders()}');
       print('Body: $requestBody');
@@ -140,7 +141,7 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
       http.Response response;
       try {
         response = await SdkHttpClient.post(
-          Uri.parse(_apiUrlVerify),
+          Uri.parse(_apiUrlSendOtp),
           headers: HttpHeadersHelper.getDefaultHeaders(),
           body: requestBody,
         ).timeout(
@@ -155,13 +156,13 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
         print('❌ CONNECTION ERROR - SocketException');
         print('═══════════════════════════════════════════════════════');
         print('Error: ${e.message}');
-        print('URL Attempted: $_apiUrlVerify');
+        print('URL Attempted: $_apiUrlSendOtp');
         print('═══════════════════════════════════════════════════════');
         print('');
         rethrow;
       } catch (e) {
         print('❌ Connection error: $e');
-        print('❌ URL attempted: $_apiUrlVerify');
+        print('❌ URL attempted: $_apiUrlSendOtp');
         rethrow;
       }
 
