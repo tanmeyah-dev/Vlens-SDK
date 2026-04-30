@@ -110,6 +110,11 @@ class ApiUrls {
     return '$base?requestTypeId=$requestTypeId';
   }
 
+  /// Create request.
+  static String getRequestCreateUrl() {
+    return '${getLocalBaseUrl()}/vlens/api/v1/request/create';
+  }
+
   /// Check if running on emulator/simulator
   static bool isRunningOnEmulator() {
     if (kIsWeb) return false;

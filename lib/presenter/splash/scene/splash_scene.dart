@@ -26,7 +26,7 @@ class _SplashSceneState extends State<SplashScene> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.black,
+      backgroundColor: AppColors.white,
       body: Center(
         child: AppImage(
           AppAssets.tanmeyah,

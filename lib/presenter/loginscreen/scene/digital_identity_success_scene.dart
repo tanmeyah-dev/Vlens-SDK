@@ -25,6 +25,19 @@ class DigitalIdentitySuccessScene extends StatefulWidget {
 }
 
 class _DigitalIdentitySuccessSceneState extends State<DigitalIdentitySuccessScene> {
+  static const Set<String> _hiddenRowKeys = {
+    'isverificationprocesscompeleeted',
+    'isverificationprocesscompleted',
+    'isdigitalidentityverified',
+    'deviceinfo',
+    'user',
+    'idfrontdata.gender',
+    'idfrontdata.client_transaction_id',
+    'idfrontdata.requesr_id',
+    'idfrontdata.request_id',
+    'idbackdata.client_transaction_id',
+  };
+
   bool _isLoadingTypes = true;
   bool _isCheckingEligibility = false;
   String? _errorMessage;
@@ -226,6 +239,9 @@ class _DigitalIdentitySuccessSceneState extends State<DigitalIdentitySuccessScen
     final normalized = data?.toJson();
     final rows = <MapEntry<String, String>>[];
     _flattenToRows(normalized, rows);
+    rows.removeWhere(
+      (entry) => _hiddenRowKeys.contains(entry.key.trim().toLowerCase()),
+    );
     if (rows.isEmpty) {
       return [const MapEntry('data', '')];
     }
