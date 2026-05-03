@@ -160,63 +160,66 @@ class _UserInfoOneSceneState extends State<UserInfoOneScene> {
           elevation: 0,
           title: const Text('اعرف عميلك',style: TextStyle(fontWeight: FontWeight.bold),),
         ),
-        body: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'برجاء الاجابة على الأسئلة التالية',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primary,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20),
-                const Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    'بيانات العمل',
+        body: Container(
+          color: AppColors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'برجاء الاجابة على الأسئلة التالية',
                     style: TextStyle(
-                      fontSize: 34,
-                      fontWeight: FontWeight.w400,
-                      color: AppColors.black,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  const Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      'بيانات العمل',
+                      style: TextStyle(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.black,
+                      ),
                     ),
                   ),
-                ),
-                const Divider(color: AppColors.border1, height: 28),
-                Expanded(
-                  child: ListView(
-                    children: [
-                      if (_isLoadingFields)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(child: CircularProgressIndicator()),
-                        )
-                      else if (_fieldsError != null)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          child: Text(
-                            _fieldsError!,
-                            style: const TextStyle(color: AppColors.error),
-                            textAlign: TextAlign.center,
-                          ),
-                        )
-                      else ..._requestFields.map(_buildDynamicField),
-                    ],
+                  const Divider(color: AppColors.border1, height: 28),
+                  Expanded(
+                    child: ListView(
+                      children: [
+                        if (_isLoadingFields)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (_fieldsError != null)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Text(
+                              _fieldsError!,
+                              style: const TextStyle(color: AppColors.error),
+                              textAlign: TextAlign.center,
+                            ),
+                          )
+                        else ..._requestFields.map(_buildDynamicField),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                AppButton(
-                  title: _isSubmitting ? 'جاري الحفظ...' : 'حفظ',
-                  onPressed:
-                      (_isLoadingFields || _isSubmitting) ? null : _onSavePressed,
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  AppButton(
+                    title: _isSubmitting ? 'جاري الحفظ...' : 'حفظ',
+                    onPressed:
+                        (_isLoadingFields || _isSubmitting) ? null : _onSavePressed,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

@@ -407,89 +407,92 @@ class _DigitalIdentitySuccessSceneState extends State<DigitalIdentitySuccessScen
         body: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'تم انشاء هاويتك الرقميه بنجاح و هذه هي البيانات الخاصه بك',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primary,
+            child: Container(
+              color: AppColors.white,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'تم انشاء هاويتك الرقميه بنجاح و هذه هي البيانات الخاصه بك',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Table(
-                      border: TableBorder.all(color: AppColors.border1),
-                      columnWidths: const {
-                        0: FlexColumnWidth(2),
-                        1: FlexColumnWidth(3),
-                      },
-                      children: [
-                        const TableRow(
-                          decoration: BoxDecoration(color: Color(0xFFF2F6F8)),
-                          children: [
-                            Padding(
-                              padding: EdgeInsets.all(10),
-                              child: Text(
-                                'الحقل',
-                                style: TextStyle(fontWeight: FontWeight.w700),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                            Padding(
-                              padding: EdgeInsets.all(10),
-                              child: Text(
-                                'القيمة',
-                                style: TextStyle(fontWeight: FontWeight.w700),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ],
-                        ),
-                        ...rows.map(
-                          (entry) => TableRow(
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Table(
+                        border: TableBorder.all(color: AppColors.border1),
+                        columnWidths: const {
+                          0: FlexColumnWidth(2),
+                          1: FlexColumnWidth(3),
+                        },
+                        children: [
+                          const TableRow(
+                            decoration: BoxDecoration(color: Color(0xFFF2F6F8)),
                             children: [
                               Padding(
-                                padding: const EdgeInsets.all(10),
-                                child: Text(entry.key),
+                                padding: EdgeInsets.all(10),
+                                child: Text(
+                                  'الحقل',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                  textAlign: TextAlign.center,
+                                ),
                               ),
                               Padding(
-                                padding: const EdgeInsets.all(10),
-                                child: Text(entry.value),
+                                padding: EdgeInsets.all(10),
+                                child: Text(
+                                  'القيمة',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                  textAlign: TextAlign.center,
+                                ),
                               ),
                             ],
                           ),
-                        ),
-                      ],
+                          ...rows.map(
+                            (entry) => TableRow(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(10),
+                                  child: Text(entry.key),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.all(10),
+                                  child: Text(entry.value),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                if (_isLoadingTypes) ...[
-                  const SizedBox(height: 8),
-                  const Center(child: CircularProgressIndicator()),
-                ],
-                if (_errorMessage != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    _errorMessage!,
-                    style: const TextStyle(color: AppColors.error),
-                    textAlign: TextAlign.center,
+                  if (_isLoadingTypes) ...[
+                    const SizedBox(height: 8),
+                    const Center(child: CircularProgressIndicator()),
+                  ],
+                  if (_errorMessage != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: AppColors.error),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  AppButton(
+                    title: _isCheckingEligibility
+                        ? 'جاري التحقق...'
+                        : 'اضغط هنا لاستكمال البيانات',
+                    onPressed: (_isLoadingTypes || _isCheckingEligibility)
+                        ? null
+                        : _onContinuePressed,
                   ),
                 ],
-                const SizedBox(height: 12),
-                AppButton(
-                  title: _isCheckingEligibility
-                      ? 'جاري التحقق...'
-                      : 'اضغط هنا لاستكمال البيانات',
-                  onPressed: (_isLoadingTypes || _isCheckingEligibility)
-                      ? null
-                      : _onContinuePressed,
-                ),
-              ],
+              ),
             ),
           ),
         ),

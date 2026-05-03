@@ -49,7 +49,6 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
   bool _isLoading = false;
   String? _errorMessage;
 
-  String get _apiUrlLogin => ApiUrls.getLoginUrl();
   String get _apiUrlLoginVerifyOtp => ApiUrls.getLoginVerifyOtpUrl();
 
   @override
@@ -95,8 +94,6 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
     print('OTP Length: ${pinController.text.length}');
     print('Has Phone (widget): ${widget.phoneNumber?.isNotEmpty == true}');
     print('Has Password (widget): ${widget.password?.isNotEmpty == true}');
-    print(
-        'Has phoneNumberOtpRequestId (widget): ${widget.phoneNumberOtpRequestId?.isNotEmpty == true}');
     print('═══════════════════════════════════════════════════════');
     print('');
 
@@ -106,10 +103,8 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
       return;
     }
 
-    // Validate required fields
     String? phoneNumber = widget.phoneNumber;
     String? password = widget.password;
-    String? phoneNumberOtpRequestId = widget.phoneNumberOtpRequestId;
 
     if (phoneNumber == null || phoneNumber.isEmpty) {
       phoneNumber = await VerificationCache().getMobileNumber();
@@ -127,29 +122,6 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
       return;
     }
 
-    if (phoneNumberOtpRequestId == null || phoneNumberOtpRequestId.isEmpty) {
-      phoneNumberOtpRequestId = await VerificationCache().getPhoneNumberOtpRequestId();
-      print('ℹ️ OTP request id from cache: $phoneNumberOtpRequestId');
-    }
-
-    if (phoneNumberOtpRequestId == null || phoneNumberOtpRequestId.isEmpty) {
-      print(
-        '⚠️ phoneNumberOtpRequestId missing; recovering via login (no OTP) request…',
-      );
-      phoneNumberOtpRequestId = await _recoverPhoneNumberOtpRequestIdFromLogin(
-        phoneNumber: phoneNumber,
-        password: password,
-      );
-      if (phoneNumberOtpRequestId == null || phoneNumberOtpRequestId.isEmpty) {
-        _showError(
-          'تعذر الحصول على معرف التحقق. أعد تسجيل الدخول أو تأكد من رد الخادم.',
-        );
-        print('❌ OTP validation failed: phoneNumberOtpRequestId still missing after login recovery');
-        return;
-      }
-      print('✅ Recovered phoneNumberOtpRequestId from login response');
-    }
-
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -164,7 +136,7 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
       print('📱 Device ID (IMEI): $deviceId');
       print('📍 Location: ${location['latitude']}, ${location['longitude']}');
 
-      // Prepare request body with original login fields PLUS OTP fields
+      // Prepare request body with original login fields PLUS OTP
       final requestBody = jsonEncode({
         'phoneNumber': phoneNumber,
         'password': password,
@@ -174,7 +146,6 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
         },
         'imei': deviceId,
         'phoneOtp': pinController.text,
-        'phoneNumberOtpRequestId': phoneNumberOtpRequestId,
       });
 
       final headers = HttpHeadersHelper.getDefaultHeaders();
@@ -190,7 +161,6 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
       print('Phone Number: $phoneNumber');
       print('Password: ${'*' * password.length}');
       print('Phone Number OTP: ${pinController.text}');
-      print('Phone Number OTP Request ID: $phoneNumberOtpRequestId');
       print('IMEI: $deviceId');
       print('GeoLocation: ${location['latitude']}, ${location['longitude']}');
       print('═══════════════════════════════════════════════════════');
@@ -390,73 +360,6 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
           _isLoading = false;
         });
       }
-    }
-  }
-
-  /// Same as initial login body (no OTP) — server should return `phoneNumberOtpRequestId`
-  /// when phone confirmation is required. Avoids `phone/send-otp` (417 for existing users).
-  Future<String?> _recoverPhoneNumberOtpRequestIdFromLogin({
-    required String phoneNumber,
-    required String password,
-  }) async {
-    try {
-      final deviceId = await DeviceInfoHelper.getDeviceId();
-      final location = await DeviceInfoHelper.getCurrentLocation();
-      final requestBody = jsonEncode({
-        'phoneNumber': phoneNumber,
-        'password': password,
-        'geoLocation': {
-          'latitude': location['latitude'],
-          'longitude': location['longitude'],
-        },
-        'imei': deviceId,
-      });
-      final headers = HttpHeadersHelper.getDefaultHeaders();
-
-      print('');
-      print('═══════════════════════════════════════════════════════');
-      print('📤 LOGIN RECOVERY (no OTP) — fetch phoneNumberOtpRequestId');
-      print('═══════════════════════════════════════════════════════');
-      print('URL: $_apiUrlLogin');
-      print('Body: $requestBody');
-
-      final response = await SdkHttpClient.post(
-        Uri.parse(_apiUrlLogin),
-        headers: headers,
-        body: requestBody,
-      ).timeout(
-        const Duration(seconds: 30),
-        onTimeout: () {
-          throw Exception('Request timeout');
-        },
-      );
-
-      print('Status: ${response.statusCode}');
-      print('Body: ${response.body}');
-      print('═══════════════════════════════════════════════════════');
-      print('');
-
-      if (response.body.isEmpty) return null;
-      final decoded = jsonDecode(response.body);
-      if (decoded is! Map) return null;
-      final loginResponse = LoginResponse.fromJson(
-        Map<String, dynamic>.from(decoded),
-      );
-      final id = loginResponse.data?.phoneNumberOtpRequestId?.trim();
-      final tx = loginResponse.data?.transactionId?.trim();
-      if (id != null && id.isNotEmpty) {
-        unawaited(
-          VerificationCache().setVerificationData(
-            phoneNumberOtpRequestId: id,
-            transactionId: tx ?? '',
-            mobileNumber: phoneNumber,
-          ),
-        );
-      }
-      return id;
-    } catch (e) {
-      print('❌ Login recovery failed: $e');
-      return null;
     }
   }
 
