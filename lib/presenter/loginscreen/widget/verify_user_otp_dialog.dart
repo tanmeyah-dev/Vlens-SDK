@@ -145,7 +145,7 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
           'longitude': location['longitude'],
         },
         'imei': deviceId,
-        'phoneOtp': pinController.text,
+        'phoneNumberOtp': pinController.text,
       });
 
       final headers = HttpHeadersHelper.getDefaultHeaders();
@@ -160,7 +160,7 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
       print('Body: $requestBody');
       print('Phone Number: $phoneNumber');
       print('Password: ${'*' * password.length}');
-      print('Phone Number OTP: ${pinController.text}');
+      print('phoneNumberOtp: ${pinController.text}');
       print('IMEI: $deviceId');
       print('GeoLocation: ${location['latitude']}, ${location['longitude']}');
       print('═══════════════════════════════════════════════════════');

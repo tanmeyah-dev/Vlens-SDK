@@ -37,6 +37,11 @@ class LoginScreenBloc extends BaseBloc {
   }
 
   _onLoginEvent(LoginEvent event, emit) async {
+    if (_model.awaitingOtpVerification) {
+      print('⚠️ Login skipped: phone OTP verification is in progress');
+      return;
+    }
+
     _model.isLoading = true;
     emit(UpdateLoginScreenUI(_model));
     emit(OnLoginLoadingState()); // Emit loading state to show dialog
@@ -191,6 +196,15 @@ class LoginScreenBloc extends BaseBloc {
           }
 
           _model.isLoading = false;
+
+          final d = loginResponse.data;
+          final needsPhoneOtp = d != null &&
+              d.isPhoneNumberConfirmationRequired == true &&
+              d.isPhoneNumberConfirmed != true;
+          if (needsPhoneOtp) {
+            _model.awaitingOtpVerification = true;
+          }
+
           emit(UpdateLoginScreenUI(_model));
           emit(OnLoginSuccessState(loginResponse));
         } catch (e, stackTrace) {

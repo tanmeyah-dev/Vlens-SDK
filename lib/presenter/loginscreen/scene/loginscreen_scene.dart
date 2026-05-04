@@ -271,22 +271,6 @@ class _LoginScreenSceneState
     }
   }
 
-  Widget _buildForgotPasswordLink() {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: GestureDetector(
-        onTap: () {
-          // TODO: Handle forgot password
-        },
-        child: AppText(
-          "نسيت كلمة المرور؟",
-          color: AppColors.gray,
-          fontSize: 14,
-          fontWeight: FontWeight.w400,
-        ),
-      ),
-    );
-  }
 
   Widget _buildLoginSection() {
     return Row(
@@ -295,9 +279,13 @@ class _LoginScreenSceneState
           child: AppButton(
             title: "تسجيل الدخول",
             textColor:
-                _model.isLoginButtonDisabled ? AppColors.gray : AppColors.white,
-            onPressed:
-                _model.isLoginButtonDisabled ? null : () => _validation(),
+                (_model.isLoginButtonDisabled || _model.awaitingOtpVerification)
+                    ? AppColors.gray
+                    : AppColors.white,
+            onPressed: (_model.isLoginButtonDisabled ||
+                    _model.awaitingOtpVerification)
+                ? null
+                : () => _validation(),
           ),
         ),
         if (_model.isBiometricAvailable) ...[
@@ -446,7 +434,11 @@ class _LoginScreenSceneState
             maskedPhoneNumber: loginResponseData.maskedPhoneNumber,
             phoneNumberOtpRequestId: otpReqId,
             transactionId: txId,
-          );
+          ).then((_) {
+            if (!mounted) return;
+            _model.awaitingOtpVerification = false;
+            emit(UpdateLoginScreenUIEvent(_model));
+          });
         } else {
           print('🔑 login success fields used for SDK/session:');
           print(' - accessToken exists: ${loginResponseData.accessToken?.trim().isNotEmpty == true}');
@@ -507,6 +499,10 @@ class _LoginScreenSceneState
   }
 
   Future<void> _validation() async {
+    if (_model.awaitingOtpVerification) {
+      return;
+    }
+
     // Clear previous server-side errors only (client-side validation errors will show automatically)
     _model.phoneNumberError = null;
     _model.passwordError = null;

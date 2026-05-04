@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import '../widget/verify_user_otp_dialog.dart';
 
 class VerifyUserOTPDialogHelper {
-  static void showVerifyUserOTPDialog(
+  /// Completes when the dialog route is popped (success, error dismiss, or close).
+  static Future<void> showVerifyUserOTPDialog(
     BuildContext context, {
     String? phoneNumber,
     String? password,
@@ -10,7 +11,7 @@ class VerifyUserOTPDialogHelper {
     String? phoneNumberOtpRequestId,
     String? transactionId,
   }) {
-    showGeneralDialog(
+    return showGeneralDialog<void>(
       context: context,
       barrierDismissible: false,
       barrierColor: Colors.black.withOpacity(0.5),

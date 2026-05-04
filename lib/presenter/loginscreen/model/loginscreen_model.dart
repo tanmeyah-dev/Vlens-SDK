@@ -11,6 +11,10 @@ class LoginScreenModel {
   String? passwordError;
   bool isLoading = false;
 
+  /// While true, [LoginEvent] is ignored — avoids a second `/login` when OTP flow
+  /// is active or a duplicate event was queued after the first login returned.
+  bool awaitingOtpVerification = false;
+
   bool isInputEmpty() {
     return mobileNumberController.text.isEmpty ||
         passwordController.text.isEmpty;
