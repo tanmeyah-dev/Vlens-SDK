@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:core/bases/base_bloc.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:http/http.dart' as http;
+import '../../../utils/api_error_parser.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../mobile_number/constants/api_urls.dart';
 import '../event/loginscreen_event.dart';
@@ -227,6 +228,13 @@ class LoginScreenBloc extends BaseBloc {
         // Status code is NOT 200 - stay on login screen and show error
         print('❌ Login API failed - Status Code: ${response.statusCode}');
         String errorMessage = 'فشل في تسجيل الدخول';
+        final apiErrorMessage = ApiErrorParser.extractMessage(
+          response.body,
+          fallbackMessage: errorMessage,
+        );
+        if (response.statusCode == 417 && apiErrorMessage.trim().isNotEmpty) {
+          errorMessage = apiErrorMessage;
+        }
         
         try {
           if (response.body.isNotEmpty) {
@@ -250,6 +258,9 @@ class LoginScreenBloc extends BaseBloc {
                             ? errorBody['errors'][0].toString() 
                             : null) ??
                           'فشل في تسجيل الدخول';
+            if (response.statusCode == 417 && apiErrorMessage.trim().isNotEmpty) {
+              errorMessage = apiErrorMessage;
+            }
             
             // If errorMessage is still default, try to get any string value from response
             if (errorMessage == 'فشل في تسجيل الدخول' && errorBody is Map) {
@@ -283,6 +294,9 @@ class LoginScreenBloc extends BaseBloc {
         } catch (e) {
           print('⚠️ Error parsing error response: $e');
           print('⚠️ Response body: ${response.body}');
+          if (response.statusCode == 417 && apiErrorMessage.trim().isNotEmpty) {
+            errorMessage = apiErrorMessage;
+          } else {
           // Use status code based message if parsing fails
           switch (response.statusCode) {
             case 400:
@@ -302,6 +316,7 @@ class LoginScreenBloc extends BaseBloc {
               break;
             default:
               errorMessage = 'فشل في تسجيل الدخول (رمز الخطأ: ${response.statusCode})';
+          }
           }
         }
 

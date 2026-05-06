@@ -4,6 +4,7 @@ import 'package:core/bases/base_bloc.dart';
 import 'package:core/bases/states/base/init_screen.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:http/http.dart' as http;
+import '../../../utils/api_error_parser.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../constants/api_urls.dart';
 import '../event/mobile_number_event.dart';
@@ -208,6 +209,10 @@ class MobileNumberBloc extends BaseBloc {
         // Error response (non-200 status)
         final errorMessage =
             'Failed to verify phone number: ${response.statusCode}';
+        final apiErrorMessage = ApiErrorParser.extractMessage(
+          response.body,
+          fallbackMessage: errorMessage,
+        );
         print('❌ Error Response:');
         print('Status Code: ${response.statusCode}');
         print('Error Body: ${response.body}');
@@ -240,8 +245,10 @@ class MobileNumberBloc extends BaseBloc {
                 : <String, dynamic>{},
           );
           
-          final finalErrorMessage = errorResponse.message ??
-              errorMessage;
+          final finalErrorMessage = (response.statusCode == 417 &&
+                  apiErrorMessage.trim().isNotEmpty)
+              ? apiErrorMessage
+              : (errorResponse.message ?? errorMessage);
           emit(OnMobileNumberErrorState(finalErrorMessage));
         } catch (e) {
           // Reset loading state and flag
@@ -265,7 +272,12 @@ class MobileNumberBloc extends BaseBloc {
             print('🔑 Invalid API Key detected (parsing failed)');
             emit(OnMobileNumberErrorState('مفتاح API غير صالح'));
           } else {
-            emit(OnMobileNumberErrorState(errorMessage));
+            if (response.statusCode == 417 &&
+                apiErrorMessage.trim().isNotEmpty) {
+              emit(OnMobileNumberErrorState(apiErrorMessage));
+            } else {
+              emit(OnMobileNumberErrorState(errorMessage));
+            }
           }
         }
       }

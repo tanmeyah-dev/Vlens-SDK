@@ -11,6 +11,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import '../../../utils/sdk_http_client.dart';
+import '../../../utils/api_error_parser.dart';
 import '../../mobile_number/constants/api_urls.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import 'package:vlens/vlens.dart';
@@ -261,6 +262,13 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
                   userFullName: loginData.userFullName,
                 ),
               );
+              final resolvedMobileNumber =
+                  (loginData.userName ?? '').trim().isNotEmpty
+                      ? loginData.userName!.trim()
+                      : (widget.phoneNumber ?? '').trim();
+              if (resolvedMobileNumber.isNotEmpty) {
+                unawaited(VerificationCache().setMobileNumber(resolvedMobileNumber));
+              }
               unawaited(_cacheLoginResponseData(loginData));
               if (loginData.isDigitalIdentityVerified == true) {
                 print('✅ Digital identity already verified (OTP flow) - opening cached VLens data screen.');
@@ -292,6 +300,13 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
       } else {
         // Status code is NOT 200 - show error
         String errorMessage = 'فشل في تسجيل الدخول';
+        final apiErrorMessage = ApiErrorParser.extractMessage(
+          response.body,
+          fallbackMessage: errorMessage,
+        );
+        if (response.statusCode == 417 && apiErrorMessage.trim().isNotEmpty) {
+          errorMessage = apiErrorMessage;
+        }
         print('⚠️ Non-200 response received in OTP verify login flow');
         try {
           if (response.body.isNotEmpty) {
@@ -306,6 +321,9 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
                 errorBody['data']?['message'] ??
                 errorBody['data']?['error'] ??
                 'فشل في تسجيل الدخول';
+            if (response.statusCode == 417 && apiErrorMessage.trim().isNotEmpty) {
+              errorMessage = apiErrorMessage;
+            }
             print('⚠️ Parsed non-200 error body: $errorBody');
           } else {
             switch (response.statusCode) {
@@ -328,6 +346,9 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
         } catch (e) {
           print('⚠️ Error parsing error response: $e');
           print('⚠️ Raw non-200 body (unparsed): ${response.body}');
+          if (response.statusCode == 417 && apiErrorMessage.trim().isNotEmpty) {
+            errorMessage = apiErrorMessage;
+          }
         }
 
         print('❌ OTP login failed. Final error message: $errorMessage');
@@ -501,8 +522,8 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
     try {
       final normalized = jsonDecode(jsonEncode(loginResponseData));
       await VerificationCache().setLoginResponseData(normalized);
-    } catch (_) {
-      // Best effort cache only.
+    } catch (e) {
+      print('⚠️ Failed to cache login response data (verify otp): $e');
     }
   }
 

@@ -8,9 +8,9 @@ import 'package:core/style/app_colors.dart';
 import 'package:flutter/material.dart';
 
 import '../model/request_fields_response.dart';
-import '../utils/device_info_helper.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../mobile_number/constants/api_urls.dart';
+import 'summaryscreen.dart';
 
 class UserInfoOneScene extends StatefulWidget {
   final Map<String, dynamic> eligibilityResponse;
@@ -32,6 +32,20 @@ class _UserInfoOneSceneState extends State<UserInfoOneScene> {
   final Map<String, TextEditingController> _textControllers = {};
   final Map<String, String?> _selectedValues = {};
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  List<SummaryAnswerItem> _buildSummaryAnswers() {
+    return _requestFields.map((field) {
+      final type = field.type.toLowerCase();
+      final title = field.displayText.trim().isNotEmpty ? field.displayText : field.key;
+      String value = '';
+      if (type == 'text') {
+        value = _textControllers[field.key]?.text.trim() ?? '';
+      } else if (type == 'select') {
+        value = (_selectedValues[field.key] ?? '').trim();
+      }
+      return SummaryAnswerItem(key: field.key, label: title, value: value);
+    }).toList();
+  }
 
   @override
   void initState() {
@@ -160,65 +174,69 @@ class _UserInfoOneSceneState extends State<UserInfoOneScene> {
           elevation: 0,
           title: const Text('اعرف عميلك',style: TextStyle(fontWeight: FontWeight.bold),),
         ),
-        body: Container(
-          color: AppColors.white,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'برجاء الاجابة على الأسئلة التالية',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  const Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      'بيانات العمل',
+        body: GestureDetector(
+          onTap: () => FocusScope.of(context).unfocus(),
+          behavior: HitTestBehavior.translucent,
+          child: Container(
+            color: AppColors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'برجاء الاجابة على الأسئلة التالية',
                       style: TextStyle(
-                        fontSize: 34,
-                        fontWeight: FontWeight.w400,
-                        color: AppColors.black,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    const Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        'بيانات العمل',
+                        style: TextStyle(
+                          fontSize: 34,
+                          fontWeight: FontWeight.w400,
+                          color: AppColors.black,
+                        ),
                       ),
                     ),
-                  ),
-                  const Divider(color: AppColors.border1, height: 28),
-                  Expanded(
-                    child: ListView(
-                      children: [
-                        if (_isLoadingFields)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 24),
-                            child: Center(child: CircularProgressIndicator()),
-                          )
-                        else if (_fieldsError != null)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: Text(
-                              _fieldsError!,
-                              style: const TextStyle(color: AppColors.error),
-                              textAlign: TextAlign.center,
-                            ),
-                          )
-                        else ..._requestFields.map(_buildDynamicField),
-                      ],
+                    const Divider(color: AppColors.border1, height: 28),
+                    Expanded(
+                      child: ListView(
+                        children: [
+                          if (_isLoadingFields)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 24),
+                              child: Center(child: CircularProgressIndicator()),
+                            )
+                          else if (_fieldsError != null)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              child: Text(
+                                _fieldsError!,
+                                style: const TextStyle(color: AppColors.error),
+                                textAlign: TextAlign.center,
+                              ),
+                            )
+                          else ..._requestFields.map(_buildDynamicField),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  AppButton(
-                    title: _isSubmitting ? 'جاري الحفظ...' : 'حفظ',
-                    onPressed:
-                        (_isLoadingFields || _isSubmitting) ? null : _onSavePressed,
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    AppButton(
+                      title: _isSubmitting ? 'جاري الحفظ...' : 'حفظ',
+                      onPressed:
+                          (_isLoadingFields || _isSubmitting) ? null : _onSavePressed,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -335,85 +353,10 @@ class _UserInfoOneSceneState extends State<UserInfoOneScene> {
     });
 
     try {
-      final cache = VerificationCache();
-      final requestTypeId = await cache.getRequestTypeId();
-      if (requestTypeId == null) {
-        throw Exception('معرف نوع الطلب غير متوفر');
-      }
-
-      final accessToken = await cache.getAccessToken();
-      final encryptedToken = await cache.getEncryptedAccessToken();
-      final token = (accessToken != null && accessToken.trim().isNotEmpty)
-          ? accessToken.trim()
-          : (encryptedToken ?? '').trim();
-      final headers = token.isNotEmpty
-          ? HttpHeadersHelper.getHeadersWithAuth(token)
-          : HttpHeadersHelper.getDefaultHeaders();
-
-      final location = await DeviceInfoHelper.getCurrentLocation();
-      final latitude = (location['latitude'] as num?)?.toDouble() ?? 0.0;
-      final longitude = (location['longitude'] as num?)?.toDouble() ?? 0.0;
-      final userDeviceUtcTime = DateTime.now().toUtc().toIso8601String();
-
-      final requestFieldsValues = <String, dynamic>{};
-      for (final field in _requestFields) {
-        final type = field.type.toLowerCase();
-        if (type == 'text') {
-          final value = _textControllers[field.key]?.text.trim() ?? '';
-          requestFieldsValues[field.key] = value;
-        } else if (type == 'select') {
-          final value = (_selectedValues[field.key] ?? '').trim();
-          requestFieldsValues[field.key] = value;
-        }
-      }
-
-      final body = {
-        'requestTypeId': requestTypeId,
-        'geoLocation': {
-          'latitude': latitude,
-          'longitude': longitude,
-        },
-        'userDeviceUtcTime': userDeviceUtcTime,
-        'requestFieldsValues': requestFieldsValues,
-      };
-
-      final createUrl = ApiUrls.getRequestCreateUrl();
-      print('');
-      print('═══════════════════════════════════════════════════════');
-      print('📤 REQUEST CREATE API CALL (USERINFOONE)');
-      print('═══════════════════════════════════════════════════════');
-      print('URL: $createUrl');
-      print('Method: POST');
-      print('Headers: $headers');
-      print('Body: ${jsonEncode(body)}');
-      print('═══════════════════════════════════════════════════════');
-      print('');
-
-      final response = await SdkHttpClient.post(
-        Uri.parse(createUrl),
-        headers: headers,
-        body: jsonEncode(body),
-      );
-
-      print('');
-      print('═══════════════════════════════════════════════════════');
-      print('📥 REQUEST CREATE API RESPONSE (USERINFOONE)');
-      print('═══════════════════════════════════════════════════════');
-      print('Status Code: ${response.statusCode}');
-      print('Body: ${response.body}');
-      print('═══════════════════════════════════════════════════════');
-      print('');
-
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            response.statusCode == 200
-                ? 'تم حفظ البيانات بنجاح'
-                : 'تم إرسال الطلب (${response.statusCode})',
-          ),
-          backgroundColor:
-              response.statusCode == 200 ? AppColors.primary : AppColors.error,
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => SummaryScreen(answeredFields: _buildSummaryAnswers()),
         ),
       );
     } catch (e) {

@@ -23,6 +23,7 @@ dependencies:
   core:
     path: Core
   vlens: ^0.1.9
+  webview_flutter: ^4.13.1
 
 dev_dependencies:
   flutter_test:
@@ -34,10 +35,10 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
-
-  # To add assets to your package, add an assets section, like this:
-   assets:
-     - assets/images/logo.png
+  assets:
+    - assets/images/logo.png
+    - assets/images/request_submitted.png
+    - assets/images/request_submitted_white.png
   #   - images/a_dot_ham.jpeg
   #
   # For details regarding assets in packages, see

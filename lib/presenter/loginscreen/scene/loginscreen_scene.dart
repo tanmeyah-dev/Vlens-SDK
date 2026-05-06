@@ -456,6 +456,11 @@ class _LoginScreenSceneState
               userFullName: loginResponseData.userFullName,
             ),
           );
+          final resolvedMobileNumber =
+              (loginResponseData.userName ?? '').trim().isNotEmpty
+                  ? loginResponseData.userName!.trim()
+                  : _model.mobileNumberController.text.trim();
+          unawaited(VerificationCache().setMobileNumber(resolvedMobileNumber));
           unawaited(_cacheLoginResponseData(loginResponseData));
           if (!hasUsableToken) {
             print('⚠️ Login success without usable token, but OTP is not required by backend.');
@@ -638,8 +643,8 @@ class _LoginScreenSceneState
     try {
       final normalized = jsonDecode(jsonEncode(loginResponseData));
       await VerificationCache().setLoginResponseData(normalized);
-    } catch (_) {
-      // Best effort cache only.
+    } catch (e) {
+      print('⚠️ Failed to cache login response data (loginscreen): $e');
     }
   }
 

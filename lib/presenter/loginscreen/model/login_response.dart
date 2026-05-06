@@ -162,6 +162,18 @@ class LoginResponse {
     if (code != null && code != 0) return false;
     return false;
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'code': code,
+      'message': message,
+      'success': success,
+      'data': data?.toJson(),
+      'error_code': errorCode,
+      'error_message': errorMessage,
+      'error_descriptions': errorDescriptions,
+    };
+  }
 }
 
 /// `data` object from login / login-with-OTP.
@@ -284,5 +296,30 @@ class LoginResponseData {
       redirectUri: json['redirectUri']?.toString(),
       transactionId: json['transactionId']?.toString(),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'hasPendingRequest': hasPendingRequest,
+      'maskedPhoneNumber': maskedPhoneNumber,
+      'isEmailConfirmationRequired': isEmailConfirmationRequired,
+      'isEmailConfirmed': isEmailConfirmed,
+      'isPhoneNumberConfirmationRequired': isPhoneNumberConfirmationRequired,
+      'isPhoneNumberConfirmed': isPhoneNumberConfirmed,
+      'phoneNumberOtp': phoneNumberOtp,
+      'phoneNumberOtpRequestId': phoneNumberOtpRequestId,
+      'emailOtpRequestId': emailOtpRequestId,
+      'isDigitalIdentityVerified': isDigitalIdentityVerified,
+      'accessToken': accessToken,
+      'refreshToken': refreshToken,
+      'encryptedAccessToken': encryptedAccessToken,
+      'phoneOtpExpireInSeconds': phoneOtpExpireInSeconds,
+      'emailOtpExpireInSeconds': emailOtpExpireInSeconds,
+      'userName': userName,
+      'userFullName': userFullName,
+      'user': user,
+      'redirectUri': redirectUri,
+      'transactionId': transactionId,
+    };
   }
 }

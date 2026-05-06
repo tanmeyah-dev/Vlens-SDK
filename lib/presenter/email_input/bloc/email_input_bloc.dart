@@ -6,6 +6,7 @@ import 'package:core/bases/states/general_state/general_render_state.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import 'package:http/http.dart' as http;
+import '../../../utils/api_error_parser.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../mobile_number/constants/api_urls.dart';
 import '../event/email_input_event.dart';
@@ -206,6 +207,13 @@ class EmailInputBloc extends BaseBloc {
       } else {
         // Error response
         String errorMessage = 'فشل في التحقق من الإيميل';
+        final apiErrorMessage = ApiErrorParser.extractMessage(
+          response.body,
+          fallbackMessage: errorMessage,
+        );
+        if (response.statusCode == 417 && apiErrorMessage.trim().isNotEmpty) {
+          errorMessage = apiErrorMessage;
+        }
         
         try {
           if (response.body.isNotEmpty) {
@@ -217,9 +225,15 @@ class EmailInputBloc extends BaseBloc {
                           errorBody['data']?['message'] ??
                           errorBody['data']?['error'] ??
                           'فشل في التحقق من الإيميل';
+            if (response.statusCode == 417 && apiErrorMessage.trim().isNotEmpty) {
+              errorMessage = apiErrorMessage;
+            }
           }
         } catch (e) {
           print('⚠️ Error parsing error response: $e');
+          if (response.statusCode == 417 && apiErrorMessage.trim().isNotEmpty) {
+            errorMessage = apiErrorMessage;
+          }
         }
 
         print('❌ StepVerifyEmail API failed with status code: ${response.statusCode}');

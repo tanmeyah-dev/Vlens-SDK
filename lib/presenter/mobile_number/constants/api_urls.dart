@@ -115,6 +115,16 @@ class ApiUrls {
     return '${getLocalBaseUrl()}/vlens/api/v1/request/create';
   }
 
+  /// E-contract customer step OTP.
+  static String getEContractCustomerStepOtpUrl() {
+    return '${getLocalBaseUrl()}/vlens/api/v1/e-contract/customer/step/otp';
+  }
+
+  /// E-contract customer validate OTP.
+  static String getEContractCustomerValidateOtpUrl() {
+    return '${getLocalBaseUrl()}/vlens/api/v1/e-contract/customer/validate/otp';
+  }
+
   /// Check if running on emulator/simulator
   static bool isRunningOnEmulator() {
     if (kIsWeb) return false;
