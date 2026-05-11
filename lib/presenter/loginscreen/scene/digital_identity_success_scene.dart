@@ -25,19 +25,6 @@ class DigitalIdentitySuccessScene extends StatefulWidget {
 }
 
 class _DigitalIdentitySuccessSceneState extends State<DigitalIdentitySuccessScene> {
-  static const Set<String> _hiddenRowKeys = {
-    'isverificationprocesscompeleeted',
-    'isverificationprocesscompleted',
-    'isdigitalidentityverified',
-    'deviceinfo',
-    'user',
-    'idfrontdata.gender',
-    'idfrontdata.client_transaction_id',
-    'idfrontdata.requesr_id',
-    'idfrontdata.request_id',
-    'idbackdata.client_transaction_id',
-  };
-
   bool _isLoadingTypes = true;
   bool _isCheckingEligibility = false;
   String? _errorMessage;
@@ -233,17 +220,81 @@ class _DigitalIdentitySuccessSceneState extends State<DigitalIdentitySuccessScen
     return null;
   }
 
-  List<MapEntry<String, String>> _buildRowsFromExtractedData(
-    ExtractedUserData? data,
-  ) {
-    final normalized = data?.toJson();
+  String _formatDate(DateTime? date) {
+    if (date == null) return '';
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final year = date.year.toString();
+    return '$day-$month-$year';
+  }
+
+  String? _nonEmpty(String? v) {
+    final t = v?.trim();
+    if (t == null || t.isEmpty) return null;
+    return t;
+  }
+
+  void _addRow(List<MapEntry<String, String>> rows, String labelAr, String? value) {
+    final v = _nonEmpty(value);
+    if (v == null) return;
+    rows.add(MapEntry(labelAr, v));
+  }
+
+  void _addDateRow(List<MapEntry<String, String>> rows, String labelAr, DateTime? d) {
+    if (d == null) return;
+    rows.add(MapEntry(labelAr, _formatDate(d)));
+  }
+
+  /// User-facing rows: Arabic labels only (no English JSON paths / English-only fields).
+  List<MapEntry<String, String>> _buildArabicLabeledRows(ExtractedUserData? data) {
     final rows = <MapEntry<String, String>>[];
-    _flattenToRows(normalized, rows);
-    rows.removeWhere(
-      (entry) => _hiddenRowKeys.contains(entry.key.trim().toLowerCase()),
-    );
+    if (data == null) {
+      return [const MapEntry('لا توجد بيانات', '')];
+    }
+
+    final u = data.user;
+    final f = data.idFrontData;
+    final b = data.idBackData;
+
+    final combinedUserName = [
+      u?.name,
+      u?.surname,
+    ].whereType<String>().map((e) => e.trim()).where((e) => e.isNotEmpty).join(' ');
+    final name = _nonEmpty(f?.name) ??
+        _nonEmpty(u?.fullName) ??
+        _nonEmpty(combinedUserName.isEmpty ? null : combinedUserName);
+    _addRow(rows, 'الاسم', name);
+
+    final idNumber = _nonEmpty(f?.idNumber) ?? _nonEmpty(b?.idNumber) ?? _nonEmpty(u?.idNumber);
+    _addRow(rows, 'رقم الهوية', idNumber);
+
+    _addDateRow(rows, 'تاريخ الميلاد', f?.dateOfBirth);
+
+    final gender = _nonEmpty(f?.gender) ?? _nonEmpty(b?.gender);
+    _addRow(rows, 'النوع', gender);
+
+    final address = _nonEmpty(f?.address) ?? _nonEmpty(u?.address);
+    _addRow(rows, 'العنوان', address);
+
+    _addRow(rows, 'المحافظة', f?.govern);
+    _addRow(rows, 'المدينة', f?.city);
+    _addRow(rows, 'المنطقة', f?.district);
+
+    _addRow(rows, 'الحالة الاجتماعية', b?.maritalStatus);
+    _addRow(rows, 'المهنة', b?.job);
+    _addRow(rows, 'المسمى الوظيفي', b?.jobTitle);
+    _addRow(rows, 'الدين', b?.religion);
+    _addRow(rows, 'اسم الزوج', b?.husbandName);
+
+    _addDateRow(rows, 'تاريخ الإصدار', b?.releaseDate);
+    _addDateRow(rows, 'تاريخ انتهاء الهوية', b?.idExpiry);
+
+    _addRow(rows, 'رقم الهاتف', u?.phoneNumber);
+    _addRow(rows, 'البريد الإلكتروني', u?.emailAddress);
+    _addRow(rows, 'اسم المستخدم', u?.userName);
+
     if (rows.isEmpty) {
-      return [const MapEntry('data', '')];
+      return [const MapEntry('لا توجد بيانات', '')];
     }
     return rows;
   }
@@ -293,30 +344,6 @@ class _DigitalIdentitySuccessSceneState extends State<DigitalIdentitySuccessScen
       // Best effort parser only.
     }
     return null;
-  }
-
-  void _flattenToRows(
-    dynamic value,
-    List<MapEntry<String, String>> rows, {
-    String prefix = '',
-  }) {
-    if (value is Map) {
-      value.forEach((key, nestedValue) {
-        final nextPrefix = prefix.isEmpty ? '$key' : '$prefix.$key';
-        _flattenToRows(nestedValue, rows, prefix: nextPrefix);
-      });
-      return;
-    }
-
-    if (value is List) {
-      for (var i = 0; i < value.length; i++) {
-        final nextPrefix = prefix.isEmpty ? '[$i]' : '$prefix[$i]';
-        _flattenToRows(value[i], rows, prefix: nextPrefix);
-      }
-      return;
-    }
-
-    rows.add(MapEntry(prefix.isEmpty ? 'data' : prefix, '${value ?? ''}'));
   }
 
   Future<void> _onContinuePressed() async {
@@ -394,7 +421,7 @@ class _DigitalIdentitySuccessSceneState extends State<DigitalIdentitySuccessScen
 
   @override
   Widget build(BuildContext context) {
-    final rows = _buildRowsFromExtractedData(_effectiveExtractedData);
+    final rows = _buildArabicLabeledRows(_effectiveExtractedData);
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(

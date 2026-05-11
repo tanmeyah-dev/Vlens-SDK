@@ -10,20 +10,24 @@ import '../../../data/models/extracted_user_data.dart';
 import '../../../utils/api_error_parser.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../utils/device_info_helper.dart';
-import 'request_submitted_scene.dart';
+import 'waiting_approval_screen.dart';
 import '../../mobile_number/constants/api_urls.dart';
 import '../../mobile_number/widgets/app_header.dart';
 
 class SummaryAnswerItem {
   final String key;
   final String label;
+  /// Sent in `requestFieldsValues` for request/create.
   final String value;
+  /// Shown on the summary screen; defaults to [value].
+  final String displayValue;
 
-  const SummaryAnswerItem({
+  SummaryAnswerItem({
     required this.key,
     required this.label,
     required this.value,
-  });
+    String? displayValue,
+  }) : displayValue = displayValue ?? value;
 }
 
 class SummaryScreen extends StatefulWidget {
@@ -385,7 +389,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
         if (!mounted) return;
         await Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => RequestSubmittedScene(requestId: createdRequestId),
+            builder: (_) => WaitingApprovalScreen(requestId: createdRequestId),
           ),
         );
       } else {
@@ -489,7 +493,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
   @override
   Widget build(BuildContext context) {
     final answersRows = widget.answeredFields
-        .map((item) => MapEntry(item.label, item.value))
+        .map((item) => MapEntry(item.label, item.displayValue))
         .toList();
 
     return Directionality(

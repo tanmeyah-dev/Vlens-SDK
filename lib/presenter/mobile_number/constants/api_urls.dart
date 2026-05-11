@@ -115,6 +115,11 @@ class ApiUrls {
     return '${getLocalBaseUrl()}/vlens/api/v1/request/create';
   }
 
+  /// Get current request.
+  static String getRequestCurrentUrl() {
+    return '${getLocalBaseUrl()}/vlens/api/v1/request/current';
+  }
+
   /// E-contract customer step OTP.
   static String getEContractCustomerStepOtpUrl() {
     return '${getLocalBaseUrl()}/vlens/api/v1/e-contract/customer/step/otp';

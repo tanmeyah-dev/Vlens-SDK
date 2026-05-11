@@ -22,6 +22,43 @@ class ApiErrorParser {
     return fallbackMessage;
   }
 
+  /// ASP.NET / ProblemDetails style: `{ "title": "...", "errors": { "Key": ["msg"] } }`.
+  /// Prefer concrete field messages over generic [title].
+  static String? _flattenErrorsMap(dynamic errors) {
+    if (errors is! Map) return null;
+    final parts = <String>[];
+    for (final entry in Map<String, dynamic>.from(errors).entries) {
+      final key = entry.key;
+      final v = entry.value;
+      final keyParts = <String>[];
+      if (v is List) {
+        for (final item in v) {
+          final s = item?.toString().trim();
+          if (s != null && s.isNotEmpty) keyParts.add(s);
+        }
+      } else {
+        final s = v?.toString().trim();
+        if (s != null && s.isNotEmpty) keyParts.add(s);
+      }
+      if (keyParts.isEmpty) {
+        keyParts.add(_friendlyValidationFieldName(key));
+      }
+      parts.addAll(keyParts);
+    }
+    if (parts.isEmpty) return null;
+    return parts.join('\n');
+  }
+
+  static String _friendlyValidationFieldName(String key) {
+    switch (key) {
+      case 'MinimumRequiredSignatories':
+        return 'لم يُستوفَ العدد الأدنى من الموقّعين المطلوبين لهذا الطلب. '
+            'يجب إضافة عدد كافٍ من الموقّعين وفق إعدادات نوع الطلب.';
+      default:
+        return key;
+    }
+  }
+
   static String? _extractFromDynamic(dynamic value) {
     if (value == null) return null;
     if (value is String && value.trim().isNotEmpty) return value.trim();
@@ -36,11 +73,19 @@ class ApiErrorParser {
         'errorMessage',
         'ErrorMessage',
         'error_message',
-        'title',
-        'detail',
       ];
 
       for (final key in directKeys) {
+        final extracted = _extractFromDynamic(map[key]);
+        if (extracted != null && extracted.isNotEmpty) return extracted;
+      }
+
+      for (final errorsKey in ['errors', 'Errors']) {
+        final flattened = _flattenErrorsMap(map[errorsKey]);
+        if (flattened != null && flattened.isNotEmpty) return flattened;
+      }
+
+      for (final key in ['title', 'detail', 'Title', 'Detail']) {
         final extracted = _extractFromDynamic(map[key]);
         if (extracted != null && extracted.isNotEmpty) return extracted;
       }
