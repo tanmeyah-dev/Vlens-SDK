@@ -10,4 +10,7 @@ class AppAssets {
   /// Request submitted success illustration.
   /// Referenced with `package: tan_sdk` in Image.asset / AssetImage.
   static const String requestSubmitted = 'assets/images/request_submitted_white.png';
+
+  /// Location permission gate illustration (host apps resolve via `package: tan_sdk`).
+  static const String locationPermission = 'assets/images/location_permission.png';
 }

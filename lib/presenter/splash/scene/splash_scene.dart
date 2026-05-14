@@ -15,10 +15,10 @@ class _SplashSceneState extends State<SplashScene> {
   @override
   void initState() {
     super.initState();
-    // Navigate to mobile number screen after 2 seconds
+    // Navigate to validate user after 2 seconds
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed(RoutePath.mobileNumber);
+        Navigator.of(context).pushReplacementNamed(RoutePath.validateUser);
       }
     });
   }

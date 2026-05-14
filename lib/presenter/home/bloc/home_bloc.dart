@@ -9,7 +9,7 @@ import '../event/home_event.dart';
 import '../model/home_model.dart';
 import '../model/request_types_response.dart';
 import '../state/home_state.dart';
-import '../../mobile_number/constants/api_urls.dart';
+import '../../validate_user/constants/api_urls.dart';
 
 class HomeBloc extends BaseBloc {
   final HomeModel _model;

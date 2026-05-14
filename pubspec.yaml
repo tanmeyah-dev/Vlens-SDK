@@ -37,6 +37,7 @@ dev_dependencies:
 flutter:
   assets:
     - assets/images/logo.png
+    - assets/images/location_permission.png
     - assets/images/request_submitted.png
     - assets/images/request_submitted_white.png
   #   - images/a_dot_ham.jpeg

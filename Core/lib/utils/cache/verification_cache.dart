@@ -151,6 +151,13 @@ class VerificationCache {
     };
   }
 
+  /// Remove stored coordinates (e.g. after invalidating placeholder cache).
+  Future<void> clearGeoLocation() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyLatitude);
+    await prefs.remove(_keyLongitude);
+  }
+
   /// Persist request type id to use in later screens/flows.
   Future<void> setRequestTypeId(int requestTypeId) async {
     final prefs = await SharedPreferences.getInstance();
