@@ -27,6 +27,15 @@ class ValidateUserPhoneField extends StatefulWidget {
 class _ValidateUserPhoneFieldState extends State<ValidateUserPhoneField> {
   String _previousMobileNumber = '';
 
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.controller.text.trim();
+    if (initial.isNotEmpty) {
+      _previousMobileNumber = initial;
+    }
+  }
+
   void _setControllerTextSafely(String text, int desiredOffset) {
     final safeOffset = desiredOffset.clamp(0, text.length);
     widget.controller.value = TextEditingValue(

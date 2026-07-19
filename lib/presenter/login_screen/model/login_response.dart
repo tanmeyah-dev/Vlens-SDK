@@ -294,7 +294,11 @@ class LoginResponseData {
       userFullName: json['userFullName']?.toString(),
       user: json['user'],
       redirectUri: json['redirectUri']?.toString(),
-      transactionId: json['transactionId']?.toString(),
+      transactionId: pickString([
+        'transactionId',
+        'TransactionId',
+        'transaction_id',
+      ]),
     );
   }
 

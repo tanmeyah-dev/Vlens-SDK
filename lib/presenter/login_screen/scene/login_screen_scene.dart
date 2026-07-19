@@ -16,7 +16,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tan_sdk/data/models/extracted_user_data.dart';
 import 'package:tan_sdk/utils/extracted_data_log.dart';
-import 'package:uuid/uuid.dart';
 import '../../home/scene/home_scene.dart';
 import '../../id_data/scene/id_data_screen.dart';
 import '../model/login_response.dart';
@@ -27,6 +26,7 @@ import '../model/login_screen_model.dart';
 import '../state/login_screen_state.dart';
 import '../utils/phone_validator.dart';
 import '../utils/verify_user_otp_dialog_helper.dart';
+import '../utils/vlens_sdk_credentials.dart';
 import '../../register_screen/widgets/pin_input_field.dart';
 
 class LoginScreenScene extends StatefulWidget {
@@ -535,29 +535,64 @@ class _LoginScreenSceneState
 
   void _initializeVLensSDK(
       BuildContext context, LoginResponseData loginResponseData) {
+    final credentials = VlensSdkCredentials.tryResolve(loginResponseData);
+    if (credentials == null) {
+      final message =
+          VlensSdkCredentials.missingFieldsMessage(loginResponseData);
+      print('⛔ VLens SDK init blocked (login flow): $message');
+      print(
+          '   accessToken=${loginResponseData.accessToken?.trim().isNotEmpty == true}, '
+          'encryptedAccessToken=${loginResponseData.encryptedAccessToken?.trim().isNotEmpty == true}, '
+          'refreshToken=${loginResponseData.refreshToken?.trim().isNotEmpty == true}');
+      if (mounted && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Persist the locally created transactionId with the session tokens.
+    unawaited(
+      VerificationCache().setLoginSession(
+        accessToken: credentials.accessToken,
+        refreshToken: credentials.refreshToken,
+        encryptedAccessToken: loginResponseData.encryptedAccessToken,
+        transactionId: credentials.transactionId,
+        userName: loginResponseData.userName,
+        userFullName: loginResponseData.userFullName,
+      ),
+    );
+
     print('');
     print('═══════════════════════════════════════════════════════');
     print('🚀 VLENS SDK INITIALIZATION (LOGIN FLOW)');
     print('═══════════════════════════════════════════════════════');
-    print('transactionId from login API: ${loginResponseData.transactionId}');
+    print('transactionId (created after login): ${credentials.transactionId}');
     print('tenancyName: tanmeyah-stg');
     print('apiBaseUrl: https://api.vlenseg.com');
-    print('accessToken source: ${(loginResponseData.accessToken?.trim().isNotEmpty == true) ? 'accessToken' : 'encryptedAccessToken'}');
-    print('refreshToken exists: ${loginResponseData.refreshToken?.trim().isNotEmpty == true}');
-    print('isDigitalIdentityVerified: ${loginResponseData.isDigitalIdentityVerified}');
+    print(
+        'accessToken source: ${(loginResponseData.accessToken?.trim().isNotEmpty == true) ? 'accessToken' : 'encryptedAccessToken'}');
+    print('accessToken length: ${credentials.accessToken.length}');
+    print('refreshToken length: ${credentials.refreshToken.length}');
+    print(
+        'isDigitalIdentityVerified: ${loginResponseData.isDigitalIdentityVerified}');
     print('═══════════════════════════════════════════════════════');
     print('');
-    String transactionId = const Uuid().v4();
-    print('UUID sent to VLens SDK: $transactionId');
+
     final sdkConfig = SdkConfig(
-      transactionId: transactionId,
+      transactionId: credentials.transactionId,
       isLivenessOnly: false,
       isNationalIdOnly: false,
       logoPath: AppAssets.tanmeyah,
       env: EnvironmentConfig(
         apiBaseUrl: "https://api.vlenseg.com",
-        accessToken: loginResponseData.accessToken ?? "",
-        refreshToken: loginResponseData.refreshToken ?? "",
+        accessToken: credentials.accessToken,
+        refreshToken: credentials.refreshToken,
         apiKey: "j1m9DwIywPS1dPCkFUT2hM2IRr10921gq5PBzQID6xI",
         tenancyName: "tanmeyah-stg",
       ),
@@ -596,8 +631,7 @@ class _LoginScreenSceneState
             if (!mounted || !context.mounted) return;
             Navigator.of(context, rootNavigator: true).pushReplacement(
               MaterialPageRoute(
-                builder: (_) =>
-                    IdDataScreen(extractedData: userData),
+                builder: (_) => IdDataScreen(extractedData: userData),
               ),
             );
           });

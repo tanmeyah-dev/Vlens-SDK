@@ -21,7 +21,10 @@ import '../../../routes/route_path.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 
 class ValidateUser extends StatefulWidget {
-  const ValidateUser({super.key});
+  /// Prefills the mobile field when opened from a host app after login.
+  final String? initialPhoneNumber;
+
+  const ValidateUser({super.key, this.initialPhoneNumber});
 
   @override
   State<ValidateUser> createState() => _ValidateUserState();
@@ -30,11 +33,13 @@ class ValidateUser extends StatefulWidget {
 class _ValidateUserState
     extends BaseState<ValidateUser, ValidateUserBloc, ValidateUserModel> {
   late ValidateUserModel _mobileNumberModel;
+  bool _didPrefillPhone = false;
 
   @override
   Widget buildWidget(
       BuildContext context, RenderDataState<ValidateUserModel> state) {
     _mobileNumberModel = state.data;
+    _prefillPhoneNumberIfNeeded();
 
     // Calculate responsive padding based on screen width
     final horizontalPadding = screenWidth > 600
@@ -167,6 +172,18 @@ class _ValidateUserState
 
   ValidateUserBloc createBloc() {
     return ValidateUserBloc(ValidateUserModel());
+  }
+
+  void _prefillPhoneNumberIfNeeded() {
+    if (_didPrefillPhone) return;
+    _didPrefillPhone = true;
+
+    final phone = widget.initialPhoneNumber?.trim();
+    if (phone == null || phone.isEmpty) return;
+
+    _mobileNumberModel.mobileNumberController.text = phone;
+    _mobileNumberModel.isSaveButtonDisabled = false;
+    unawaited(VerificationCache().setMobileNumber(phone));
   }
 
   bool _isLoadingDialogShowing = false;

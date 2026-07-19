@@ -24,8 +24,13 @@ const String _tanSdkPackageName = 'tan_sdk';
 /// Host apps should render this widget instead of wiring SDK routes manually.
 /// Location services and permission must be granted and a GPS fix obtained
 /// before the SDK flow is shown (Android: GPS on + permission; iOS: permission + fix).
+///
+/// [phoneNumber] is optional. When provided (e.g. from the host app's logged-in
+/// user cache), it is prefilled on the validate-user screen.
 class TanSdkEntry extends StatefulWidget {
-  const TanSdkEntry({super.key});
+  final String? phoneNumber;
+
+  const TanSdkEntry({super.key, this.phoneNumber});
 
   @override
   State<TanSdkEntry> createState() => _TanSdkEntryState();
@@ -106,12 +111,25 @@ class _TanSdkEntryState extends State<TanSdkEntry> with WidgetsBindingObserver {
           case RoutePath.splash:
             return MaterialPageRoute<void>(
               settings: settings,
-              builder: (_) => const SplashScene(),
+              builder: (_) => SplashScene(
+                phoneNumber: widget.phoneNumber,
+              ),
             );
           case RoutePath.validateUser:
+            final phoneFromArgs = settings.arguments is String
+                ? (settings.arguments as String).trim()
+                : null;
+            final phoneNumber = (phoneFromArgs != null && phoneFromArgs.isNotEmpty)
+                ? phoneFromArgs
+                : widget.phoneNumber?.trim();
             return MaterialPageRoute<void>(
               settings: settings,
-              builder: (_) => const ValidateUser(),
+              builder: (_) => ValidateUser(
+                initialPhoneNumber:
+                    phoneNumber != null && phoneNumber.isNotEmpty
+                        ? phoneNumber
+                        : null,
+              ),
             );
           case RoutePath.loginScreen:
             return MaterialPageRoute<void>(
@@ -144,7 +162,9 @@ class _TanSdkEntryState extends State<TanSdkEntry> with WidgetsBindingObserver {
           default:
             return MaterialPageRoute<void>(
               settings: settings,
-              builder: (_) => const SplashScene(),
+              builder: (_) => SplashScene(
+                phoneNumber: widget.phoneNumber,
+              ),
             );
         }
       },

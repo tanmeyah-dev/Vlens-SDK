@@ -5,7 +5,10 @@ import 'package:core/style/app_colors.dart';
 import '../../../routes/route_path.dart';
 
 class SplashScene extends StatefulWidget {
-  const SplashScene({super.key});
+  /// Optional phone from the host app to prefill on validate-user.
+  final String? phoneNumber;
+
+  const SplashScene({super.key, this.phoneNumber});
 
   @override
   State<SplashScene> createState() => _SplashSceneState();
@@ -18,7 +21,11 @@ class _SplashSceneState extends State<SplashScene> {
     // Navigate to validate user after 2 seconds
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed(RoutePath.validateUser);
+        final phone = widget.phoneNumber?.trim();
+        Navigator.of(context).pushReplacementNamed(
+          RoutePath.validateUser,
+          arguments: (phone != null && phone.isNotEmpty) ? phone : null,
+        );
       }
     });
   }
