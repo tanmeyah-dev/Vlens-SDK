@@ -37,12 +37,13 @@ class IdDataBloc extends BaseBloc {
   }
 
   Future<void> _ensureCachedExtractedData() async {
-    final cached = await VerificationCache().getVlensExtractedData();
-    if (cached != null) return;
-
     try {
-      final normalized = parseExtractedUserData(_model.extractedData)?.toJson() ??
+      final normalized =
+          (_model.effectiveExtractedData ??
+                  parseExtractedUserData(_model.extractedData))
+              ?.toJson() ??
           normalizeDynamicData(_model.extractedData);
+      if (normalized == null) return;
       await VerificationCache().setVlensExtractedData(normalized);
     } catch (_) {}
   }
@@ -116,6 +117,9 @@ class IdDataBloc extends BaseBloc {
     emit(UpdateIdDataUI(_model));
 
     try {
+      // Always refresh cached identity so user_info can prefill from it.
+      await _ensureCachedExtractedData();
+
       if (await VerificationCache().getRequestTypeId() == null) {
         await _fetchAndCacheRequestTypeId(emit);
       }

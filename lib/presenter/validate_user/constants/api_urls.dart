@@ -120,6 +120,11 @@ class ApiUrls {
     return '${getLocalBaseUrl()}/vlens/api/v1/request/current';
   }
 
+  /// Customer lookups (gender, religion, qualification, …).
+  static String getCustomersLookupsUrl() {
+    return '${getLocalBaseUrl()}/vlens/api/v1/mobile/customers/lookups';
+  }
+
   /// E-contract customer step OTP.
   static String getEContractCustomerStepOtpUrl() {
     return '${getLocalBaseUrl()}/vlens/api/v1/e-contract/customer/step/otp';

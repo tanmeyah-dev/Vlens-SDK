@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:tan_sdk/data/models/extracted_user_data.dart';
 
+import 'lookups_response.dart';
 import 'request_fields_response.dart';
 import 'summary_answer_item.dart';
 import '../utils/user_info_field_helpers.dart';
+import '../utils/user_info_lookup_helpers.dart';
 
 /// Mutable UI + loaded fields for the user-info (KYC) step.
 class UserInfoModel {
@@ -15,11 +18,32 @@ class UserInfoModel {
   String? fieldsError;
   List<RequestFieldItem> requestFields = [];
 
+  /// Standalone dropdowns built from `/mobile/customers/lookups`.
+  List<RequestFieldItem> lookupFields = [];
+
+  /// Lookups from `/mobile/customers/lookups`.
+  Lookups? lookups;
+
+  /// Jobs from `/mobile/customers/lookups` (`data.jobs`).
+  List<JobItem> jobs = const [];
+
+  /// Locations hierarchy from `/mobile/customers/lookups` (`data.locations`).
+  List<LocationGovernorate> locations = const [];
+
+  /// Cached VLens identity used to prefill matching fields.
+  ExtractedUserData? cachedExtractedData;
+
   final Map<String, TextEditingController> textControllers = {};
   final Map<String, String?> selectedValues = {};
   final Map<String, bool> checkboxValues = {};
   final Map<String, DateTime?> dateValues = {};
   final Map<String, Set<String>> multiSelectValues = {};
+
+  /// All visible form fields: request/fields + lookup dropdowns.
+  List<RequestFieldItem> get allFormFields => [
+        ...requestFields,
+        ...lookupFields,
+      ];
 
   void dispose() {
     for (final c in textControllers.values) {
@@ -38,15 +62,62 @@ class UserInfoModel {
     multiSelectValues.clear();
   }
 
+  List<LookupItem> lookupItemsForField(RequestFieldItem field) {
+    return resolveLookupItemsForFieldKey(field.key, lookups);
+  }
+
   void populateFromRequestFields(List<RequestFieldItem> fields) {
     _clearFieldControllers();
-    for (final field in fields) {
+    requestFields = fields;
+    lookupFields = buildLookupSelectFields(lookups);
+
+    final prefill = buildPrefillMapFromExtractedData(cachedExtractedData);
+
+    for (final field in allFormFields) {
       final t = field.type.toLowerCase();
+      final cachedRaw = lookupPrefillValue(prefill, field.key);
+      final lookupItems = lookupItemsForField(field);
+
       if (t == 'text' || t == 'number') {
-        textControllers[field.key] =
-            TextEditingController(text: field.value ?? '');
+        final initial = (field.value != null && field.value!.trim().isNotEmpty)
+            ? field.value!
+            : (cachedRaw ?? '');
+        textControllers[field.key] = TextEditingController(text: initial);
       } else if (t == 'select' || t == 'radiogroup') {
-        selectedValues[field.key] = field.value;
+        String? initial = field.value;
+        final preferNationalId = shouldPrefillFromNationalId(field.key);
+
+        // Gender / religion / social status: always prefer cached national ID.
+        if (preferNationalId && cachedRaw != null) {
+          if (lookupItems.isNotEmpty) {
+            initial = matchLookupIdFromCachedLabel(lookupItems, cachedRaw) ??
+                findLookupItemByIdOrName(lookupItems, cachedRaw)?.id;
+          } else {
+            initial = cachedRaw;
+          }
+        } else if ((initial == null || initial.trim().isEmpty) &&
+            cachedRaw != null) {
+          if (lookupItems.isNotEmpty) {
+            initial = matchLookupIdFromCachedLabel(lookupItems, cachedRaw) ??
+                findLookupItemByIdOrName(lookupItems, cachedRaw)?.id ??
+                cachedRaw;
+          } else {
+            initial = cachedRaw;
+          }
+        } else if (initial != null && lookupItems.isNotEmpty) {
+          initial =
+              findLookupItemByIdOrName(lookupItems, initial)?.id ?? initial;
+        }
+
+        // Only keep a value that exists in the dropdown options.
+        if (initial != null && lookupItems.isNotEmpty) {
+          final ids = lookupItems.map((e) => e.id).toSet();
+          if (!ids.contains(initial)) {
+            initial = matchLookupIdFromCachedLabel(lookupItems, initial);
+          }
+        }
+
+        selectedValues[field.key] = initial;
       } else if (t == 'checkbox') {
         checkboxValues[field.key] = parseBoolLoose(field.value);
       } else if (t == 'date') {
@@ -58,15 +129,22 @@ class UserInfoModel {
   }
 
   List<SummaryAnswerItem> buildSummaryAnswers() {
-    return requestFields.map((field) {
+    return allFormFields.map((field) {
       final type = field.type.toLowerCase();
       final title =
           field.displayText.trim().isNotEmpty ? field.displayText : field.key;
       String value = '';
+      String? displayValue;
+
       if (type == 'text' || type == 'number') {
         value = textControllers[field.key]?.text.trim() ?? '';
       } else if (type == 'select' || type == 'radiogroup') {
         value = (selectedValues[field.key] ?? '').trim();
+        final lookupItems = lookupItemsForField(field);
+        if (lookupItems.isNotEmpty) {
+          displayValue =
+              findLookupItemByIdOrName(lookupItems, value)?.name ?? value;
+        }
       } else if (type == 'checkbox') {
         value = (checkboxValues[field.key] ?? false) ? 'نعم' : 'لا';
       } else if (type == 'date') {
@@ -85,7 +163,12 @@ class UserInfoModel {
         final set = multiSelectValues[field.key] ?? {};
         value = set.join(', ');
       }
-      return SummaryAnswerItem(key: field.key, label: title, value: value);
+      return SummaryAnswerItem(
+        key: field.key,
+        label: title,
+        value: value,
+        displayValue: displayValue,
+      );
     }).toList();
   }
 }

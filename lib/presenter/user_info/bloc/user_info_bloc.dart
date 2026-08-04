@@ -7,8 +7,10 @@ import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../utils/sdk_http_client.dart';
+import '../../id_data/utils/id_data_parser.dart';
 import '../../validate_user/constants/api_urls.dart';
 import '../event/user_info_event.dart';
+import '../model/lookups_response.dart';
 import '../model/request_fields_response.dart';
 import '../model/user_info_model.dart';
 import '../state/user_info_state.dart';
@@ -67,6 +69,8 @@ class UserInfoBloc extends BaseBloc {
     emit(UpdateUserInfoUI(_model));
 
     final cache = VerificationCache();
+    await _loadCachedExtractedData(cache);
+
     final requestTypeId = await cache.getRequestTypeId();
     final accessToken = await cache.getAccessToken();
     final encryptedToken = await cache.getEncryptedAccessToken();
@@ -77,67 +81,156 @@ class UserInfoBloc extends BaseBloc {
     final headers = token.isNotEmpty
         ? HttpHeadersHelper.getHeadersWithAuth(token)
         : HttpHeadersHelper.getDefaultHeaders();
-    final url = ApiUrls.getRequestFieldsUrl(requestTypeId: requestTypeId);
+    final fieldsUrl = ApiUrls.getRequestFieldsUrl(requestTypeId: requestTypeId);
+    final lookupsUrl = ApiUrls.getCustomersLookupsUrl();
 
     if (kDebugMode) {
       print('');
       print('═══════════════════════════════════════════════════════');
-      print('📤 REQUEST FIELDS API CALL (USER_INFO)');
+      print('📤 USER_INFO API CALLS');
       print('═══════════════════════════════════════════════════════');
-      print('URL: $url');
-      print('Method: GET');
+      print('Fields URL: $fieldsUrl');
+      print('Lookups URL: $lookupsUrl');
       print('requestTypeId (cached): $requestTypeId');
       print('Has Bearer Token: ${token.isNotEmpty}');
-      print('Headers: $headers');
+      print('Cached extracted data: ${_model.cachedExtractedData != null}');
       print('═══════════════════════════════════════════════════════');
       print('');
     }
 
     try {
-      final response = await SdkHttpClient.get(
-        Uri.parse(url),
+      final fieldsFuture = SdkHttpClient.get(
+        Uri.parse(fieldsUrl),
         headers: headers,
       );
+      final lookupsFuture = SdkHttpClient.get(
+        Uri.parse(lookupsUrl),
+        headers: headers,
+      );
+
+      final fieldsResponse = await fieldsFuture;
+      LookupsData? lookupsData;
+      try {
+        final lookupsResponse = await lookupsFuture;
+        if (kDebugMode) {
+          print('');
+          print('═══════════════════════════════════════════════════════');
+          print('📥 LOOKUPS API RESPONSE (USER_INFO)');
+          print('═══════════════════════════════════════════════════════');
+          print('Status Code: ${lookupsResponse.statusCode}');
+          print('Body: ${lookupsResponse.body}');
+          print('═══════════════════════════════════════════════════════');
+          print('');
+        }
+        lookupsData = _parseLookupsResponse(lookupsResponse);
+      } catch (e) {
+        if (kDebugMode) {
+          print('⚠️ LOOKUPS API ERROR (USER_INFO): $e');
+        }
+      }
 
       if (kDebugMode) {
         print('');
         print('═══════════════════════════════════════════════════════');
         print('📥 REQUEST FIELDS API RESPONSE (USER_INFO)');
         print('═══════════════════════════════════════════════════════');
-        print('Status Code: ${response.statusCode}');
-        print('Body: ${response.body}');
+        print('Status Code: ${fieldsResponse.statusCode}');
+        print('Body: ${fieldsResponse.body}');
         print('═══════════════════════════════════════════════════════');
         print('');
       }
 
-      if (response.statusCode != 200) {
-        throw Exception('فشل تحميل الحقول (${response.statusCode})');
+      if (fieldsResponse.statusCode != 200) {
+        throw Exception('فشل تحميل الحقول (${fieldsResponse.statusCode})');
       }
 
-      final decoded = jsonDecode(response.body);
-      if (decoded is! Map<String, dynamic>) {
+      final decodedFields = jsonDecode(fieldsResponse.body);
+      if (decodedFields is! Map<String, dynamic>) {
         throw Exception('استجابة غير صالحة من request/fields');
       }
 
-      final parsed = RequestFieldsResponse.fromJson(decoded);
+      final parsed = RequestFieldsResponse.fromJson(decodedFields);
       final fields = parsed.data?.requestsFields
               .where((field) => field.visibleToUser)
               .toList() ??
           <RequestFieldItem>[];
       fields.sort((a, b) => a.order.compareTo(b.order));
 
-      _model.requestFields = fields;
+      _model.lookups = lookupsData?.lookups;
+      _model.jobs = lookupsData?.jobs ?? const [];
+      _model.locations = lookupsData?.locations ?? const [];
       _model.populateFromRequestFields(fields);
       _model.isLoadingFields = false;
       _model.fieldsError = null;
+
+      if (kDebugMode) {
+        final gender = _model.selectedValues['CIF_GENDER'];
+        final religion = _model.selectedValues['CIF_RELIGION'];
+        final social = _model.selectedValues['CIF_SOCIAL_STATUS'];
+        print(
+          '✅ USER_INFO: requestFields=${fields.length}, '
+          'lookupFields=${_model.lookupFields.length}, '
+          'lookupsLoaded=${lookupsData != null}, '
+          'jobs=${_model.jobs.length}, '
+          'locations=${_model.locations.length}',
+        );
+        print(
+          '✅ USER_INFO defaults from national ID => '
+          'GENDER=$gender, RELIGION=$religion, SOCIAL_STATUS=$social '
+          '(cached=${_model.cachedExtractedData != null})',
+        );
+      }
+
       emit(UpdateUserInfoUI(_model));
     } catch (e) {
       if (kDebugMode) {
-        print('❌ REQUEST FIELDS API ERROR (USER_INFO): $e');
+        print('❌ USER_INFO LOAD ERROR: $e');
       }
       _model.isLoadingFields = false;
       _model.fieldsError = e.toString().replaceAll('Exception: ', '');
       emit(UpdateUserInfoUI(_model));
+    }
+  }
+
+  Future<void> _loadCachedExtractedData(VerificationCache cache) async {
+    try {
+      final cached = await cache.getVlensExtractedData();
+      _model.cachedExtractedData = parseExtractedUserData(cached);
+      if (kDebugMode) {
+        print(
+          '📦 USER_INFO: loaded cached extracted data '
+          '(${_model.cachedExtractedData != null})',
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ USER_INFO: failed to load cached extracted data: $e');
+      }
+      _model.cachedExtractedData = null;
+    }
+  }
+
+  LookupsData? _parseLookupsResponse(dynamic response) {
+    try {
+      if (response.statusCode != 200) {
+        if (kDebugMode) {
+          print(
+            '⚠️ LOOKUPS API non-200 (${response.statusCode}); '
+            'continuing without lookups.',
+          );
+        }
+        return null;
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) return null;
+      final parsed = LookupsResponse.fromJson(decoded);
+      if (!parsed.success && parsed.data == null) return null;
+      return parsed.data;
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ LOOKUPS parse error: $e');
+      }
+      return null;
     }
   }
 }

@@ -3,6 +3,7 @@ import 'package:core/style/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../model/lookups_response.dart';
 import '../model/request_fields_response.dart';
 import '../model/user_info_model.dart';
 import '../utils/user_info_field_helpers.dart';
@@ -91,7 +92,14 @@ class UserInfoDynamicField extends StatelessWidget {
     }
 
     if (type == 'radiogroup') {
-      final values = field.availableValues;
+      final lookupItems = model.lookupItemsForField(field);
+      final useLookups = lookupItems.isNotEmpty;
+      final values = useLookups
+          ? lookupItems.map((e) => e.id).toList()
+          : field.availableValues;
+      final labelsByValue = useLookups
+          ? {for (final item in lookupItems) item.id: item.name}
+          : {for (final v in values) v: v};
       final current = model.selectedValues[field.key];
       final selected = values.contains(current) ? current : null;
 
@@ -132,7 +140,10 @@ class UserInfoDynamicField extends StatelessWidget {
                         .map(
                           (option) => RadioListTile<String>(
                             contentPadding: EdgeInsets.zero,
-                            title: Text(option, textAlign: TextAlign.right),
+                            title: Text(
+                              labelsByValue[option] ?? option,
+                              textAlign: TextAlign.right,
+                            ),
                             value: option,
                             selected: formState.value == option,
                           ),
@@ -366,7 +377,14 @@ class UserInfoDynamicField extends StatelessWidget {
     }
 
     if (type == 'select') {
-      final values = field.availableValues;
+      final lookupItems = model.lookupItemsForField(field);
+      final useLookups = lookupItems.isNotEmpty;
+      final optionItems = useLookups
+          ? lookupItems
+          : field.availableValues
+              .map((value) => LookupItem(id: value, name: value))
+              .toList();
+      final values = optionItems.map((e) => e.id).toList();
       final current = model.selectedValues[field.key];
       final selected = values.contains(current) ? current : null;
 
@@ -412,11 +430,11 @@ class UserInfoDynamicField extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
               ),
               icon: const Icon(Icons.arrow_drop_down, color: AppColors.secondary),
-              items: values
+              items: optionItems
                   .map(
-                    (value) => DropdownMenuItem<String>(
-                      value: value,
-                      child: Text(value, textAlign: TextAlign.right),
+                    (item) => DropdownMenuItem<String>(
+                      value: item.id,
+                      child: Text(item.name, textAlign: TextAlign.right),
                     ),
                   )
                   .toList(),
