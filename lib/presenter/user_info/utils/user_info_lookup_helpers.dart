@@ -318,3 +318,176 @@ String? _firstNonEmpty(List<String?> values) {
   }
   return null;
 }
+
+/// Location cascade levels from `/mobile/customers/lookups` → `data.locations`.
+enum LocationFieldRole {
+  governorate,
+  city,
+  village,
+}
+
+/// Detects محافظة / مدينة / المركز أو القسم fields from key or Arabic label.
+LocationFieldRole? detectLocationFieldRole(RequestFieldItem field) {
+  final key = normalizeLookupKey(field.key);
+  final label = normalizeArabicLabel(
+    [
+      field.displayText,
+      field.displayArText ?? '',
+      field.key,
+    ].join(' '),
+  );
+  final labelEn = [
+    field.displayText,
+    field.displayArText ?? '',
+    field.key,
+  ].join(' ').toLowerCase();
+
+  bool keyMatches(List<String> aliases) => aliases.any(
+        (alias) =>
+            key == normalizeLookupKey(alias) ||
+            key.contains(normalizeLookupKey(alias)),
+      );
+
+  // Village / center (المركز أو القسم) — check before city/gov aliases.
+  if (keyMatches(const [
+        'VILLAGE',
+        'DISTRICT',
+        'MARKAZ',
+        'QISM',
+        'QESM',
+        'SECTION',
+        'CIF_VILLAGE',
+        'CIF_DISTRICT',
+      ]) ||
+      label.contains('مركز') ||
+      label.contains('قسم') ||
+      labelEn.contains('village') ||
+      labelEn.contains('district') ||
+      labelEn.contains('markaz')) {
+    return LocationFieldRole.village;
+  }
+
+  if (keyMatches(const [
+        'CITY',
+        'CITY_ID',
+        'CITYID',
+        'CIF_CITY',
+      ]) ||
+      label.contains('مدينه') ||
+      RegExp(r'\bcity\b').hasMatch(labelEn)) {
+    return LocationFieldRole.city;
+  }
+
+  if (keyMatches(const [
+        'GOVERNORATE',
+        'GOVERNATE',
+        'GOVERNORATE_ID',
+        'GOVERNORATEID',
+        'CIF_GOVERNORATE',
+      ]) ||
+      label.contains('محافظ') ||
+      labelEn.contains('governorate') ||
+      labelEn.contains('governate')) {
+    return LocationFieldRole.governorate;
+  }
+
+  return null;
+}
+
+RequestFieldItem? findLocationFieldByRole(
+  List<RequestFieldItem> fields,
+  LocationFieldRole role,
+) {
+  for (final field in fields) {
+    if (field.type.toLowerCase() != 'select' &&
+        field.type.toLowerCase() != 'radiogroup') {
+      continue;
+    }
+    if (detectLocationFieldRole(field) == role) return field;
+  }
+  return null;
+}
+
+LocationGovernorate? findGovernorateById(
+  List<LocationGovernorate> locations,
+  String? id,
+) {
+  if (id == null || id.trim().isEmpty) return null;
+  final needle = id.trim();
+  for (final gov in locations) {
+    if ('${gov.id}' == needle) return gov;
+  }
+  return null;
+}
+
+LocationCity? findCityById(LocationGovernorate? governorate, String? id) {
+  if (governorate == null || id == null || id.trim().isEmpty) return null;
+  final needle = id.trim();
+  for (final city in governorate.cities) {
+    if ('${city.id}' == needle) return city;
+  }
+  return null;
+}
+
+/// Options for a location select, cascading from currently selected parents.
+List<LookupItem> resolveLocationLookupItems({
+  required LocationFieldRole role,
+  required List<LocationGovernorate> locations,
+  required List<RequestFieldItem> fields,
+  required Map<String, String?> selectedValues,
+}) {
+  if (locations.isEmpty) return const [];
+
+  switch (role) {
+    case LocationFieldRole.governorate:
+      return locations
+          .map((g) => LookupItem(id: '${g.id}', name: g.nameAr))
+          .toList();
+    case LocationFieldRole.city:
+      final govField =
+          findLocationFieldByRole(fields, LocationFieldRole.governorate);
+      final gov = findGovernorateById(
+        locations,
+        govField == null ? null : selectedValues[govField.key],
+      );
+      if (gov == null) return const [];
+      return gov.cities
+          .map((c) => LookupItem(id: '${c.id}', name: c.nameAr))
+          .toList();
+    case LocationFieldRole.village:
+      final govField =
+          findLocationFieldByRole(fields, LocationFieldRole.governorate);
+      final cityField = findLocationFieldByRole(fields, LocationFieldRole.city);
+      final gov = findGovernorateById(
+        locations,
+        govField == null ? null : selectedValues[govField.key],
+      );
+      final city = findCityById(
+        gov,
+        cityField == null ? null : selectedValues[cityField.key],
+      );
+      if (city == null) return const [];
+      return city.villages
+          .map((v) => LookupItem(id: '${v.id}', name: v.nameAr))
+          .toList();
+  }
+}
+
+/// Clears dependent city/village selections when a parent location changes.
+void clearDependentLocationSelections({
+  required LocationFieldRole changedRole,
+  required List<RequestFieldItem> fields,
+  required Map<String, String?> selectedValues,
+}) {
+  void clear(LocationFieldRole role) {
+    final field = findLocationFieldByRole(fields, role);
+    if (field != null) selectedValues[field.key] = null;
+  }
+
+  if (changedRole == LocationFieldRole.governorate) {
+    clear(LocationFieldRole.city);
+    clear(LocationFieldRole.village);
+  } else if (changedRole == LocationFieldRole.city) {
+    clear(LocationFieldRole.village);
+  }
+}

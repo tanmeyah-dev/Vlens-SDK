@@ -66,6 +66,31 @@ class UserInfoModel {
     return resolveLookupItemsForFieldKey(field.key, lookups);
   }
 
+  /// Select options: location cascade from lookups, else CIF_* lookups.
+  List<LookupItem> selectOptionsForField(RequestFieldItem field) {
+    final role = detectLocationFieldRole(field);
+    if (role != null && locations.isNotEmpty) {
+      return resolveLocationLookupItems(
+        role: role,
+        locations: locations,
+        fields: allFormFields,
+        selectedValues: selectedValues,
+      );
+    }
+    return lookupItemsForField(field);
+  }
+
+  void onLocationSelectionChanged(RequestFieldItem field, String? value) {
+    selectedValues[field.key] = value;
+    final role = detectLocationFieldRole(field);
+    if (role == null) return;
+    clearDependentLocationSelections(
+      changedRole: role,
+      fields: allFormFields,
+      selectedValues: selectedValues,
+    );
+  }
+
   void populateFromRequestFields(List<RequestFieldItem> fields) {
     _clearFieldControllers();
     requestFields = fields;
@@ -86,6 +111,23 @@ class UserInfoModel {
       } else if (t == 'select' || t == 'radiogroup') {
         String? initial = field.value;
         final preferNationalId = shouldPrefillFromNationalId(field.key);
+        final locationRole = detectLocationFieldRole(field);
+        final usesLocations =
+            locationRole != null && locations.isNotEmpty;
+
+        // Location selects come from lookups hierarchy — do not keep FIELDS
+        // availableValues / default names that are not location ids.
+        if (usesLocations) {
+          final optionItems = selectOptionsForField(field);
+          if (initial != null && optionItems.isNotEmpty) {
+            initial =
+                findLookupItemByIdOrName(optionItems, initial)?.id;
+          } else {
+            initial = null;
+          }
+          selectedValues[field.key] = initial;
+          continue;
+        }
 
         // Gender / religion / social status: always prefer cached national ID.
         if (preferNationalId && cachedRaw != null) {
@@ -140,10 +182,10 @@ class UserInfoModel {
         value = textControllers[field.key]?.text.trim() ?? '';
       } else if (type == 'select' || type == 'radiogroup') {
         value = (selectedValues[field.key] ?? '').trim();
-        final lookupItems = lookupItemsForField(field);
-        if (lookupItems.isNotEmpty) {
+        final optionItems = selectOptionsForField(field);
+        if (optionItems.isNotEmpty) {
           displayValue =
-              findLookupItemByIdOrName(lookupItems, value)?.name ?? value;
+              findLookupItemByIdOrName(optionItems, value)?.name ?? value;
         }
       } else if (type == 'checkbox') {
         value = (checkboxValues[field.key] ?? false) ? 'نعم' : 'لا';

@@ -7,6 +7,7 @@ import '../model/lookups_response.dart';
 import '../model/request_fields_response.dart';
 import '../model/user_info_model.dart';
 import '../utils/user_info_field_helpers.dart';
+import '../utils/user_info_lookup_helpers.dart';
 
 /// Renders one dynamic request-field row (text, number, radio, checkbox, date, multiselect, select).
 class UserInfoDynamicField extends StatelessWidget {
@@ -377,8 +378,13 @@ class UserInfoDynamicField extends StatelessWidget {
     }
 
     if (type == 'select') {
-      final lookupItems = model.lookupItemsForField(field);
-      final useLookups = lookupItems.isNotEmpty;
+      final locationRole = detectLocationFieldRole(field);
+      final usesLocations =
+          locationRole != null && model.locations.isNotEmpty;
+      final lookupItems = usesLocations
+          ? model.selectOptionsForField(field)
+          : model.lookupItemsForField(field);
+      final useLookups = lookupItems.isNotEmpty || usesLocations;
       final optionItems = useLookups
           ? lookupItems
           : field.availableValues
@@ -387,6 +393,31 @@ class UserInfoDynamicField extends StatelessWidget {
       final values = optionItems.map((e) => e.id).toList();
       final current = model.selectedValues[field.key];
       final selected = values.contains(current) ? current : null;
+
+      final govField = findLocationFieldByRole(
+        model.allFormFields,
+        LocationFieldRole.governorate,
+      );
+      final cityField = findLocationFieldByRole(
+        model.allFormFields,
+        LocationFieldRole.city,
+      );
+      final parentCascadeKey = usesLocations
+          ? '${model.selectedValues[govField?.key] ?? ''}_'
+              '${model.selectedValues[cityField?.key] ?? ''}'
+          : '';
+
+      final hintText = () {
+        if (usesLocations && optionItems.isEmpty) {
+          if (locationRole == LocationFieldRole.city) {
+            return 'اختر المحافظة أولاً';
+          }
+          if (locationRole == LocationFieldRole.village) {
+            return 'اختر المدينة أولاً';
+          }
+        }
+        return 'اختر $title';
+      }();
 
       return Padding(
         padding: const EdgeInsets.only(bottom: 18),
@@ -404,10 +435,11 @@ class UserInfoDynamicField extends StatelessWidget {
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               key: ValueKey<String>(
-                  'dd_${field.key}_${model.selectedValues[field.key] ?? ''}'),
+                'dd_${field.key}_${parentCascadeKey}_${selected ?? ''}',
+              ),
               initialValue: selected,
               decoration: InputDecoration(
-                hintText: 'اختر $title',
+                hintText: hintText,
                 hintStyle: const TextStyle(
                   color: AppColors.hintGray,
                   fontSize: 14,
@@ -438,11 +470,25 @@ class UserInfoDynamicField extends StatelessWidget {
                     ),
                   )
                   .toList(),
-              onChanged: (value) {
-                model.selectedValues[field.key] = value;
-                onFormChanged();
-              },
+              onChanged: optionItems.isEmpty
+                  ? null
+                  : (value) {
+                      if (usesLocations) {
+                        model.onLocationSelectionChanged(field, value);
+                      } else {
+                        model.selectedValues[field.key] = value;
+                      }
+                      onFormChanged();
+                    },
               validator: (value) {
+                if (usesLocations && optionItems.isEmpty) {
+                  if (locationRole == LocationFieldRole.city) {
+                    return 'برجاء اختيار المحافظة أولاً';
+                  }
+                  if (locationRole == LocationFieldRole.village) {
+                    return 'برجاء اختيار المدينة أولاً';
+                  }
+                }
                 if ((value ?? '').trim().isEmpty) {
                   return 'برجاء الاختيار';
                 }
