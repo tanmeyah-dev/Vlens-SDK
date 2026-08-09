@@ -63,6 +63,12 @@ class ApiUrls {
     return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/create-user';
   }
 
+  /// Vlens Register/StepCreate — required after StepVerifyOAuthToken.
+  /// See https://docs.vlenseg.com/oauth
+  static String getStepCreateUrl() {
+    return 'https://api.vlenseg.com/api/DigitalIdentity/Register/StepCreate';
+  }
+
   /// Login (vlens).
   static String getLoginUrl() {
     return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/login';
@@ -85,12 +91,25 @@ class ApiUrls {
     return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/phone/verify-otp';
   }
 
+  /// Vlens Register/StepVerifyPhone — send OTP (`phoneNumber` only) or validate
+  /// OTP (`phoneNumber` + `phoneNumberOtpRequestId` + `phoneNumberOtp`).
+  /// See https://docs.vlenseg.com/quickstart
+  static String getStepVerifyPhoneUrl() {
+    return 'https://api.vlenseg.com/api/DigitalIdentity/Register/StepVerifyPhone';
+  }
+
   static String getSendEmailOtpUrl() {
     return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/email/send-otp';
   }
 
   static String getVerifyEmailOtpUrl() {
     return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/email/verify-otp';
+  }
+
+  /// Verify Google/Microsoft OAuth IdToken (replaces email OTP).
+  /// See https://docs.vlenseg.com/oauth
+  static String getVerifyOAuthTokenUrl() {
+    return 'https://api.vlenseg.com/api/DigitalIdentity/Register/StepVerifyOAuthToken';
   }
 
   /// Request types list.

@@ -14,6 +14,7 @@ import '../model/lookups_response.dart';
 import '../model/request_fields_response.dart';
 import '../model/user_info_model.dart';
 import '../state/user_info_state.dart';
+import '../utils/user_info_lookup_helpers.dart';
 
 class UserInfoBloc extends BaseBloc {
   UserInfoBloc(this._model)
@@ -159,7 +160,18 @@ class UserInfoBloc extends BaseBloc {
       _model.lookups = lookupsData?.lookups;
       _model.jobs = lookupsData?.jobs ?? const [];
       _model.locations = lookupsData?.locations ?? const [];
-      _model.populateFromRequestFields(fields);
+
+      // Prefer request/fields. Only add lookups dropdowns that are not already
+      // covered (by key, aliases, or label) to avoid duplicates like
+      // «اختر المؤهل الدراسي» + «المؤهل».
+      final uniqueLookupFields = buildLookupSelectFields(
+        lookupsData?.lookups,
+        existingRequestFields: fields,
+      );
+      _model.populateFromRequestFields(
+        fields,
+        lookupFieldsOverride: uniqueLookupFields,
+      );
       _model.isLoadingFields = false;
       _model.fieldsError = null;
 
@@ -167,9 +179,14 @@ class UserInfoBloc extends BaseBloc {
         final gender = _model.selectedValues['CIF_GENDER'];
         final religion = _model.selectedValues['CIF_RELIGION'];
         final social = _model.selectedValues['CIF_SOCIAL_STATUS'];
+        final skippedLookups = (lookupsData?.lookups == null)
+            ? 0
+            : buildLookupSelectFields(lookupsData!.lookups).length -
+                uniqueLookupFields.length;
         print(
           '✅ USER_INFO: requestFields=${fields.length}, '
-          'lookupFields=${_model.lookupFields.length}, '
+          'lookupFields=${uniqueLookupFields.length} '
+          '(skippedDuplicates≈$skippedLookups), '
           'lookupsLoaded=${lookupsData != null}, '
           'jobs=${_model.jobs.length}, '
           'locations=${_model.locations.length}',

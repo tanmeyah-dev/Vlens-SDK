@@ -105,17 +105,29 @@ class CreateUserResponse {
     return int.tryParse(v.toString());
   }
 
-  static bool _parseSuccess(dynamic v) {
-    if (v == null) return false;
-    if (v is bool) return v;
-    return v.toString().toLowerCase() == 'true';
-  }
-
   factory CreateUserResponse.fromJson(Map<String, dynamic> json) {
+    final rawSuccess = json['success'];
+    final success = rawSuccess is bool
+        ? rawSuccess
+        : rawSuccess == null
+            // Vlens shape: success omitted; treat as ok when data has tokens and no error_code.
+            ? (json['error_code'] == null &&
+                json['data'] is Map &&
+                ((json['data'] as Map)['accessToken']?.toString().trim().isNotEmpty ==
+                        true ||
+                    (json['data'] as Map)['refreshToken']
+                            ?.toString()
+                            .trim()
+                            .isNotEmpty ==
+                        true))
+            : rawSuccess.toString().toLowerCase() == 'true';
+
     return CreateUserResponse(
-      code: _parseCode(json['code']),
-      message: json['message']?.toString(),
-      success: _parseSuccess(json['success']),
+      code: _parseCode(json['code'] ?? json['error_code']),
+      message: json['message']?.toString() ??
+          json['error_message']?.toString() ??
+          json['errorMessage']?.toString(),
+      success: success,
       data: json['data'] is Map<String, dynamic>
           ? CreateUserData.fromJson(json['data'] as Map<String, dynamic>)
           : null,

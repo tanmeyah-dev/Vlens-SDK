@@ -67,7 +67,7 @@ class HomeBloc extends BaseBloc {
       }
 
       final parsed = RequestTypesResponse.fromJson(
-        Map<String, dynamic>.from(decoded as Map),
+        Map<String, dynamic>.from(decoded),
       );
       if (!parsed.success) {
         _model.isLoading = false;

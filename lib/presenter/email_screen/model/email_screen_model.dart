@@ -5,6 +5,7 @@ class EmailScreenModel {
   var formKey = GlobalKey<FormState>();
   var isSaveButtonDisabled = true;
   var isLoading = false;
+  var isGoogleLoading = false;
 
   bool isInputEmpty() {
     return emailController.text.isEmpty;

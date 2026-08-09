@@ -22,8 +22,56 @@ const Map<String, String> lookupDropdownLabelsAr = {
 };
 
 /// Builds select fields from lookups so they always appear on user_info.
-List<RequestFieldItem> buildLookupSelectFields(Lookups? lookups) {
+/// Skips a lookup dropdown when [existingRequestFields] already covers it
+/// (same key/aliases, same lookup list, or overlapping Arabic label —
+/// e.g. «اختر المؤهل الدراسي» vs standalone «المؤهل»).
+List<RequestFieldItem> buildLookupSelectFields(
+  Lookups? lookups, {
+  List<RequestFieldItem> existingRequestFields = const [],
+}) {
   if (lookups == null) return const [];
+
+  bool alreadyCovered(String lookupKey) {
+    final normalizedLookup = normalizeLookupKey(lookupKey);
+    final lookupLabel = normalizeArabicLabel(
+      lookupDropdownLabelsAr[lookupKey] ?? '',
+    );
+    final standaloneItems = resolveLookupItemsForFieldKey(lookupKey, lookups);
+
+    return existingRequestFields.any((field) {
+      final fieldKey = normalizeLookupKey(field.key);
+      if (fieldKey.isNotEmpty && fieldKey == normalizedLookup) {
+        return true;
+      }
+      // Field key embeds the lookup key (e.g. JOB_QUALIFICATION_ID).
+      if (fieldKey.isNotEmpty &&
+          normalizedLookup.length >= 4 &&
+          fieldKey.contains(normalizedLookup)) {
+        return true;
+      }
+
+      if (standaloneItems.isNotEmpty) {
+        final items = resolveLookupItemsForFieldKey(field.key, lookups);
+        if (identical(items, standaloneItems)) return true;
+      }
+
+      if (lookupLabel.isNotEmpty) {
+        final fieldLabel = normalizeArabicLabel(
+          [
+            field.displayText,
+            field.displayArText ?? '',
+          ].join(' '),
+        );
+        if (fieldLabel.isNotEmpty &&
+            (fieldLabel.contains(lookupLabel) ||
+                lookupLabel.contains(fieldLabel))) {
+          return true;
+        }
+      }
+
+      return false;
+    });
+  }
 
   final entries = <MapEntry<String, List<LookupItem>>>[
     MapEntry('CIF_QUALIFICATION_ID', lookups.cifQualificationId),
@@ -42,6 +90,7 @@ List<RequestFieldItem> buildLookupSelectFields(Lookups? lookups) {
   var order = 1000;
   for (final entry in entries) {
     if (entry.value.isEmpty) continue;
+    if (alreadyCovered(entry.key)) continue;
     final label = lookupDropdownLabelsAr[entry.key] ?? entry.key;
     fields.add(
       RequestFieldItem(

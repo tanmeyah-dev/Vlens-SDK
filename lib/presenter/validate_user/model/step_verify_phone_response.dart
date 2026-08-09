@@ -39,15 +39,17 @@ class StepVerifyPhoneResponse {
   });
 
   /// Computed property to determine if the request was successful
-  /// Supports both legacy contract and new contract with explicit success flag.
+  /// Supports local `success` flag and Vlens `data` / `error_code` shape.
   bool get success {
     if (apiSuccess != null) {
       return apiSuccess == true;
     }
-    return phoneNumberOtpRequestId != null && 
-           phoneNumberOtpRequestId!.isNotEmpty &&
-           transactionId != null && 
-           transactionId!.isNotEmpty;
+    if (errorCode != null && errorCode!.trim().isNotEmpty) {
+      return false;
+    }
+    if (isPhoneNumberConfirmed == true) return true;
+    return phoneNumberOtpRequestId != null &&
+        phoneNumberOtpRequestId!.isNotEmpty;
   }
 
   factory StepVerifyPhoneResponse.fromJson(Map<String, dynamic> json) {
@@ -141,12 +143,23 @@ class StepVerifyPhoneResponse {
       }
     }
 
-    return StepVerifyPhoneResponse(
-      code: json['code'] is int ? json['code'] as int : int.tryParse('${json['code']}'),
-      message: json['message']?.toString(),
-      apiSuccess: json['success'] is bool
+    bool? apiSuccess;
+    if (json['success'] != null) {
+      apiSuccess = json['success'] is bool
           ? json['success'] as bool
-          : (json['success']?.toString().toLowerCase() == 'true'),
+          : (json['success']?.toString().toLowerCase() == 'true');
+    } else if (json['error_code'] == null &&
+        (phoneNumberOtpRequestId != null || isPhoneNumberConfirmed == true)) {
+      // Vlens style success (no explicit success flag).
+      apiSuccess = true;
+    }
+
+    return StepVerifyPhoneResponse(
+      code: json['code'] is int
+          ? json['code'] as int
+          : int.tryParse('${json['code'] ?? json['error_code']}'),
+      message: json['message']?.toString() ?? json['error_message']?.toString(),
+      apiSuccess: apiSuccess,
       phoneNumberOtpRequestId: phoneNumberOtpRequestId,
       transactionId: transactionId,
       phoneOtpExpireInSeconds: phoneOtpExpireInSeconds,

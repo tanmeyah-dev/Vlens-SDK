@@ -103,28 +103,85 @@ class RegisterScreenBloc extends BaseBloc {
         print('📦 phoneNumber was empty on event; from cache: ${phoneNumber.isNotEmpty ? "found" : "still empty"}');
       }
 
-      // Prepare request body (vlens create-user: no phoneNumberOtpRequestId / transactionId)
-      final requestBody = jsonEncode({
-        'password': event.securityCode,
-        'email': email,
-        'geoLocation': {
-          'latitude': finalLatitude,
-          'longitude': finalLongitude,
-        },
-        'imei': imei,
-        'imsi': imsi,
-        'phoneNumber': phoneNumber,
-        'skipEmail': false,
-      });
+      // Prepare request body (vlens create-user)
+      final phoneOtpRequestId =
+          await VerificationCache().getPhoneNumberOtpRequestId();
+      final emailOtpRequestId =
+          await VerificationCache().getEmailOtpRequestId();
+      final oAuthTokenVerificationRequestId =
+          await VerificationCache().getOAuthTokenVerificationRequestId();
+
+      final hasOAuth = oAuthTokenVerificationRequestId != null &&
+          oAuthTokenVerificationRequestId.trim().isNotEmpty;
+      final hasEmailOtp = emailOtpRequestId != null &&
+          emailOtpRequestId.trim().isNotEmpty;
+
+      // Google/Microsoft OAuth replaces email OTP — backend expects skipEmail.
+      // Plain email flow must send emailOtpRequestId or create-user returns 417.
+      if (!hasOAuth && !hasEmailOtp) {
+        emit(OnRegisterScreenErrorState(
+          'لم يتم التحقق من البريد الإلكتروني. يرجى التحقق عبر OTP أو Google ثم المحاولة مرة أخرى.',
+        ));
+        return;
+      }
+
+      // OAuth was verified on api.vlenseg.com — StepCreate must hit the same host
+      // (https://docs.vlenseg.com/oauth). Local create-user does not see that request id.
+      final useVlensStepCreate = hasOAuth;
+      final createUrl = useVlensStepCreate
+          ? ApiUrls.getStepCreateUrl()
+          : _apiUrlCreateUser;
+
+      final Map<String, dynamic> body;
+      if (useVlensStepCreate) {
+        if (phoneOtpRequestId == null || phoneOtpRequestId.trim().isEmpty) {
+          emit(OnRegisterScreenErrorState(
+            'لم يتم التحقق من رقم الهاتف. يرجى إكمال التحقق من الهاتف ثم المحاولة مرة أخرى.',
+          ));
+          return;
+        }
+        body = <String, dynamic>{
+          'password': event.securityCode,
+          'username': phoneNumber,
+          'geoLocation': {
+            'latitude': finalLatitude,
+            'longitude': finalLongitude,
+          },
+          'imei': imei,
+          'phoneNumberOtpRequestId': phoneOtpRequestId.trim(),
+          'oAuthTokenVerificationRequestId':
+              oAuthTokenVerificationRequestId.trim(),
+        };
+      } else {
+        body = <String, dynamic>{
+          'password': event.securityCode,
+          'email': email,
+          'geoLocation': {
+            'latitude': finalLatitude,
+            'longitude': finalLongitude,
+          },
+          'imei': imei,
+          'imsi': imsi,
+          'phoneNumber': phoneNumber,
+          'skipEmail': false,
+          'emailOtpRequestId': emailOtpRequestId!.trim(),
+        };
+        if (phoneOtpRequestId != null && phoneOtpRequestId.trim().isNotEmpty) {
+          body['phoneNumberOtpRequestId'] = phoneOtpRequestId.trim();
+        }
+      }
+
+      final requestBody = jsonEncode(body);
 
       print('');
       print('═══════════════════════════════════════════════════════');
       print('📤 CREATE USER API REQUEST');
       print('═══════════════════════════════════════════════════════');
-      print('URL: $_apiUrlCreateUser');
+      print('URL: $createUrl');
       print('Method: POST');
       print('Body: $requestBody');
       print('Email: $email');
+      print('OAuth StepCreate: $useVlensStepCreate');
       print('═══════════════════════════════════════════════════════');
       print('');
 
@@ -132,7 +189,7 @@ class RegisterScreenBloc extends BaseBloc {
       http.Response response;
       try {
         response = await SdkHttpClient.post(
-          Uri.parse(_apiUrlCreateUser),
+          Uri.parse(createUrl),
           headers: HttpHeadersHelper.getDefaultHeaders(),
           body: requestBody,
         ).timeout(
@@ -150,13 +207,13 @@ class RegisterScreenBloc extends BaseBloc {
         print('Error: ${e.message}');
         print('Address: ${e.address}');
         print('Port: ${e.port}');
-        print('URL Attempted: $_apiUrlCreateUser');
+        print('URL Attempted: $createUrl');
         print('═══════════════════════════════════════════════════════');
         print('');
         rethrow;
       } catch (e) {
         print('❌ Connection error: $e');
-        print('❌ URL attempted: $_apiUrlCreateUser');
+        print('❌ URL attempted: $createUrl');
         rethrow;
       }
 
@@ -194,6 +251,7 @@ class RegisterScreenBloc extends BaseBloc {
             final errorBody = jsonDecode(response.body);
             if (errorBody is Map<String, dynamic>) {
               errorMessage = errorBody['message']?.toString() ??
+                  errorBody['error_message']?.toString() ??
                   errorBody['error']?.toString() ??
                   errorBody['errorMessage']?.toString() ??
                   errorMessage;

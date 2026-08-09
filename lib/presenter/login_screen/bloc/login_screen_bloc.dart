@@ -156,7 +156,7 @@ class LoginScreenBloc extends BaseBloc {
             emit(OnLoginErrorState('استجابة غير صالحة من الخادم'));
             return;
           }
-          final responseBody = Map<String, dynamic>.from(decoded as Map);
+          final responseBody = Map<String, dynamic>.from(decoded);
           final rawData = responseBody['data'];
           if (rawData is Map) {
             print('🔍 RAW login data keys: ${rawData.keys.toList()}');

@@ -50,16 +50,17 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
   final FocusNode pinFocusNode = FocusNode();
   bool _isLoading = false;
   String? _errorMessage;
+  late String? _phoneNumberOtpRequestId;
+  late String? _transactionId;
 
-  /// API URL for sending/resending OTP.
-  String get _apiUrlSendOtp => ApiUrls.getSendPhoneOtpUrl();
-
-  /// API URL for verifying OTP code.
-  String get _apiUrlVerifyOtp => ApiUrls.getVerifyPhoneOtpUrl();
+  /// Vlens Register/StepVerifyPhone — used for resend + validate.
+  String get _apiUrlStepVerifyPhone => ApiUrls.getStepVerifyPhoneUrl();
 
   @override
   void initState() {
     super.initState();
+    _phoneNumberOtpRequestId = widget.phoneNumberOtpRequestId;
+    _transactionId = widget.transactionId;
     // Start countdown timer
     countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
@@ -120,7 +121,7 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
       print('═══════════════════════════════════════════════════════');
       print('📤 RESEND OTP API REQUEST');
       print('═══════════════════════════════════════════════════════');
-      print('URL: $_apiUrlSendOtp');
+      print('URL: $_apiUrlStepVerifyPhone');
       print('Method: POST');
       print('Headers: ${HttpHeadersHelper.getDefaultHeaders()}');
       print('Body: $requestBody');
@@ -132,7 +133,7 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
       http.Response response;
       try {
         response = await SdkHttpClient.post(
-          Uri.parse(_apiUrlSendOtp),
+          Uri.parse(_apiUrlStepVerifyPhone),
           headers: HttpHeadersHelper.getDefaultHeaders(),
           body: requestBody,
         )
@@ -149,13 +150,13 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
         print('❌ CONNECTION ERROR - SocketException');
         print('═══════════════════════════════════════════════════════');
         print('Error: ${e.message}');
-        print('URL Attempted: $_apiUrlSendOtp');
+        print('URL Attempted: $_apiUrlStepVerifyPhone');
         print('═══════════════════════════════════════════════════════');
         print('');
         rethrow;
       } catch (e) {
         print('❌ Connection error: $e');
-        print('❌ URL attempted: $_apiUrlSendOtp');
+        print('❌ URL attempted: $_apiUrlStepVerifyPhone');
         rethrow;
       }
 
@@ -214,22 +215,24 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
 
             // Check if we have the required IDs
             if (stepVerifyPhoneResponse.phoneNumberOtpRequestId != null &&
-                stepVerifyPhoneResponse.phoneNumberOtpRequestId!.isNotEmpty &&
-                stepVerifyPhoneResponse.transactionId != null &&
-                stepVerifyPhoneResponse.transactionId!.isNotEmpty) {
+                stepVerifyPhoneResponse.phoneNumberOtpRequestId!.isNotEmpty) {
+              _phoneNumberOtpRequestId =
+                  stepVerifyPhoneResponse.phoneNumberOtpRequestId;
+              _transactionId = stepVerifyPhoneResponse.transactionId ??
+                  _transactionId ??
+                  _phoneNumberOtpRequestId;
+
               // Save updated phoneNumberOtpRequestId and transactionId to cache
               await VerificationCache().setVerificationData(
-                phoneNumberOtpRequestId:
-                    stepVerifyPhoneResponse.phoneNumberOtpRequestId!,
-                transactionId: stepVerifyPhoneResponse.transactionId!,
+                phoneNumberOtpRequestId: _phoneNumberOtpRequestId!,
+                transactionId: _transactionId!,
                 mobileNumber: widget.mobileNumber ?? '',
               );
 
               print('💾 Updated verification data in cache:');
               print(
-                  '💾 phoneNumberOtpRequestId: ${stepVerifyPhoneResponse.phoneNumberOtpRequestId}');
-              print(
-                  '💾 transactionId: ${stepVerifyPhoneResponse.transactionId}');
+                  '💾 phoneNumberOtpRequestId: $_phoneNumberOtpRequestId');
+              print('💾 transactionId: $_transactionId');
 
               // Clear PIN input
               pinController.clear();
@@ -391,10 +394,20 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
     });
 
     try {
-      // Verify API contract: only phoneNumber and phoneNumberOtp are required.
+      final phoneOtpRequestId = _phoneNumberOtpRequestId?.trim();
+      if (phoneOtpRequestId == null || phoneOtpRequestId.isEmpty) {
+        _showError(
+          'معرف التحقق من الهاتف غير موجود. أعد إرسال كود التحقق ثم حاول مرة أخرى.',
+        );
+        return;
+      }
+
+      // Vlens StepVerifyPhone validate contract:
+      // phoneNumber + phoneNumberOtpRequestId + phoneNumberOtp
       final requestPayload = <String, dynamic>{
         'phoneNumber': widget.mobileNumber,
-        'phoneOtp': pinController.text,
+        'phoneNumberOtpRequestId': phoneOtpRequestId,
+        'phoneNumberOtp': pinController.text,
       };
       final requestBody = jsonEncode(requestPayload);
 
@@ -404,7 +417,7 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
       print('═══════════════════════════════════════════════════════');
       print('📤 STEP VERIFY PHONE API REQUEST');
       print('═══════════════════════════════════════════════════════');
-      print('URL: $_apiUrlVerifyOtp');
+      print('URL: $_apiUrlStepVerifyPhone');
       print('Method: POST');
       print('Headers: $headers');
       print('ApiKey: ${headers['ApiKey']}');
@@ -419,7 +432,7 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
       http.Response response;
       try {
         response = await SdkHttpClient.post(
-          Uri.parse(_apiUrlVerifyOtp),
+          Uri.parse(_apiUrlStepVerifyPhone),
           headers: HttpHeadersHelper.getDefaultHeaders(),
           body: requestBody,
         )
@@ -439,13 +452,13 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
         print('Error: ${e.message}');
         print('Address: ${e.address}');
         print('Port: ${e.port}');
-        print('URL Attempted: $_apiUrlVerifyOtp');
+        print('URL Attempted: $_apiUrlStepVerifyPhone');
         print('═══════════════════════════════════════════════════════');
         print('');
         rethrow;
       } catch (e) {
         print('❌ Connection error: $e');
-        print('❌ URL attempted: $_apiUrlVerifyOtp');
+        print('❌ URL attempted: $_apiUrlStepVerifyPhone');
         rethrow;
       }
 
@@ -576,26 +589,34 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
               // Use response values if available, otherwise fall back to widget values
               final finalPhoneNumberOtpRequestId =
                   stepVerifyPhoneResponse.phoneNumberOtpRequestId ??
-                      widget.phoneNumberOtpRequestId ??
+                      _phoneNumberOtpRequestId ??
                       '';
               final finalTransactionId =
                   stepVerifyPhoneResponse.transactionId ??
-                      widget.transactionId ??
+                      _transactionId ??
                       '';
 
-              // Save to cache if we have valid values
-              if (finalPhoneNumberOtpRequestId.isNotEmpty &&
-                  finalTransactionId.isNotEmpty) {
-                await VerificationCache().setVerificationData(
-                  phoneNumberOtpRequestId: finalPhoneNumberOtpRequestId,
-                  transactionId: finalTransactionId,
-                  mobileNumber: widget.mobileNumber ?? '',
-                );
-                print('💾 Saved to cache from StepVerifyPhone API:');
+              if (finalPhoneNumberOtpRequestId.isEmpty) {
                 print(
-                    '💾 phoneNumberOtpRequestId: $finalPhoneNumberOtpRequestId');
-                print('💾 transactionId: $finalTransactionId');
+                  '❌ Phone OTP verified but phoneNumberOtpRequestId is missing',
+                );
+                _showError(
+                  'تعذر حفظ معرف التحقق من الهاتف. يرجى إعادة إرسال كود التحقق والمحاولة مرة أخرى.',
+                );
+                return;
               }
+
+              await VerificationCache().setVerificationData(
+                phoneNumberOtpRequestId: finalPhoneNumberOtpRequestId,
+                transactionId: finalTransactionId.isNotEmpty
+                    ? finalTransactionId
+                    : finalPhoneNumberOtpRequestId,
+                mobileNumber: widget.mobileNumber ?? '',
+              );
+              print('💾 Saved to cache from StepVerifyPhone API:');
+              print(
+                  '💾 phoneNumberOtpRequestId: $finalPhoneNumberOtpRequestId');
+              print('💾 transactionId: $finalTransactionId');
 
               // Success - close verification dialog and show success dialog
               Navigator.of(context).pop();

@@ -16,7 +16,7 @@ import '../state/validate_user_state.dart';
 class ValidateUserBloc extends BaseBloc {
   final ValidateUserModel _mobileNumberModel;
   String get _apiUrlCheck => ApiUrls.getIdentityCheckUrl();
-  String get _apiUrlStepVerifyPhone => ApiUrls.getSendPhoneOtpUrl();
+  String get _apiUrlStepVerifyPhone => ApiUrls.getStepVerifyPhoneUrl();
   
   // Flag to prevent duplicate API calls
   bool _isRequestInProgress = false;
@@ -377,6 +377,8 @@ class ValidateUserBloc extends BaseBloc {
           print('Success: ${sendOtpResponse.success}');
           print('phoneOtpExpireInSeconds: ${sendOtpResponse.data?.phoneOtpExpireInSeconds ?? "N/A"}');
           print('isPhoneNumberConfirmed: ${sendOtpResponse.data?.isPhoneNumberConfirmed}');
+          print('phoneNumberOtpRequestId: ${sendOtpResponse.phoneNumberOtpRequestId ?? "N/A"}');
+          print('transactionId: ${sendOtpResponse.transactionId ?? "N/A"}');
           print('═══════════════════════════════════════════════════════');
           print('');
 
@@ -393,8 +395,21 @@ class ValidateUserBloc extends BaseBloc {
               print('✅ Phone already confirmed - navigating to login screen');
               emit(OnPhoneNumberExistsState());
             } else {
-              print('✅ Phone not confirmed - showing verification dialog');
-              emit(OnValidateUserSavedState());
+              final phoneOtpId = sendOtpResponse.phoneNumberOtpRequestId?.trim();
+              if (phoneOtpId == null || phoneOtpId.isEmpty) {
+                print(
+                  '❌ Vlens send-otp succeeded but phoneNumberOtpRequestId is missing',
+                );
+                emit(OnValidateUserErrorState(
+                  'تعذر الحصول على معرف التحقق من الهاتف. يرجى المحاولة مرة أخرى.',
+                ));
+              } else {
+                print('✅ Phone not confirmed - showing verification dialog');
+                emit(OnValidateUserSavedState(
+                  phoneNumberOtpRequestId: phoneOtpId,
+                  transactionId: sendOtpResponse.transactionId,
+                ));
+              }
             }
           } else {
             print('❌ StepVerifyPhone API unsuccessful response');
@@ -468,7 +483,7 @@ class ValidateUserBloc extends BaseBloc {
   String? _extractApiErrorMessage(dynamic body) {
     if (body is! Map) return null;
 
-    final map = Map<String, dynamic>.from(body as Map);
+    final map = Map<String, dynamic>.from(body);
 
     String? readString(Map<String, dynamic> source, List<String> keys) {
       for (final key in keys) {
@@ -494,7 +509,7 @@ class ValidateUserBloc extends BaseBloc {
 
     final data = map['data'];
     if (data is Map) {
-      final nested = readString(Map<String, dynamic>.from(data as Map), const [
+      final nested = readString(Map<String, dynamic>.from(data), const [
         'error_message',
         'errorMessage',
         'message',
@@ -512,7 +527,7 @@ class ValidateUserBloc extends BaseBloc {
       final first = errors.first;
       if (first is String && first.trim().isNotEmpty) return first.trim();
       if (first is Map) {
-        final nested = readString(Map<String, dynamic>.from(first as Map), const [
+        final nested = readString(Map<String, dynamic>.from(first), const [
           'message',
           'Message',
           'error',

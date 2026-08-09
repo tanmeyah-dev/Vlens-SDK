@@ -5,29 +5,196 @@ import 'package:core/bases/states/base/init_screen.dart';
 import 'package:core/bases/states/general_state/general_render_state.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:core/utils/cache/verification_cache.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import '../../../utils/api_error_parser.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../validate_user/constants/api_urls.dart';
+import '../constants/google_oauth_helper.dart';
 import '../event/email_screen_event.dart';
 import '../model/email_screen_model.dart';
 import '../model/send_email_otp_response.dart';
+import '../model/verify_oauth_token_response.dart';
 import '../state/email_screen_state.dart';
 
 class EmailScreenBloc extends BaseBloc {
   final EmailScreenModel _model;
   
   String get _apiUrlStepVerifyEmail => ApiUrls.getSendEmailOtpUrl();
+  String get _apiUrlVerifyOAuthToken => ApiUrls.getVerifyOAuthTokenUrl();
 
   EmailScreenBloc(this._model)
       : super(initialState: InitScreen(_model)) {
     on<EnableSaveButtonEvent>(_onEnableSaveButtonEvent);
     on<SaveEmailEvent>(_onSaveEmailEvent);
+    on<SignInWithGoogleEvent>(_onSignInWithGoogleEvent);
   }
 
   _onEnableSaveButtonEvent(EnableSaveButtonEvent event, emit) {
     _model.isSaveButtonDisabled = !event.isEnabled;
     emit(UpdateEmailScreenUI(_model));
+  }
+
+  _onSignInWithGoogleEvent(SignInWithGoogleEvent event, emit) async {
+    if (_model.isLoading || _model.isGoogleLoading) return;
+
+    _model.isGoogleLoading = true;
+    _model.isLoading = true;
+    emit(UpdateEmailScreenUI(_model));
+    emit(OnEmailLoadingState());
+
+    try {
+      final idToken = await GoogleOAuthHelper.getIdToken();
+      GoogleOAuthHelper.logIdTokenClaims(idToken);
+
+      final requestBody = jsonEncode({
+        'provider': 'Google',
+        'IdToken': idToken,
+      });
+
+      print('');
+      print('═══════════════════════════════════════════════════════');
+      print('📤 VERIFY OAUTH TOKEN API REQUEST');
+      print('═══════════════════════════════════════════════════════');
+      print('URL: $_apiUrlVerifyOAuthToken');
+      print('Method: POST');
+      print('Body: {"provider":"Google","IdToken":"<redacted>"}');
+      print('═══════════════════════════════════════════════════════');
+      print('');
+
+      final response = await SdkHttpClient.post(
+        Uri.parse(_apiUrlVerifyOAuthToken),
+        headers: HttpHeadersHelper.getDefaultHeaders(),
+        body: requestBody,
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('Request timeout - Server may not be running or not accessible');
+        },
+      );
+
+      print('');
+      print('═══════════════════════════════════════════════════════');
+      print('📥 VERIFY OAUTH TOKEN API RESPONSE');
+      print('═══════════════════════════════════════════════════════');
+      print('Status Code: ${response.statusCode}');
+      print('Body: ${response.body}');
+      print('═══════════════════════════════════════════════════════');
+      print('');
+
+      if (response.statusCode != 200) {
+        String errorMessage = 'فشل التحقق من حساب Google';
+        final apiErrorMessage = ApiErrorParser.extractMessage(
+          response.body,
+          fallbackMessage: errorMessage,
+        );
+        if (apiErrorMessage.trim().isNotEmpty) {
+          errorMessage = apiErrorMessage;
+        }
+        _model.isLoading = false;
+        _model.isGoogleLoading = false;
+        emit(UpdateEmailScreenUI(_model));
+        emit(OnEmailErrorState(errorMessage));
+        return;
+      }
+
+      if (response.body.isEmpty) {
+        _model.isLoading = false;
+        _model.isGoogleLoading = false;
+        emit(UpdateEmailScreenUI(_model));
+        emit(OnEmailErrorState('استجابة فارغة من الخادم'));
+        return;
+      }
+
+      final decoded = jsonDecode(response.body);
+      final parsed = VerifyOAuthTokenResponse.fromJson(
+        decoded is Map<String, dynamic> ? decoded : <String, dynamic>{},
+      );
+
+      final oauthId = parsed.data?.oAuthTokenVerificationRequestId?.trim();
+      final email = parsed.data?.email?.trim();
+      final verified = parsed.data?.isVerified == true;
+
+      if (!parsed.success && oauthId == null) {
+        _model.isLoading = false;
+        _model.isGoogleLoading = false;
+        emit(UpdateEmailScreenUI(_model));
+        emit(OnEmailErrorState(
+          parsed.message ?? 'فشل التحقق من حساب Google',
+        ));
+        return;
+      }
+
+      if (!verified || oauthId == null || oauthId.isEmpty) {
+        _model.isLoading = false;
+        _model.isGoogleLoading = false;
+        emit(UpdateEmailScreenUI(_model));
+        emit(OnEmailErrorState(
+          parsed.data?.validationResult ??
+              parsed.message ??
+              'رمز Google غير صالح',
+        ));
+        return;
+      }
+
+      final resolvedEmail = (email != null && email.isNotEmpty) ? email : '';
+      if (resolvedEmail.isNotEmpty) {
+        _model.emailController.text = resolvedEmail;
+      }
+
+      await VerificationCache().setOAuthVerificationData(
+        oAuthTokenVerificationRequestId: oauthId,
+        email: resolvedEmail,
+      );
+
+      print('💾 Saved OAuth verification data:');
+      print('💾 oAuthTokenVerificationRequestId: $oauthId');
+      print('💾 email: $resolvedEmail');
+
+      _model.isLoading = false;
+      _model.isGoogleLoading = false;
+      emit(UpdateEmailScreenUI(_model));
+      emit(OnEmailConfirmedState(email: resolvedEmail));
+    } on GoogleSignInException catch (e) {
+      print('❌ GoogleSignInException: ${e.code.name} ${e.description}');
+      _model.isLoading = false;
+      _model.isGoogleLoading = false;
+      emit(UpdateEmailScreenUI(_model));
+
+      if (e.code == GoogleSignInExceptionCode.canceled ||
+          e.code == GoogleSignInExceptionCode.interrupted) {
+        // User dismissed the Google sheet — dismiss loader, no error snackbar.
+        emit(OnEmailLoadingDismissedState());
+        return;
+      }
+      emit(OnEmailErrorState(
+        e.description?.trim().isNotEmpty == true
+            ? e.description!
+            : 'فشل تسجيل الدخول بحساب Google',
+      ));
+    } catch (e) {
+      print('❌ Google OAuth error: $e');
+      _model.isLoading = false;
+      _model.isGoogleLoading = false;
+      emit(UpdateEmailScreenUI(_model));
+
+      final msg = e.toString();
+      if (msg.contains('IdToken')) {
+        emit(OnEmailErrorState(
+          'تعذر الحصول على رمز Google. تأكد من إعداد Web Client ID.',
+        ));
+      } else if (msg.contains('SocketException') ||
+          msg.contains('connection refused') ||
+          msg.contains('Failed host lookup')) {
+        emit(OnEmailErrorState(
+          'لا يمكن الاتصال بالخادم.\n\nيرجى التحقق من الاتصال والمحاولة مرة أخرى',
+        ));
+      } else {
+        emit(OnEmailErrorState(
+          'حدث خطأ أثناء تسجيل الدخول بحساب Google',
+        ));
+      }
+    }
   }
 
   _onSaveEmailEvent(SaveEmailEvent event, emit) async {

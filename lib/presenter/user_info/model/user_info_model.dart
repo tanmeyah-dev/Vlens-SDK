@@ -91,10 +91,17 @@ class UserInfoModel {
     );
   }
 
-  void populateFromRequestFields(List<RequestFieldItem> fields) {
+  void populateFromRequestFields(
+    List<RequestFieldItem> fields, {
+    List<RequestFieldItem>? lookupFieldsOverride,
+  }) {
     _clearFieldControllers();
     requestFields = fields;
-    lookupFields = buildLookupSelectFields(lookups);
+    lookupFields = lookupFieldsOverride ??
+        buildLookupSelectFields(
+          lookups,
+          existingRequestFields: fields,
+        );
 
     final prefill = buildPrefillMapFromExtractedData(cachedExtractedData);
 

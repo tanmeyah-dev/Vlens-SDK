@@ -9,6 +9,8 @@ class VerificationCache {
   static const String _keyMobileNumber = 'mobile_number';
   static const String _keyEmailOtpRequestId = 'email_otp_request_id';
   static const String _keyEmail = 'email';
+  static const String _keyOAuthTokenVerificationRequestId =
+      'oauth_token_verification_request_id';
   static const String _keyAccessToken = 'access_token';
   static const String _keyRefreshToken = 'refresh_token';
   static const String _keyEncryptedAccessToken = 'encrypted_access_token';
@@ -49,6 +51,8 @@ class VerificationCache {
     await prefs.setString(_keyEmailOtpRequestId, emailOtpRequestId);
     await prefs.setString(_keyTransactionId, transactionId);
     await prefs.setString(_keyEmail, email);
+    // Email OTP replaces OAuth verification for this session.
+    await prefs.remove(_keyOAuthTokenVerificationRequestId);
   }
 
   /// Get phone number OTP request ID
@@ -85,6 +89,31 @@ class VerificationCache {
   Future<void> setEmail(String email) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyEmail, email);
+  }
+
+  /// Save OAuth email verification (replaces email OTP request id).
+  Future<void> setOAuthVerificationData({
+    required String oAuthTokenVerificationRequestId,
+    required String email,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _keyOAuthTokenVerificationRequestId,
+      oAuthTokenVerificationRequestId.trim(),
+    );
+    await prefs.setString(_keyEmail, email.trim());
+    // OAuth replaces email OTP — clear any previous OTP id.
+    await prefs.remove(_keyEmailOtpRequestId);
+  }
+
+  Future<String?> getOAuthTokenVerificationRequestId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyOAuthTokenVerificationRequestId);
+  }
+
+  Future<void> clearOAuthTokenVerificationRequestId() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyOAuthTokenVerificationRequestId);
   }
 
   /// Persist login user/session data for downstream requests.
@@ -235,6 +264,7 @@ class VerificationCache {
     await prefs.remove(_keyMobileNumber);
     await prefs.remove(_keyEmailOtpRequestId);
     await prefs.remove(_keyEmail);
+    await prefs.remove(_keyOAuthTokenVerificationRequestId);
     await prefs.remove(_keyAccessToken);
     await prefs.remove(_keyRefreshToken);
     await prefs.remove(_keyEncryptedAccessToken);

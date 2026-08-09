@@ -81,11 +81,15 @@ class _EmailScreenSceneState
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
+                              children: [
                               verticalSpacing.height,
                               instructions(),
                               verticalSpacing.height,
                               emailField(),
+                              verticalSpacing.height,
+                              orDivider(),
+                              16.height,
+                              googleSignInButton(),
                             ],
                           ),
                         ),
@@ -162,6 +166,80 @@ class _EmailScreenSceneState
           },
         ),
       ],
+    );
+  }
+
+  Widget orDivider() {
+    return Row(
+      children: [
+        const Expanded(child: Divider(color: AppColors.border1)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: AppText(
+            'أو',
+            color: AppColors.secondary,
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+        const Expanded(child: Divider(color: AppColors.border1)),
+      ],
+    );
+  }
+
+  Widget googleSignInButton() {
+    final disabled = _model.isLoading || _model.isGoogleLoading;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: disabled
+            ? null
+            : () {
+                hideKeyboard();
+                emit(SignInWithGoogleEvent());
+              },
+        borderRadius: BorderRadius.circular(8),
+        child: Ink(
+          height: 64,
+          decoration: BoxDecoration(
+            color: disabled ? const Color(0xffE9EAEE) : AppColors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.border1),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 22,
+                height: 22,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFFDADCE0)),
+                ),
+                child: const Text(
+                  'G',
+                  style: TextStyle(
+                    color: Color(0xFF4285F4),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'المتابعة باستخدام Google',
+                style: TextStyle(
+                  color: disabled ? AppColors.gray : AppColors.secondary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -252,10 +330,13 @@ class _EmailScreenSceneState
         _isLoadingDialogMounted = false;
         Navigator.of(context, rootNavigator: false).pop(); // Close loading dialog
       }
-      print('📧 Email already confirmed - navigating to username security screen');
+      final email = (state.email?.trim().isNotEmpty == true)
+          ? state.email!.trim()
+          : _model.emailController.text.trim();
+      print('📧 Email confirmed - navigating to username security screen');
       Navigator.of(context).pushNamed(
         RoutePath.registerScreen,
-        arguments: _model.emailController.text.trim(),
+        arguments: email,
       );
     } else if (state is OnEmailErrorState) {
       // Hide loading dialog if showing
@@ -272,6 +353,13 @@ class _EmailScreenSceneState
           duration: const Duration(seconds: 3),
         ),
       );
+    } else if (state is OnEmailLoadingDismissedState) {
+      // Cancel/interrupt can arrive before the post-frame showDialog runs.
+      if (_isLoadingDialogShowing && _isLoadingDialogMounted) {
+        Navigator.of(context, rootNavigator: false).pop();
+      }
+      _isLoadingDialogShowing = false;
+      _isLoadingDialogMounted = false;
     }
   }
 

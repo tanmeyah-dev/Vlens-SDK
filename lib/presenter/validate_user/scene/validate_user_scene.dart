@@ -269,15 +269,21 @@ class _ValidateUserState
         unawaited(VerificationCache().setMobileNumber(mobileNumber));
         print('💾 Saved to cache - mobileNumber: $mobileNumber');
       }
-      // Save phoneNumberOtpRequestId and transactionId when both exist
-      if (state.phoneNumberOtpRequestId != null && state.transactionId != null) {
+      // Save phoneNumberOtpRequestId when present (required for StepCreate / OAuth).
+      if (state.phoneNumberOtpRequestId != null &&
+          state.phoneNumberOtpRequestId!.trim().isNotEmpty) {
+        final otpId = state.phoneNumberOtpRequestId!.trim();
+        final txId = (state.transactionId != null &&
+                state.transactionId!.trim().isNotEmpty)
+            ? state.transactionId!.trim()
+            : otpId;
         unawaited(VerificationCache().setVerificationData(
-          phoneNumberOtpRequestId: state.phoneNumberOtpRequestId!,
-          transactionId: state.transactionId!,
+          phoneNumberOtpRequestId: otpId,
+          transactionId: txId,
           mobileNumber: mobileNumber,
         ));
-        print('💾 Saved to cache - phoneNumberOtpRequestId: ${state.phoneNumberOtpRequestId}');
-        print('💾 Saved to cache - transactionId: ${state.transactionId}');
+        print('💾 Saved to cache - phoneNumberOtpRequestId: $otpId');
+        print('💾 Saved to cache - transactionId: $txId');
       }
       // Show verification dialog on success (phoneNumberExists == false)
       print(

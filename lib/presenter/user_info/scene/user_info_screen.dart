@@ -139,22 +139,6 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
                                 ),
                               ),
                               if (model.lookupFields.isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                const Align(
-                                  alignment: Alignment.centerRight,
-                                  child: Text(
-                                    'بيانات إضافية',
-                                    style: TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.black,
-                                    ),
-                                  ),
-                                ),
-                                const Divider(
-                                  color: AppColors.border1,
-                                  height: 24,
-                                ),
                                 ...model.lookupFields.map(
                                   (f) => UserInfoDynamicField(
                                     field: f,
@@ -164,7 +148,8 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
                                   ),
                                 ),
                               ],
-                            ],                          ],
+                            ],
+                          ],
                         ),
                       ),
                       const SizedBox(height: 12),

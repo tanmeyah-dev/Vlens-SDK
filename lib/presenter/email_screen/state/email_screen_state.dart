@@ -33,5 +33,13 @@ class OnEmailVerificationRequiredState extends NonRenderState {
 }
 
 class OnEmailConfirmedState extends NonRenderState {
-  OnEmailConfirmedState();
+  /// Email to pass to register screen (manual entry or from Google).
+  final String? email;
+
+  OnEmailConfirmedState({this.email});
+}
+
+/// Dismisses the loading dialog without showing an error (e.g. Google cancel).
+class OnEmailLoadingDismissedState extends NonRenderState {
+  OnEmailLoadingDismissedState();
 }

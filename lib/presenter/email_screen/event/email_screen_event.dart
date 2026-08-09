@@ -11,3 +11,8 @@ class SaveEmailEvent extends BaseEvent {
 
   SaveEmailEvent(this.email);
 }
+
+/// Sign in with Google and verify IdToken with Vlens (skips email OTP).
+class SignInWithGoogleEvent extends BaseEvent {
+  SignInWithGoogleEvent();
+}
