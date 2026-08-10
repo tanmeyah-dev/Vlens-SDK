@@ -43,6 +43,14 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
           setState(() => _isSubmitting = false);
         }
       });
+    } else if (state is UserInfoSubmitFailedState) {
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(state.message),
+          backgroundColor: AppColors.error,
+        ),
+      );
     }
   }
 
@@ -171,10 +179,10 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
   }
 
   Future<void> _onSavePressed(UserInfoModel model) async {
-    final isValid = model.formKey.currentState?.validate() ?? false;
-    if (!isValid) return;
+    // final isValid = model.formKey.currentState?.validate() ?? false;
+    // if (!isValid) return;
 
-    setState(() => _isSubmitting = true);
+    // setState(() => _isSubmitting = true);
 
     try {
       emit(UserInfoSubmitEvent(model.buildSummaryAnswers()));

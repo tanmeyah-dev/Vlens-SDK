@@ -14,6 +14,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../../../utils/sdk_http_client.dart';
 import '../../../routes/route_path.dart';
+import '../../register_screen/model/register_screen_nav_args.dart';
 import '../../validate_user/constants/api_urls.dart';
 import '../model/step_verify_email_response.dart';
 import 'package:core/utils/cache/verification_cache.dart';
@@ -524,8 +525,9 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
               final finalTransactionId = stepVerifyEmailResponse.transactionId ?? 
                   widget.transactionId ?? '';
               
-              // Save full verification row when IDs exist (create-user API may need them).
-              if (finalEmailOtpRequestId.isNotEmpty && finalTransactionId.isNotEmpty) {
+              // Always persist emailOtpRequestId when present (needed by create-user).
+              // oauthTokenVerificationRequestId for email OTP flow is "".
+              if (finalEmailOtpRequestId.isNotEmpty) {
                 await VerificationCache().setEmailVerificationData(
                   emailOtpRequestId: finalEmailOtpRequestId,
                   transactionId: finalTransactionId,
@@ -535,6 +537,9 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
                 print('💾 emailOtpRequestId: $finalEmailOtpRequestId');
                 print('💾 transactionId: $finalTransactionId');
                 print('💾 email: $verifiedEmail');
+              } else {
+                await VerificationCache().clearOAuthTokenVerificationRequestId();
+                print('⚠️ No emailOtpRequestId after OTP verify — create-user may fail');
               }
               
               // Success - close verification dialog and navigate directly.
@@ -544,7 +549,13 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
                 if (successContext.mounted) {
                   Navigator.of(successContext).pushNamed(
                     RoutePath.registerScreen,
-                    arguments: verifiedEmail,
+                    arguments: RegisterScreenNavArgs(
+                      verifiedEmail: verifiedEmail,
+                      oauthTokenVerificationRequestId: '',
+                      emailOtpRequestId: finalEmailOtpRequestId.isNotEmpty
+                          ? finalEmailOtpRequestId
+                          : null,
+                    ),
                   );
                   widget.onConfirm(pinController.text);
                 }

@@ -13,3 +13,10 @@ class UserInfoNavigateToSummaryState extends NonRenderState {
 
   UserInfoNavigateToSummaryState(this.answeredFields);
 }
+
+/// One-click-apply failed; scene should show [message] and reset submit UI.
+class UserInfoSubmitFailedState extends NonRenderState {
+  final String message;
+
+  UserInfoSubmitFailedState(this.message);
+}

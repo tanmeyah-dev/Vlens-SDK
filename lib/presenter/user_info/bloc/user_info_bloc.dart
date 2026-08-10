@@ -6,6 +6,7 @@ import 'package:core/utils/cache/verification_cache.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../../utils/api_error_parser.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../id_data/utils/id_data_parser.dart';
 import '../../validate_user/constants/api_urls.dart';
@@ -15,6 +16,7 @@ import '../model/request_fields_response.dart';
 import '../model/user_info_model.dart';
 import '../state/user_info_state.dart';
 import '../utils/user_info_lookup_helpers.dart';
+import '../utils/user_info_one_click_apply_builder.dart';
 
 class UserInfoBloc extends BaseBloc {
   UserInfoBloc(this._model)
@@ -37,8 +39,102 @@ class UserInfoBloc extends BaseBloc {
     emit(UpdateUserInfoUI(_model));
   }
 
-  void _onSubmit(UserInfoSubmitEvent event, emit) {
-    emit(UserInfoNavigateToSummaryState(event.answers));
+  Future<void> _onSubmit(UserInfoSubmitEvent event, emit) async {
+    try {
+      final cache = VerificationCache();
+      final cachedEmail = await cache.getEmail();
+      final cachedPhone = await cache.getMobileNumber();
+
+      final built = buildOneClickApplyBody(
+        model: _model,
+        answers: event.answers,
+        cachedEmail: cachedEmail,
+        cachedPhone: cachedPhone,
+      );
+
+      final accessToken = await cache.getAccessToken();
+      final encryptedToken = await cache.getEncryptedAccessToken();
+      final token = (accessToken != null && accessToken.trim().isNotEmpty)
+          ? accessToken.trim()
+          : (encryptedToken ?? '').trim();
+      final headers = token.isNotEmpty
+          ? HttpHeadersHelper.getHeadersWithAuth(token)
+          : HttpHeadersHelper.getDefaultHeaders();
+
+      final url = ApiUrls.getOneClickApplyUrl();
+      final bodyJson = jsonEncode(built.body);
+
+      if (kDebugMode) {
+        print('');
+        print('═══════════════════════════════════════════════════════');
+        print('📤 ONE-CLICK APPLY API CALL (USER_INFO)');
+        print('═══════════════════════════════════════════════════════');
+        print('URL: $url');
+        print('Method: POST');
+        print('Headers: $headers');
+        print('Body: $bodyJson');
+        print('═══════════════════════════════════════════════════════');
+        print('');
+      }
+
+      final response = await SdkHttpClient.post(
+        Uri.parse(url),
+        headers: headers,
+        body: bodyJson,
+      );
+
+      if (kDebugMode) {
+        print('');
+        print('═══════════════════════════════════════════════════════');
+        print('📥 ONE-CLICK APPLY API RESPONSE (USER_INFO)');
+        print('═══════════════════════════════════════════════════════');
+        print('Status Code: ${response.statusCode}');
+        print('Body: ${response.body}');
+        print('═══════════════════════════════════════════════════════');
+        print('');
+      }
+
+      if (response.statusCode != 200) {
+        final message = ApiErrorParser.extractMessage(
+          response.body,
+          fallbackMessage: 'فشل إرسال طلب القرض (${response.statusCode})',
+        );
+        emit(UserInfoSubmitFailedState(message));
+        return;
+      }
+
+      final decoded = _tryDecodeMap(response.body);
+      if (decoded != null && decoded['success'] == false) {
+        final message = ApiErrorParser.extractMessage(
+          response.body,
+          fallbackMessage: 'فشل إرسال طلب القرض',
+        );
+        emit(UserInfoSubmitFailedState(message));
+        return;
+      }
+
+      emit(UserInfoNavigateToSummaryState(event.answers));
+    } on OneClickApplyBuildException catch (e) {
+      emit(UserInfoSubmitFailedState(e.message));
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ ONE-CLICK APPLY ERROR: $e');
+      }
+      emit(
+        UserInfoSubmitFailedState(
+          e.toString().replaceAll('Exception: ', ''),
+        ),
+      );
+    }
+  }
+
+  Map<String, dynamic>? _tryDecodeMap(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (_) {}
+    return null;
   }
 
   Future<void> _onLoadFields(UserInfoLoadFieldsEvent event, emit) async {

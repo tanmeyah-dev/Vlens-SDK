@@ -27,12 +27,20 @@ class RegisterScreen extends StatefulWidget {
   /// Email from email step (route argument); falls back to [VerificationCache].
   final String? verifiedEmail;
 
+  /// From Google OAuth; empty/`null` for manual email OTP flow.
+  final String? oauthTokenVerificationRequestId;
+
+  /// From email OTP verify; falls back to [VerificationCache].
+  final String? emailOtpRequestId;
+
   const RegisterScreen({
     super.key,
     this.phoneNumberOtpRequestId,
     this.transactionId,
     this.mobileNumber,
     this.verifiedEmail,
+    this.oauthTokenVerificationRequestId,
+    this.emailOtpRequestId,
   });
 
   @override
@@ -397,11 +405,18 @@ class _RegisterScreenState
       print('📤 Using values for create-user API:');
       print('📤 email: $email');
       print('📤 mobileNumber: $mobileNumber');
+      print(
+        '📤 oauthTokenVerificationRequestId: ${widget.oauthTokenVerificationRequestId}',
+      );
+      print('📤 emailOtpRequestId: ${widget.emailOtpRequestId}');
 
       emit(RegisterScreenSaveEvent(
         email,
         _model.createSecurityCodeController.text,
         mobileNumber: mobileNumber,
+        oauthTokenVerificationRequestId:
+            widget.oauthTokenVerificationRequestId,
+        emailOtpRequestId: widget.emailOtpRequestId,
       ));
     }
   }

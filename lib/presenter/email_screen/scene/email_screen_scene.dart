@@ -9,6 +9,7 @@ import 'package:core/utils/ui.dart';
 import 'package:core/style/app_colors.dart';
 import 'package:flutter/material.dart';
 import '../../../routes/route_path.dart';
+import '../../register_screen/model/register_screen_nav_args.dart';
 import '../../validate_user/widgets/app_header.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import '../bloc/email_screen_bloc.dart';
@@ -334,9 +335,18 @@ class _EmailScreenSceneState
           ? state.email!.trim()
           : _model.emailController.text.trim();
       print('📧 Email confirmed - navigating to username security screen');
+      print(
+        '📧 oauthTokenVerificationRequestId: ${state.oauthTokenVerificationRequestId}',
+      );
       Navigator.of(context).pushNamed(
         RoutePath.registerScreen,
-        arguments: email,
+        arguments: RegisterScreenNavArgs(
+          verifiedEmail: email,
+          // Google → real id; email already-confirmed without OTP → "".
+          oauthTokenVerificationRequestId:
+              state.oauthTokenVerificationRequestId ?? '',
+          emailOtpRequestId: null,
+        ),
       );
     } else if (state is OnEmailErrorState) {
       // Hide loading dialog if showing

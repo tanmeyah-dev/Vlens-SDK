@@ -36,7 +36,13 @@ class OnEmailConfirmedState extends NonRenderState {
   /// Email to pass to register screen (manual entry or from Google).
   final String? email;
 
-  OnEmailConfirmedState({this.email});
+  /// Google OAuth request id; `null` for email OTP / already-confirmed email.
+  final String? oauthTokenVerificationRequestId;
+
+  OnEmailConfirmedState({
+    this.email,
+    this.oauthTokenVerificationRequestId,
+  });
 }
 
 /// Dismisses the loading dialog without showing an error (e.g. Google cancel).

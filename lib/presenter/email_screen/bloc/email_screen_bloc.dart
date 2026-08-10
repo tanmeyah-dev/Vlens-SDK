@@ -110,17 +110,23 @@ class EmailScreenBloc extends BaseBloc {
       final parsed = VerifyOAuthTokenResponse.fromJson(
         decoded is Map<String, dynamic> ? decoded : <String, dynamic>{},
       );
+      final apiErrorMessage = ApiErrorParser.extractMessage(
+        response.body,
+        fallbackMessage: 'فشل التحقق من حساب Google',
+      );
 
       final oauthId = parsed.data?.oAuthTokenVerificationRequestId?.trim();
       final email = parsed.data?.email?.trim();
       final verified = parsed.data?.isVerified == true;
 
-      if (!parsed.success && oauthId == null) {
+      if (!parsed.success || parsed.errorCode != null) {
         _model.isLoading = false;
         _model.isGoogleLoading = false;
         emit(UpdateEmailScreenUI(_model));
         emit(OnEmailErrorState(
-          parsed.message ?? 'فشل التحقق من حساب Google',
+          parsed.message?.trim().isNotEmpty == true
+              ? parsed.message!.trim()
+              : apiErrorMessage,
         ));
         return;
       }
@@ -130,9 +136,9 @@ class EmailScreenBloc extends BaseBloc {
         _model.isGoogleLoading = false;
         emit(UpdateEmailScreenUI(_model));
         emit(OnEmailErrorState(
-          parsed.data?.validationResult ??
-              parsed.message ??
-              'رمز Google غير صالح',
+          parsed.message?.trim().isNotEmpty == true
+              ? parsed.message!.trim()
+              : (parsed.data?.validationResult ?? apiErrorMessage),
         ));
         return;
       }
@@ -154,7 +160,10 @@ class EmailScreenBloc extends BaseBloc {
       _model.isLoading = false;
       _model.isGoogleLoading = false;
       emit(UpdateEmailScreenUI(_model));
-      emit(OnEmailConfirmedState(email: resolvedEmail));
+      emit(OnEmailConfirmedState(
+        email: resolvedEmail,
+        oauthTokenVerificationRequestId: oauthId,
+      ));
     } on GoogleSignInException catch (e) {
       print('❌ GoogleSignInException: ${e.code.name} ${e.description}');
       _model.isLoading = false;
@@ -312,8 +321,10 @@ class EmailScreenBloc extends BaseBloc {
           }
 
           // Always persist trimmed email for username / create-user screens.
+          // Email OTP flow must send oauthTokenVerificationRequestId as null.
           final trimmedEmail = event.email.trim();
           await VerificationCache().setEmail(trimmedEmail);
+          await VerificationCache().clearOAuthTokenVerificationRequestId();
 
           final isEmailConfirmed =
               sendEmailOtpResponse.data?.emailConfirmed ?? false;
@@ -345,7 +356,10 @@ class EmailScreenBloc extends BaseBloc {
 
           if (isEmailConfirmed) {
             print('✅ Email already confirmed - navigating to username security screen');
-            emit(OnEmailConfirmedState());
+            emit(OnEmailConfirmedState(
+              email: trimmedEmail,
+              oauthTokenVerificationRequestId: null,
+            ));
           } else {
             print('✅ Email not confirmed - showing verification dialog');
             emit(OnEmailVerificationRequiredState(

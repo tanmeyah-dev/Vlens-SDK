@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:geolocator/geolocator.dart';
 
 /// Why location could not be obtained for auth-sensitive flows.
@@ -101,15 +103,18 @@ class RequiredLocationHelper {
       );
     }
 
+    // Prefer a quick low-accuracy fix, then fall back to last known position.
     try {
       final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.medium,
-        timeLimit: const Duration(seconds: 20),
+        desiredAccuracy: LocationAccuracy.low,
+        timeLimit: const Duration(seconds: 45),
       );
       if (!RequiredLocationResult._isPlausibleCoordinate(
         position.latitude,
         position.longitude,
       )) {
+        final lastKnown = await _plausibleLastKnown();
+        if (lastKnown != null) return lastKnown;
         return RequiredLocationResult.failure(
           LocationGateIssue.positionError,
           'تم استلام إحداثيات غير صالحة. تأكد من تفعيل GPS وحاول مرة أخرى.',
@@ -119,13 +124,42 @@ class RequiredLocationHelper {
         position.latitude,
         position.longitude,
       );
+    } on TimeoutException catch (e, st) {
+      // ignore: avoid_print
+      print('RequiredLocationHelper.acquire timeout: $e\n$st');
+      final lastKnown = await _plausibleLastKnown();
+      if (lastKnown != null) return lastKnown;
+      return RequiredLocationResult.failure(
+        LocationGateIssue.positionError,
+        'انتهت مهلة تحديد الموقع (GPS). انتقل لمكان مفتوح أو تأكد من تفعيل '
+        'خدمة الموقع بدقة عالية، ثم أعد المحاولة.',
+      );
     } catch (e, st) {
       // ignore: avoid_print
       print('RequiredLocationHelper.acquire error: $e\n$st');
+      final lastKnown = await _plausibleLastKnown();
+      if (lastKnown != null) return lastKnown;
       return RequiredLocationResult.failure(
         LocationGateIssue.positionError,
-        'تعذر تحديد موقعك الحالي. تأكد من تفعيل GPS وأنك في مكان يمكن فيه استقبال الإشارة، ثم أعد المحاولة.',
+        'تعذر تحديد موقعك الحالي. تأكد من تفعيل GPS وأنك في مكان يمكن فيه '
+        'استقبال الإشارة، ثم أعد المحاولة.',
       );
+    }
+  }
+
+  static Future<RequiredLocationResult?> _plausibleLastKnown() async {
+    try {
+      final last = await Geolocator.getLastKnownPosition();
+      if (last == null) return null;
+      if (!RequiredLocationResult._isPlausibleCoordinate(
+        last.latitude,
+        last.longitude,
+      )) {
+        return null;
+      }
+      return RequiredLocationResult.success(last.latitude, last.longitude);
+    } catch (_) {
+      return null;
     }
   }
 }

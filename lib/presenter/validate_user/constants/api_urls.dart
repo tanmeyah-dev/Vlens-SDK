@@ -144,6 +144,11 @@ class ApiUrls {
     return '${getLocalBaseUrl()}/vlens/api/v1/mobile/customers/lookups';
   }
 
+  /// One-click loan apply.
+  static String getOneClickApplyUrl() {
+    return '${getLocalBaseUrl()}/vlens/api/v1/mobile/customers/loans/one-click-apply';
+  }
+
   /// E-contract customer step OTP.
   static String getEContractCustomerStepOtpUrl() {
     return '${getLocalBaseUrl()}/vlens/api/v1/e-contract/customer/step/otp';

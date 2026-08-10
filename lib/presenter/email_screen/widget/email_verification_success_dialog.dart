@@ -5,6 +5,8 @@ import 'package:core/style/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../../../../routes/route_path.dart';
+import '../../register_screen/model/register_screen_nav_args.dart';
+import 'package:core/utils/cache/verification_cache.dart';
 
 class EmailVerificationSuccessDialog extends StatefulWidget {
   final VoidCallback? onDismiss;
@@ -31,11 +33,22 @@ class _EmailVerificationSuccessDialogState extends State<EmailVerificationSucces
       if (mounted) {
         Navigator.of(context).pop(); // Close success dialog
         // Use a small delay to ensure dialog is fully closed before navigation
-        Future.delayed(const Duration(milliseconds: 100), () {
-          // Navigate to username security code screen
+        Future.delayed(const Duration(milliseconds: 100), () async {
+          // Navigate to username security code screen (email OTP → oauth id null).
           final navContext = widget.navigationContext ?? context;
           if (navContext.mounted) {
-            Navigator.of(navContext).pushNamed(RoutePath.registerScreen);
+            await VerificationCache().clearOAuthTokenVerificationRequestId();
+            final email = await VerificationCache().getEmail();
+            if (!navContext.mounted) return;
+            Navigator.of(navContext).pushNamed(
+              RoutePath.registerScreen,
+              arguments: RegisterScreenNavArgs(
+                verifiedEmail: email,
+                oauthTokenVerificationRequestId: '',
+                emailOtpRequestId:
+                    await VerificationCache().getEmailOtpRequestId(),
+              ),
+            );
           }
           widget.onDismiss?.call(); // Call the callback if provided
         });

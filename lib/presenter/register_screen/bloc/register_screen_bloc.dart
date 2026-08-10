@@ -103,72 +103,60 @@ class RegisterScreenBloc extends BaseBloc {
         print('📦 phoneNumber was empty on event; from cache: ${phoneNumber.isNotEmpty ? "found" : "still empty"}');
       }
 
-      // Prepare request body (vlens create-user)
-      final phoneOtpRequestId =
-          await VerificationCache().getPhoneNumberOtpRequestId();
-      final emailOtpRequestId =
-          await VerificationCache().getEmailOtpRequestId();
-      final oAuthTokenVerificationRequestId =
-          await VerificationCache().getOAuthTokenVerificationRequestId();
+      // Prepare request body (local create-user)
+      final cache = VerificationCache();
+      final phoneOtpRequestId = await cache.getPhoneNumberOtpRequestId();
+      final oauthFromCache =
+          (await cache.getOAuthTokenVerificationRequestId())?.trim();
+      final oauthFromEvent = event.oauthTokenVerificationRequestId?.trim();
+      final cachedEmail = (await cache.getEmail())?.trim();
 
-      final hasOAuth = oAuthTokenVerificationRequestId != null &&
-          oAuthTokenVerificationRequestId.trim().isNotEmpty;
-      final hasEmailOtp = emailOtpRequestId != null &&
-          emailOtpRequestId.trim().isNotEmpty;
+      // Google → real id; otherwise JSON null (not empty string).
+      final hasGoogleOAuth = (oauthFromEvent != null &&
+              oauthFromEvent.isNotEmpty) ||
+          (oauthFromCache != null && oauthFromCache.isNotEmpty);
+      final String? oauthTokenVerificationRequestId = hasGoogleOAuth
+          ? ((oauthFromEvent != null && oauthFromEvent.isNotEmpty)
+              ? oauthFromEvent
+              : oauthFromCache)
+          : null;
 
-      // Google/Microsoft OAuth replaces email OTP — backend expects skipEmail.
-      // Plain email flow must send emailOtpRequestId or create-user returns 417.
-      if (!hasOAuth && !hasEmailOtp) {
-        emit(OnRegisterScreenErrorState(
-          'لم يتم التحقق من البريد الإلكتروني. يرجى التحقق عبر OTP أو Google ثم المحاولة مرة أخرى.',
-        ));
-        return;
-      }
+      print('');
+      print('═══════════════════════════════════════════════════════');
+      print('🔍 CREATE USER — REQUEST IDS');
+      print('═══════════════════════════════════════════════════════');
+      print('event.email: "${event.email}"');
+      print('resolved email: "$email"');
+      print('cached email: "$cachedEmail"');
+      print('event.oauthTokenVerificationRequestId: "$oauthFromEvent"');
+      print('cache.oauthTokenVerificationRequestId: "$oauthFromCache"');
+      print(
+        'resolved oauthTokenVerificationRequestId: $oauthTokenVerificationRequestId',
+      );
+      print('cache.phoneNumberOtpRequestId: "$phoneOtpRequestId"');
+      print('═══════════════════════════════════════════════════════');
+      print('');
 
-      // OAuth was verified on api.vlenseg.com — StepCreate must hit the same host
-      // (https://docs.vlenseg.com/oauth). Local create-user does not see that request id.
-      final useVlensStepCreate = hasOAuth;
-      final createUrl = useVlensStepCreate
-          ? ApiUrls.getStepCreateUrl()
-          : _apiUrlCreateUser;
+      // Always use local create-user (never api.vlenseg.com StepCreate).
+      final createUrl = _apiUrlCreateUser;
 
-      final Map<String, dynamic> body;
-      if (useVlensStepCreate) {
-        if (phoneOtpRequestId == null || phoneOtpRequestId.trim().isEmpty) {
-          emit(OnRegisterScreenErrorState(
-            'لم يتم التحقق من رقم الهاتف. يرجى إكمال التحقق من الهاتف ثم المحاولة مرة أخرى.',
-          ));
-          return;
-        }
-        body = <String, dynamic>{
-          'password': event.securityCode,
-          'username': phoneNumber,
-          'geoLocation': {
-            'latitude': finalLatitude,
-            'longitude': finalLongitude,
-          },
-          'imei': imei,
-          'phoneNumberOtpRequestId': phoneOtpRequestId.trim(),
-          'oAuthTokenVerificationRequestId':
-              oAuthTokenVerificationRequestId.trim(),
-        };
-      } else {
-        body = <String, dynamic>{
-          'password': event.securityCode,
-          'email': email,
-          'geoLocation': {
-            'latitude': finalLatitude,
-            'longitude': finalLongitude,
-          },
-          'imei': imei,
-          'imsi': imsi,
-          'phoneNumber': phoneNumber,
-          'skipEmail': false,
-          'emailOtpRequestId': emailOtpRequestId!.trim(),
-        };
-        if (phoneOtpRequestId != null && phoneOtpRequestId.trim().isNotEmpty) {
-          body['phoneNumberOtpRequestId'] = phoneOtpRequestId.trim();
-        }
+      final body = <String, dynamic>{
+        'password': event.securityCode,
+        'email': email,
+        'geoLocation': {
+          'latitude': finalLatitude,
+          'longitude': finalLongitude,
+        },
+        'imei': imei,
+        'imsi': imsi,
+        'phoneNumber': phoneNumber,
+        'skipEmail': false,
+        // Google id, or null when user did not sign in with Google.
+        'oauthTokenVerificationRequestId': oauthTokenVerificationRequestId,
+      };
+
+      if (phoneOtpRequestId != null && phoneOtpRequestId.trim().isNotEmpty) {
+        body['phoneNumberOtpRequestId'] = phoneOtpRequestId.trim();
       }
 
       final requestBody = jsonEncode(body);
@@ -181,7 +169,7 @@ class RegisterScreenBloc extends BaseBloc {
       print('Method: POST');
       print('Body: $requestBody');
       print('Email: $email');
-      print('OAuth StepCreate: $useVlensStepCreate');
+      print('oauthTokenVerificationRequestId: $oauthTokenVerificationRequestId');
       print('═══════════════════════════════════════════════════════');
       print('');
 

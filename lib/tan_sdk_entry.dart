@@ -11,6 +11,7 @@ import 'presenter/login_screen/scene/login_screen_scene.dart';
 import 'presenter/validate_user/scene/validate_user_scene.dart';
 import 'presenter/splash/scene/splash_scene.dart';
 import 'presenter/register_screen/scene/register_screen_scene.dart';
+import 'presenter/register_screen/model/register_screen_nav_args.dart';
 import 'routes/route_path.dart';
 
 /// Terracotta accent used on the location gate modal (matches product design).
@@ -142,15 +143,30 @@ class _TanSdkEntryState extends State<TanSdkEntry> with WidgetsBindingObserver {
               builder: (_) => const EmailScreenScene(),
             );
           case RoutePath.registerScreen:
-            final verifiedEmail = settings.arguments is String
-                ? (settings.arguments as String).trim()
-                : null;
+            final args = settings.arguments;
+            String? verifiedEmail;
+            String? oauthTokenVerificationRequestId;
+            String? emailOtpRequestId;
+            if (args is RegisterScreenNavArgs) {
+              verifiedEmail = args.verifiedEmail?.trim();
+              oauthTokenVerificationRequestId =
+                  args.oauthTokenVerificationRequestId?.trim();
+              emailOtpRequestId = args.emailOtpRequestId?.trim();
+            } else if (args is String) {
+              verifiedEmail = args.trim();
+            }
             return MaterialPageRoute<void>(
               settings: settings,
               builder: (_) => RegisterScreen(
                 verifiedEmail:
                     verifiedEmail != null && verifiedEmail.isNotEmpty
                         ? verifiedEmail
+                        : null,
+                oauthTokenVerificationRequestId:
+                    oauthTokenVerificationRequestId,
+                emailOtpRequestId:
+                    emailOtpRequestId != null && emailOtpRequestId.isNotEmpty
+                        ? emailOtpRequestId
                         : null,
               ),
             );

@@ -45,13 +45,14 @@ class VerifyOAuthTokenResponse {
 
   factory VerifyOAuthTokenResponse.fromJson(Map<String, dynamic> json) {
     final rawSuccess = json['success'];
+    final hasErrorCode = json['error_code'] != null || json['errorCode'] != null;
     final success = rawSuccess is bool
         ? rawSuccess
         : rawSuccess == null
-            ? json['error_code'] == null && json['data'] != null
+            ? !hasErrorCode && json['data'] != null
             : rawSuccess.toString().toLowerCase() == 'true';
 
-    final rawCode = json['code'];
+    final rawCode = json['code'] ?? json['error_code'] ?? json['errorCode'];
     final code = rawCode is int ? rawCode : int.tryParse('$rawCode');
 
     Map<String, dynamic>? dataMap;
@@ -65,10 +66,12 @@ class VerifyOAuthTokenResponse {
     return VerifyOAuthTokenResponse(
       data: dataMap == null ? null : VerifyOAuthTokenData.fromJson(dataMap),
       code: code,
-      message: json['message']?.toString() ??
+      message: json['error_message']?.toString() ??
+          json['errorMessage']?.toString() ??
+          json['message']?.toString() ??
           json['validationResult']?.toString() ??
           dataMap?['validationResult']?.toString(),
-      success: success,
+      success: success && !hasErrorCode,
       errorCode: json['error_code'] ?? json['errorCode'],
     );
   }

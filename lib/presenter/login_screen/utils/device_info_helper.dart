@@ -36,8 +36,16 @@ class DeviceInfoHelper {
   /// Location with system services + permission + real GPS fix (no placeholder).
   /// Use for login, registration, and SDK entry gate.
   static Future<RequiredLocationResult> obtainRequiredLocationForAuth() async {
-    _ongoingLocationRequest = null;
-    _memoryCachedLocation = null;
+    // Reuse a valid cached fix first (SDK entry / prior auth already obtained one).
+    final memory = _memoryCachedLocation;
+    if (memory != null) {
+      final lat = memory['latitude']!;
+      final lng = memory['longitude']!;
+      if (!RequiredLocationResult.isInvalidOrPlaceholder(lat, lng)) {
+        return RequiredLocationResult.success(lat, lng);
+      }
+      _memoryCachedLocation = null;
+    }
 
     final persisted = await VerificationCache().getGeoLocation();
     if (persisted != null) {
@@ -45,6 +53,9 @@ class DeviceInfoHelper {
       final lng = persisted['longitude']!;
       if (RequiredLocationResult.isInvalidOrPlaceholder(lat, lng)) {
         await VerificationCache().clearGeoLocation();
+      } else {
+        _memoryCachedLocation = persisted;
+        return RequiredLocationResult.success(lat, lng);
       }
     }
 
