@@ -404,14 +404,16 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
   void _initializeVLensSDK(
       BuildContext context, LoginResponseData loginResponseData) {
     final credentials = VlensSdkCredentials.tryResolve(loginResponseData);
-    if (credentials == null) {
+    if (credentials == null || !credentials.isReadyForVlensInit) {
       final message =
           VlensSdkCredentials.missingFieldsMessage(loginResponseData);
       print('⛔ VLens SDK init blocked (OTP flow): $message');
       print(
           '   accessToken=${loginResponseData.accessToken?.trim().isNotEmpty == true}, '
           'encryptedAccessToken=${loginResponseData.encryptedAccessToken?.trim().isNotEmpty == true}, '
-          'refreshToken=${loginResponseData.refreshToken?.trim().isNotEmpty == true}');
+          'refreshToken=${loginResponseData.refreshToken?.trim().isNotEmpty == true}, '
+          'apiKey=${VlensSdkCredentials.defaultApiKey.isNotEmpty}, '
+          'tenancyName=${VlensSdkCredentials.defaultTenancyName.isNotEmpty}');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -440,15 +442,17 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
     print('═══════════════════════════════════════════════════════');
     print('🚀 VLENS SDK INITIALIZATION (OTP FLOW)');
     print('═══════════════════════════════════════════════════════');
-    print('transactionId (created after OTP verify): ${credentials.transactionId}');
-    print('tenancyName: tanmeyah-stg');
-    print('apiBaseUrl: https://api.vlenseg.com');
+    print('transactionId: ${credentials.transactionId}');
+    print('tenancyName: ${credentials.tenancyName}');
+    print('apiKey: ${credentials.apiKey}');
+    print('apiBaseUrl: ${credentials.apiBaseUrl}');
     print(
         'accessToken source: ${(loginResponseData.accessToken?.trim().isNotEmpty == true) ? 'accessToken' : 'encryptedAccessToken'}');
     print('accessToken length: ${credentials.accessToken.length}');
     print('refreshToken length: ${credentials.refreshToken.length}');
     print(
         'isDigitalIdentityVerified: ${loginResponseData.isDigitalIdentityVerified}');
+    print('✅ Required fields ready: transactionId, accessToken, apiKey, tenancyName');
     print('═══════════════════════════════════════════════════════');
     print('');
 
@@ -458,11 +462,11 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
       isNationalIdOnly: false,
       logoPath: AppAssets.tanmeyah,
       env: EnvironmentConfig(
-        apiBaseUrl: "https://api.vlenseg.com",
+        apiBaseUrl: credentials.apiBaseUrl,
         accessToken: credentials.accessToken,
         refreshToken: credentials.refreshToken,
-        apiKey: "j1m9DwIywPS1dPCkFUT2hM2IRr10921gq5PBzQID6xI",
-        tenancyName: "tanmeyah-stg",
+        apiKey: credentials.apiKey,
+        tenancyName: credentials.tenancyName,
       ),
       defaultLocale: "ar",
       colors: ColorsConfig(

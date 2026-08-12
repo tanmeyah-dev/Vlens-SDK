@@ -10,8 +10,14 @@ class UpdateUserInfoUI extends RenderDataState<UserInfoModel> {
 
 class UserInfoNavigateToSummaryState extends NonRenderState {
   final List<SummaryAnswerItem> answeredFields;
+  final UserInfoModel userInfoModel;
+  final dynamic createdRequestId;
 
-  UserInfoNavigateToSummaryState(this.answeredFields);
+  UserInfoNavigateToSummaryState({
+    required this.answeredFields,
+    required this.userInfoModel,
+    required this.createdRequestId,
+  });
 }
 
 /// One-click-apply failed; scene should show [message] and reset submit UI.

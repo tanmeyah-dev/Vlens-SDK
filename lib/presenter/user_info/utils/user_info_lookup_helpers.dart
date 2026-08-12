@@ -7,6 +7,10 @@ String normalizeLookupKey(String raw) {
   return raw.trim().toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
 }
 
+/// Field key for «المنطقة التابعة للبطاقة» on user_info.
+const String idCardVillageFieldKey = 'IDCARD_VILLAGE';
+const String idCardVillageFieldLabel = 'اختر المنطقه التابعه للبطاقه';
+
 /// Arabic labels for standalone lookup dropdowns.
 const Map<String, String> lookupDropdownLabelsAr = {
   'CIF_QUALIFICATION_ID': 'المؤهل',
@@ -469,6 +473,98 @@ LocationGovernorate? findGovernorateById(
   return null;
 }
 
+/// Matches ID-card governorate text (Arabic/English) to backend locations.
+LocationGovernorate? findGovernorateByName(
+  List<LocationGovernorate> locations,
+  String? label,
+) {
+  if (label == null || label.trim().isEmpty || locations.isEmpty) return null;
+  final needle = _normalizeGovernorateLabel(label);
+  if (needle.isEmpty) return null;
+
+  for (final gov in locations) {
+    if (_normalizeGovernorateLabel(gov.nameAr) == needle) return gov;
+    final en = gov.nameEn;
+    if (en != null && _normalizeGovernorateLabel(en) == needle) return gov;
+  }
+
+  LocationGovernorate? best;
+  var bestLen = 0;
+  for (final gov in locations) {
+    final ar = _normalizeGovernorateLabel(gov.nameAr);
+    final en =
+        gov.nameEn == null ? '' : _normalizeGovernorateLabel(gov.nameEn!);
+    for (final name in [ar, en]) {
+      if (name.length < 3) continue;
+      final hit = name == needle ||
+          needle.contains(name) ||
+          name.contains(needle);
+      if (!hit) continue;
+      if (name.length > bestLen) {
+        best = gov;
+        bestLen = name.length;
+      }
+    }
+  }
+  return best;
+}
+
+/// Resolves governorate from ID OCR: scan address/govern text for the longest
+/// matching location name (e.g. «المنيا» in address), then fall back to
+/// matching the dedicated govern fields.
+LocationGovernorate? resolveGovernorateFromIdExtract({
+  required List<LocationGovernorate> locations,
+  String? govern,
+  String? governEnglish,
+  String? addressText,
+}) {
+  if (locations.isEmpty) return null;
+
+  final haystack = _normalizeGovernorateLabel(
+    [govern, governEnglish, addressText]
+        .whereType<String>()
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .join(' '),
+  );
+
+  if (haystack.isNotEmpty) {
+    LocationGovernorate? bestInText;
+    var bestLen = 0;
+    for (final gov in locations) {
+      final names = <String>{
+        _normalizeGovernorateLabel(gov.nameAr),
+        if (gov.nameEn != null) _normalizeGovernorateLabel(gov.nameEn!),
+      };
+      for (final name in names) {
+        if (name.length < 3) continue;
+        if (haystack.contains(name) && name.length > bestLen) {
+          bestInText = gov;
+          bestLen = name.length;
+        }
+      }
+    }
+    if (bestInText != null) return bestInText;
+  }
+
+  return findGovernorateByName(locations, govern) ??
+      findGovernorateByName(locations, governEnglish);
+}
+
+String _normalizeGovernorateLabel(String raw) {
+  var value = normalizeArabicLabel(raw);
+  // Drop common prefix so «محافظة المنيا» matches «المنيا».
+  const prefixes = ['محافظه', 'محافظة', 'gov', 'governorate'];
+  for (final prefix in prefixes) {
+    final p = normalizeArabicLabel(prefix);
+    if (value.startsWith(p)) {
+      value = value.substring(p.length).trim();
+      break;
+    }
+  }
+  return value;
+}
+
 LocationCity? findCityById(LocationGovernorate? governorate, String? id) {
   if (governorate == null || id == null || id.trim().isEmpty) return null;
   final needle = id.trim();
@@ -476,6 +572,150 @@ LocationCity? findCityById(LocationGovernorate? governorate, String? id) {
     if ('${city.id}' == needle) return city;
   }
   return null;
+}
+
+LocationVillage? findVillageById(LocationCity? city, String? id) {
+  if (city == null || id == null || id.trim().isEmpty) return null;
+  final needle = id.trim();
+  for (final village in city.villages) {
+    if ('${village.id}' == needle) return village;
+  }
+  return null;
+}
+
+/// Matches city text to cities under [governorate], or across all [locations]
+/// when governorate is unknown.
+LocationCity? findCityByName({
+  required List<LocationGovernorate> locations,
+  LocationGovernorate? governorate,
+  String? label,
+}) {
+  if (label == null || label.trim().isEmpty) return null;
+  final needle = _normalizeGovernorateLabel(label);
+  if (needle.isEmpty) return null;
+
+  final cities = governorate?.cities ??
+      locations.expand((g) => g.cities).toList(growable: false);
+  if (cities.isEmpty) return null;
+
+  for (final city in cities) {
+    if (_normalizeGovernorateLabel(city.nameAr) == needle) return city;
+    final en = city.nameEn;
+    if (en != null && _normalizeGovernorateLabel(en) == needle) return city;
+  }
+
+  LocationCity? best;
+  var bestLen = 0;
+  for (final city in cities) {
+    final ar = _normalizeGovernorateLabel(city.nameAr);
+    final en =
+        city.nameEn == null ? '' : _normalizeGovernorateLabel(city.nameEn!);
+    for (final name in [ar, en]) {
+      if (name.length < 3) continue;
+      final hit = name == needle ||
+          needle.contains(name) ||
+          name.contains(needle);
+      if (!hit) continue;
+      if (name.length > bestLen) {
+        best = city;
+        bestLen = name.length;
+      }
+    }
+  }
+  return best;
+}
+
+/// Resolves city from ID OCR under the matched governorate when possible.
+LocationCity? resolveCityFromIdExtract({
+  required List<LocationGovernorate> locations,
+  LocationGovernorate? governorate,
+  String? city,
+  String? district,
+  String? addressText,
+}) {
+  if (locations.isEmpty && governorate == null) return null;
+
+  final cities = governorate?.cities ??
+      locations.expand((g) => g.cities).toList(growable: false);
+  if (cities.isEmpty) return null;
+
+  final haystack = _normalizeGovernorateLabel(
+    [city, district, addressText]
+        .whereType<String>()
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .join(' '),
+  );
+
+  if (haystack.isNotEmpty) {
+    LocationCity? bestInText;
+    var bestLen = 0;
+    for (final item in cities) {
+      final names = <String>{
+        _normalizeGovernorateLabel(item.nameAr),
+        if (item.nameEn != null) _normalizeGovernorateLabel(item.nameEn!),
+      };
+      for (final name in names) {
+        if (name.length < 3) continue;
+        if (haystack.contains(name) && name.length > bestLen) {
+          bestInText = item;
+          bestLen = name.length;
+        }
+      }
+    }
+    if (bestInText != null) return bestInText;
+  }
+
+  return findCityByName(
+        locations: locations,
+        governorate: governorate,
+        label: city,
+      ) ??
+      findCityByName(
+        locations: locations,
+        governorate: governorate,
+        label: district,
+      );
+}
+
+/// City resolved from cached national-ID extract (for ID-card village dropdown).
+LocationCity? resolveIdCardCityFromExtract({
+  required List<LocationGovernorate> locations,
+  ExtractedUserData? extracted,
+}) {
+  if (locations.isEmpty || extracted == null) return null;
+
+  final front = extracted.idFrontData;
+  final user = extracted.user;
+  final idCardAddressText = _firstNonEmpty([
+    front?.address,
+    front?.address1,
+    front?.address2,
+    user?.address,
+  ]);
+
+  final matchedGovernorate = resolveGovernorateFromIdExtract(
+    locations: locations,
+    govern: front?.govern,
+    governEnglish: front?.governEnglish,
+    addressText: idCardAddressText,
+  );
+
+  return resolveCityFromIdExtract(
+    locations: locations,
+    governorate: matchedGovernorate,
+    city: front?.city,
+    district: front?.district,
+    addressText: idCardAddressText,
+  );
+}
+
+/// Village options under the city extracted from the national ID.
+List<LookupItem> idCardVillageOptionsForCity(LocationCity? city) {
+  if (city == null || city.villages.isEmpty) return const [];
+  return city.villages
+      .map((v) => LookupItem(id: '${v.id}', name: v.nameAr))
+      .toList();
 }
 
 /// Options for a location select, cascading from currently selected parents.

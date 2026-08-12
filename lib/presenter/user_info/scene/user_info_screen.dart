@@ -13,6 +13,7 @@ import '../event/user_info_event.dart';
 import '../model/user_info_model.dart';
 import '../state/user_info_state.dart';
 import '../widget/user_info_dynamic_field.dart';
+import '../widget/user_info_id_card_village_field.dart';
 
 class UserInfoScreen extends StatefulWidget {
   final Map<String, dynamic> eligibilityResponse;
@@ -35,7 +36,11 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
       Navigator.of(context)
           .push<void>(
         MaterialPageRoute<void>(
-          builder: (_) => SummaryScreen(answeredFields: state.answeredFields),
+          builder: (_) => SummaryScreen(
+            answeredFields: state.answeredFields,
+            userInfoModel: state.userInfoModel,
+            createdRequestId: state.createdRequestId,
+          ),
         ),
       )
           .whenComplete(() {
@@ -73,116 +78,136 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
             height: 44,
           ),
         ),
-        body: ColoredBox(
-          color: AppColors.white,
-          child: SafeArea(
-            child: GestureDetector(
-              onTap: () => FocusScope.of(context).unfocus(),
-              behavior: HitTestBehavior.translucent,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Form(
-                  key: model.formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        'اعرف عميلك',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'برجاء الاجابة على الأسئلة التالية',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 20),
-                      const Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          'بيانات العمل',
-                          style: TextStyle(
-                            fontSize: 34,
-                            fontWeight: FontWeight.w400,
-                            color: AppColors.black,
+        body: Stack(
+          children: [
+            ColoredBox(
+              color: AppColors.white,
+              child: SafeArea(
+                child: GestureDetector(
+                  onTap: () => FocusScope.of(context).unfocus(),
+                  behavior: HitTestBehavior.translucent,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Form(
+                      key: model.formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text(
+                            'اعرف عميلك',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
-                        ),
-                      ),
-                      const Divider(color: AppColors.border1, height: 28),
-                      Expanded(
-                        child: ListView(
-                          children: [
-                            if (model.isLoadingFields)
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 24),
-                                child: Center(child: CircularProgressIndicator()),
-                              )
-                            else if (model.fieldsError != null)
-                              Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 12),
-                                child: Text(
-                                  model.fieldsError!,
-                                  style:
-                                      const TextStyle(color: AppColors.error),
-                                  textAlign: TextAlign.center,
-                                ),
-                              )
-                            else ...[
-                              ...model.requestFields.map(
-                                (f) => UserInfoDynamicField(
-                                  field: f,
-                                  model: model,
-                                  onFormChanged: () =>
-                                      emit(UserInfoFormChangedEvent()),
-                                ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'برجاء الاجابة على الأسئلة التالية',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 20),
+                          const Align(
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              'بيانات العمل',
+                              style: TextStyle(
+                                fontSize: 34,
+                                fontWeight: FontWeight.w400,
+                                color: AppColors.black,
                               ),
-                              if (model.lookupFields.isNotEmpty) ...[
-                                ...model.lookupFields.map(
-                                  (f) => UserInfoDynamicField(
-                                    field: f,
-                                    model: model,
-                                    onFormChanged: () =>
-                                        emit(UserInfoFormChangedEvent()),
+                            ),
+                          ),
+                          const Divider(color: AppColors.border1, height: 28),
+                          Expanded(
+                            child: ListView(
+                              children: [
+                                if (model.isLoadingFields)
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 24),
+                                    child: Center(child: CircularProgressIndicator()),
+                                  )
+                                else if (model.fieldsError != null)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    child: Text(
+                                      model.fieldsError!,
+                                      style: const TextStyle(color: AppColors.error),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  )
+                                else ...[
+                                  ...model.requestFields.map(
+                                    (f) => UserInfoDynamicField(
+                                      field: f,
+                                      model: model,
+                                      onFormChanged: () =>
+                                          emit(UserInfoFormChangedEvent()),
+                                    ),
                                   ),
-                                ),
+                                  if (model.lookupFields.isNotEmpty) ...[
+                                    ...model.lookupFields.map(
+                                      (f) => UserInfoDynamicField(
+                                        field: f,
+                                        model: model,
+                                        onFormChanged: () =>
+                                            emit(UserInfoFormChangedEvent()),
+                                      ),
+                                    ),
+                                  ],
+                                  if (!model.isLoadingFields &&
+                                      model.fieldsError == null) ...[
+                                    UserInfoIdCardVillageField(
+                                      model: model,
+                                      onFormChanged: () =>
+                                          emit(UserInfoFormChangedEvent()),
+                                    ),
+                                  ],
+                                ],
                               ],
-                            ],
-                          ],
-                        ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          AppButton(
+                            title: 'حفظ',
+                            onPressed: (model.isLoadingFields || _isSubmitting)
+                                ? null
+                                : () => _onSavePressed(model),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 12),
-                      AppButton(
-                        title: _isSubmitting ? 'جاري الحفظ...' : 'حفظ',
-                        onPressed: (model.isLoadingFields || _isSubmitting)
-                            ? null
-                            : () => _onSavePressed(model),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
+            if (_isSubmitting)
+              const ColoredBox(
+                color: Color(0x66000000),
+                child: Center(
+                  child: CircularProgressIndicator(
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(AppColors.primary),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
 
   Future<void> _onSavePressed(UserInfoModel model) async {
-    // final isValid = model.formKey.currentState?.validate() ?? false;
-    // if (!isValid) return;
+    final isValid = model.formKey.currentState?.validate() ?? false;
+    if (!isValid) return;
 
-    // setState(() => _isSubmitting = true);
+    setState(() => _isSubmitting = true);
 
     try {
       emit(UserInfoSubmitEvent(model.buildSummaryAnswers()));

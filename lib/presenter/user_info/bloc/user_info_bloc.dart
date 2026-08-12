@@ -10,13 +10,13 @@ import '../../../utils/api_error_parser.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../id_data/utils/id_data_parser.dart';
 import '../../validate_user/constants/api_urls.dart';
+import '../../login_screen/utils/device_info_helper.dart';
 import '../event/user_info_event.dart';
 import '../model/lookups_response.dart';
 import '../model/request_fields_response.dart';
 import '../model/user_info_model.dart';
 import '../state/user_info_state.dart';
 import '../utils/user_info_lookup_helpers.dart';
-import '../utils/user_info_one_click_apply_builder.dart';
 
 class UserInfoBloc extends BaseBloc {
   UserInfoBloc(this._model)
@@ -42,15 +42,11 @@ class UserInfoBloc extends BaseBloc {
   Future<void> _onSubmit(UserInfoSubmitEvent event, emit) async {
     try {
       final cache = VerificationCache();
-      final cachedEmail = await cache.getEmail();
-      final cachedPhone = await cache.getMobileNumber();
-
-      final built = buildOneClickApplyBody(
-        model: _model,
-        answers: event.answers,
-        cachedEmail: cachedEmail,
-        cachedPhone: cachedPhone,
-      );
+      final requestTypeId = await cache.getRequestTypeId();
+      if (requestTypeId == null) {
+        emit(UserInfoSubmitFailedState('معرف نوع الطلب غير متوفر'));
+        return;
+      }
 
       final accessToken = await cache.getAccessToken();
       final encryptedToken = await cache.getEncryptedAccessToken();
@@ -61,13 +57,25 @@ class UserInfoBloc extends BaseBloc {
           ? HttpHeadersHelper.getHeadersWithAuth(token)
           : HttpHeadersHelper.getDefaultHeaders();
 
-      final url = ApiUrls.getOneClickApplyUrl();
-      final bodyJson = jsonEncode(built.body);
+      final requestFieldsValues = <String, dynamic>{};
+      for (final item in event.answers) {
+        requestFieldsValues[item.key] = item.value.trim();
+      }
+
+      final body = {
+        'requestTypeId': requestTypeId,
+        'geoLocation': await DeviceInfoHelper.getCurrentLocation(),
+        'userDeviceUtcTime': DateTime.now().toUtc().toIso8601String(),
+        'requestFieldsValues': requestFieldsValues,
+      };
+
+      final url = ApiUrls.getRequestCreateUrl();
+      final bodyJson = jsonEncode(body);
 
       if (kDebugMode) {
         print('');
         print('═══════════════════════════════════════════════════════');
-        print('📤 ONE-CLICK APPLY API CALL (USER_INFO)');
+        print('📤 REQUEST CREATE API CALL (USER_INFO)');
         print('═══════════════════════════════════════════════════════');
         print('URL: $url');
         print('Method: POST');
@@ -86,7 +94,7 @@ class UserInfoBloc extends BaseBloc {
       if (kDebugMode) {
         print('');
         print('═══════════════════════════════════════════════════════');
-        print('📥 ONE-CLICK APPLY API RESPONSE (USER_INFO)');
+        print('📥 REQUEST CREATE API RESPONSE (USER_INFO)');
         print('═══════════════════════════════════════════════════════');
         print('Status Code: ${response.statusCode}');
         print('Body: ${response.body}');
@@ -97,28 +105,38 @@ class UserInfoBloc extends BaseBloc {
       if (response.statusCode != 200) {
         final message = ApiErrorParser.extractMessage(
           response.body,
-          fallbackMessage: 'فشل إرسال طلب القرض (${response.statusCode})',
+          fallbackMessage: 'فشل إنشاء الطلب (${response.statusCode})',
         );
         emit(UserInfoSubmitFailedState(message));
         return;
       }
 
       final decoded = _tryDecodeMap(response.body);
-      if (decoded != null && decoded['success'] == false) {
+      if (!_isCreateRequestSuccess(decoded)) {
         final message = ApiErrorParser.extractMessage(
           response.body,
-          fallbackMessage: 'فشل إرسال طلب القرض',
+          fallbackMessage: 'فشل إنشاء الطلب',
         );
         emit(UserInfoSubmitFailedState(message));
         return;
       }
 
-      emit(UserInfoNavigateToSummaryState(event.answers));
-    } on OneClickApplyBuildException catch (e) {
-      emit(UserInfoSubmitFailedState(e.message));
+      final createdRequestId = _extractCreatedRequestId(decoded);
+      if (createdRequestId == null) {
+        emit(UserInfoSubmitFailedState('رقم الطلب الناتج من إنشاء الطلب غير متوفر'));
+        return;
+      }
+
+      emit(
+        UserInfoNavigateToSummaryState(
+          answeredFields: event.answers,
+          userInfoModel: _model,
+          createdRequestId: createdRequestId,
+        ),
+      );
     } catch (e) {
       if (kDebugMode) {
-        print('❌ ONE-CLICK APPLY ERROR: $e');
+        print('❌ REQUEST CREATE ERROR: $e');
       }
       emit(
         UserInfoSubmitFailedState(
@@ -126,6 +144,32 @@ class UserInfoBloc extends BaseBloc {
         ),
       );
     }
+  }
+
+  bool _isCreateRequestSuccess(Map<String, dynamic>? responseBody) {
+    if (responseBody == null) return false;
+    final rootSuccess = responseBody['success'];
+    if (rootSuccess is bool) return rootSuccess;
+
+    final data = responseBody['data'];
+    if (data is Map) {
+      final dataSuccess = data['success'];
+      if (dataSuccess is bool) return dataSuccess;
+    }
+    return false;
+  }
+
+  dynamic _extractCreatedRequestId(Map<String, dynamic>? responseBody) {
+    if (responseBody == null) return null;
+    if (responseBody['id'] != null) return responseBody['id'];
+
+    final data = responseBody['data'];
+    if (data is Map) {
+      final dataMap = Map<String, dynamic>.from(data);
+      if (dataMap['id'] != null) return dataMap['id'];
+      if (dataMap['requestId'] != null) return dataMap['requestId'];
+    }
+    return null;
   }
 
   Map<String, dynamic>? _tryDecodeMap(String raw) {

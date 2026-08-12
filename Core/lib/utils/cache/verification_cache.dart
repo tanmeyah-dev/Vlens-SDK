@@ -237,6 +237,13 @@ class VerificationCache {
     }
   }
 
+  /// Clear cached VLens identity so the next success overwrites cleanly.
+  Future<void> clearVlensIdentityData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyVlensExtractedData);
+    await prefs.remove(_keyVlensTraceResponseBody);
+  }
+
   /// Cache full login response data model (not only session tokens).
   Future<void> setLoginResponseData(dynamic loginResponseData) async {
     final prefs = await SharedPreferences.getInstance();

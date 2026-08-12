@@ -14,6 +14,13 @@ ExtractedUserData? parseExtractedUserData(dynamic value) {
     );
   }
 
+  // VLens SDK success payload (non-JSON typed model).
+  try {
+    return ExtractedUserData.fromExtractedData(value);
+  } catch (_) {
+    // Fall through to encode/decode.
+  }
+
   try {
     final encoded = jsonEncode(value);
     final decoded = jsonDecode(encoded);
@@ -33,8 +40,16 @@ ExtractedUserData? parseExtractedUserData(dynamic value) {
 
 dynamic normalizeDynamicData(dynamic value) {
   if (value == null) return null;
+  if (value is ExtractedUserData) return value.toJson();
   if (value is Map || value is List || value is String || value is num || value is bool) {
     return value;
+  }
+
+  try {
+    final fromSdk = ExtractedUserData.fromExtractedData(value);
+    return fromSdk.toJson();
+  } catch (_) {
+    // Fall through.
   }
 
   try {

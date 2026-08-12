@@ -105,7 +105,6 @@ class RegisterScreenBloc extends BaseBloc {
 
       // Prepare request body (local create-user)
       final cache = VerificationCache();
-      final phoneOtpRequestId = await cache.getPhoneNumberOtpRequestId();
       final oauthFromCache =
           (await cache.getOAuthTokenVerificationRequestId())?.trim();
       final oauthFromEvent = event.oauthTokenVerificationRequestId?.trim();
@@ -133,7 +132,6 @@ class RegisterScreenBloc extends BaseBloc {
       print(
         'resolved oauthTokenVerificationRequestId: $oauthTokenVerificationRequestId',
       );
-      print('cache.phoneNumberOtpRequestId: "$phoneOtpRequestId"');
       print('═══════════════════════════════════════════════════════');
       print('');
 
@@ -154,10 +152,6 @@ class RegisterScreenBloc extends BaseBloc {
         // Google id, or null when user did not sign in with Google.
         'oauthTokenVerificationRequestId': oauthTokenVerificationRequestId,
       };
-
-      if (phoneOtpRequestId != null && phoneOtpRequestId.trim().isNotEmpty) {
-        body['phoneNumberOtpRequestId'] = phoneOtpRequestId.trim();
-      }
 
       final requestBody = jsonEncode(body);
 

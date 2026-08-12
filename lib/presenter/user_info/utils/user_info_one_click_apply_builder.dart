@@ -115,7 +115,7 @@ OneClickApplyBuildResult buildOneClickApplyBody({
       ]) ??
       '';
 
-  final phoneNo2 = '';
+  final phoneNo2 = null;
 
   final nickname = answer(const ['nickname', 'nickName', 'alias']) ?? '';
 
@@ -206,13 +206,32 @@ OneClickApplyBuildResult buildOneClickApplyBody({
     streetFallback: formStreet,
     buildingNoFallback: formBuildingNo,
     addMarkFallback: addressAddMark,
+    // state/city/village must come only from locations lookups cascade.
+    locationCodesFromLookupsOnly: true,
   );
+  final lookupLocationCodes = _lookupLocationCodesFromForm(model);
+  address['stateCode'] = lookupLocationCodes.stateCode;
+  address['cityCode'] = lookupLocationCodes.cityCode;
+  address['villageCode'] = lookupLocationCodes.villageCode;
   if (formStreet != null && formStreet.isNotEmpty) {
     address['street'] = formStreet;
     address['addMark'] = formStreet;
   }
   if (formBuildingNo != null && formBuildingNo.isNotEmpty) {
     address['buildingNo'] = formBuildingNo;
+  }
+  // address.floorNo must match buildingNo.
+  final addressBuildingValue = address['buildingNo']?.toString().trim();
+  if (addressBuildingValue != null && addressBuildingValue.isNotEmpty) {
+    address['floorNo'] = _asInt(addressBuildingValue) ?? addressBuildingValue;
+  }
+  // address.flatNo must match floorNo.
+  final previousAddressFlat = address.remove('flatno');
+  final addressFloorValue = address['floorNo']?.toString().trim();
+  if (addressFloorValue != null && addressFloorValue.isNotEmpty) {
+    address['flatNo'] = _asInt(addressFloorValue) ?? addressFloorValue;
+  } else if (previousAddressFlat != null) {
+    address['flatNo'] = previousAddressFlat;
   }
   if ((address['addMark']?.toString().trim().isEmpty ?? true)) {
     throw OneClickApplyBuildException(
@@ -240,6 +259,69 @@ OneClickApplyBuildResult buildOneClickApplyBody({
   }
   if (idCardStreetName != null && idCardStreetName.isNotEmpty) {
     addressInIdCard['addMark'] = idCardStreetName;
+  }
+  // addressInIdCard.floorNo must match street (building number from ID).
+  final idCardStreetValue = addressInIdCard['street']?.toString().trim();
+  if (idCardStreetValue != null && idCardStreetValue.isNotEmpty) {
+    addressInIdCard['floorNo'] =
+        _asInt(idCardStreetValue) ?? idCardStreetValue;
+  }
+  // addressInIdCard.flatNo must match buildingNo.
+  final previousFlat = addressInIdCard.remove('flatno');
+  final idCardBuildingValue =
+      addressInIdCard['buildingNo']?.toString().trim();
+  if (idCardBuildingValue != null && idCardBuildingValue.isNotEmpty) {
+    addressInIdCard['flatNo'] =
+        _asInt(idCardBuildingValue) ?? idCardBuildingValue;
+  } else if (previousFlat != null) {
+    addressInIdCard['flatNo'] = previousFlat;
+  }
+
+  // Prefer extracted ID location data for addressInIdCard.
+  addressInIdCard['countryCode'] = 1;
+  final idLocationAddressText = _firstNonEmpty([
+    idCardAddressText,
+    front?.address,
+    front?.address1,
+    front?.address2,
+    addressInIdCard['addMark']?.toString(),
+  ]);
+  final matchedGovernorate = resolveGovernorateFromIdExtract(
+    locations: model.locations,
+    govern: front?.govern,
+    governEnglish: front?.governEnglish,
+    addressText: idLocationAddressText,
+  );
+  if (matchedGovernorate != null) {
+    addressInIdCard['stateCode'] = matchedGovernorate.id;
+    // Drop form city/village — they belong to customer address lookups.
+    addressInIdCard['cityCode'] = null;
+    addressInIdCard['villageCode'] = null;
+  }
+  final matchedCity = resolveCityFromIdExtract(
+    locations: model.locations,
+    governorate: matchedGovernorate,
+    city: front?.city,
+    district: front?.district,
+    addressText: idLocationAddressText,
+  );
+  if (matchedCity != null) {
+    addressInIdCard['cityCode'] = matchedCity.id;
+  }
+
+  final idCardVillageCode =
+      _asInt(model.selectedValues[idCardVillageFieldKey]);
+  if (matchedCity != null && matchedCity.villages.isNotEmpty) {
+    if (idCardVillageCode == null) {
+      throw OneClickApplyBuildException(
+        'برجاء اختيار المنطقة التابعة للبطاقة',
+      );
+    }
+    addressInIdCard['villageCode'] = idCardVillageCode;
+  } else if (idCardVillageCode != null) {
+    addressInIdCard['villageCode'] = idCardVillageCode;
+  } else {
+    addressInIdCard['villageCode'] = 0;
   }
 
   final loanDetails = _buildLoanDetails(
@@ -356,6 +438,7 @@ Map<String, dynamic> _buildAddress({
   Map<String, dynamic>? fallbackAddress,
   String? buildingNoFallback,
   String? addMarkFallback,
+  bool locationCodesFromLookupsOnly = false,
 }) {
   String? scoped(List<String> aliases) {
     if (keyPrefixAliases.isNotEmpty) {
@@ -370,43 +453,30 @@ Map<String, dynamic> _buildAddress({
     return _findByAliases(byKey, aliases);
   }
 
-  int? stateCode;
-  int? cityCode;
-  int? villageCode;
+  final lookupCodes = _lookupLocationCodesFromForm(model);
+  int? stateCode = lookupCodes.stateCode;
+  int? cityCode = lookupCodes.cityCode;
+  int? villageCode = lookupCodes.villageCode;
 
-  for (final field in model.allFormFields) {
-    final role = detectLocationFieldRole(field);
-    if (role == null) continue;
-    final raw = model.selectedValues[field.key];
-    final id = _asInt(raw);
-    if (id == null) continue;
-    switch (role) {
-      case LocationFieldRole.governorate:
-        stateCode ??= id;
-      case LocationFieldRole.city:
-        cityCode ??= id;
-      case LocationFieldRole.village:
-        villageCode ??= id;
-    }
+  if (!locationCodesFromLookupsOnly) {
+    stateCode ??= _asInt(scoped(const [
+      'stateCode',
+      'governorate',
+      'governate',
+      'CIF_GOVERNORATE',
+    ]));
+    cityCode ??= _asInt(scoped(const ['cityCode', 'city', 'CIF_CITY']));
+    villageCode ??= _asInt(scoped(const [
+      'villageCode',
+      'village',
+      'district',
+      'CIF_VILLAGE',
+      'CIF_DISTRICT',
+    ]));
   }
 
-  stateCode ??= _asInt(scoped(const [
-    'stateCode',
-    'governorate',
-    'governate',
-    'CIF_GOVERNORATE',
-  ]));
-  cityCode ??= _asInt(scoped(const ['cityCode', 'city', 'CIF_CITY']));
-  villageCode ??= _asInt(scoped(const [
-    'villageCode',
-    'village',
-    'district',
-    'CIF_VILLAGE',
-    'CIF_DISTRICT',
-  ]));
-
   final street = _firstNonEmpty([
-        scoped(const ['street', 'customerAddress']),
+        scoped(const ['street', 'propertyAddress']),
         streetFallback,
       ]) ??
       '';
@@ -450,7 +520,7 @@ Map<String, dynamic> _buildAddress({
     'street': street,
     'buildingNo': buildingNo,
     'floorNo': floorNo,
-    'flatno': flatno,
+    'flatNo': flatno,
     'addMark': addMark,
   };
 
@@ -475,6 +545,47 @@ Map<String, dynamic> _buildAddress({
     return copied;
   }
   return built;
+}
+
+/// state/city/village codes from form location cascade (lookups) only.
+({int? stateCode, int? cityCode, int? villageCode})
+    _lookupLocationCodesFromForm(UserInfoModel model) {
+  int? stateCode;
+  int? cityCode;
+  int? villageCode;
+
+  String? selectedFor(LocationFieldRole role) {
+    final field = findLocationFieldByRole(model.allFormFields, role);
+    if (field == null) return null;
+    return model.selectedValues[field.key]?.trim();
+  }
+
+  final stateRaw = selectedFor(LocationFieldRole.governorate);
+  final cityRaw = selectedFor(LocationFieldRole.city);
+  final villageRaw = selectedFor(LocationFieldRole.village);
+
+  // Prefer validating against backend locations hierarchy when available.
+  if (model.locations.isNotEmpty) {
+    final gov = findGovernorateById(model.locations, stateRaw);
+    if (gov != null) {
+      stateCode = gov.id;
+      final city = findCityById(gov, cityRaw);
+      if (city != null) {
+        cityCode = city.id;
+        final village = findVillageById(city, villageRaw);
+        if (village != null) {
+          villageCode = village.id;
+        }
+      }
+    }
+    return (stateCode: stateCode, cityCode: cityCode, villageCode: villageCode);
+  }
+
+  // Fallback: use selected lookup ids as-is when locations list is empty.
+  stateCode = _asInt(stateRaw);
+  cityCode = _asInt(cityRaw);
+  villageCode = _asInt(villageRaw);
+  return (stateCode: stateCode, cityCode: cityCode, villageCode: villageCode);
 }
 
 /// First number in an address string, e.g. "108 شارع النصر" / "١٠٨ شارع..." → "108".

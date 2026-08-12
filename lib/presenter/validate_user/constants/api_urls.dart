@@ -91,13 +91,6 @@ class ApiUrls {
     return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/phone/verify-otp';
   }
 
-  /// Vlens Register/StepVerifyPhone — send OTP (`phoneNumber` only) or validate
-  /// OTP (`phoneNumber` + `phoneNumberOtpRequestId` + `phoneNumberOtp`).
-  /// See https://docs.vlenseg.com/quickstart
-  static String getStepVerifyPhoneUrl() {
-    return 'https://api.vlenseg.com/api/DigitalIdentity/Register/StepVerifyPhone';
-  }
-
   static String getSendEmailOtpUrl() {
     return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/email/send-otp';
   }
@@ -157,6 +150,11 @@ class ApiUrls {
   /// E-contract customer validate OTP.
   static String getEContractCustomerValidateOtpUrl() {
     return '${getLocalBaseUrl()}/vlens/api/v1/e-contract/customer/validate/otp';
+  }
+
+  /// Mark loan ready for disbursement (after e-contract OTP success).
+  static String getReadyForDisbursementUrl() {
+    return '${getLocalBaseUrl()}/vlens/api/v1/mobile/customers/loans/ready-for-disbursement';
   }
 
   /// Check if running on emulator/simulator

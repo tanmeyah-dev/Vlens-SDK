@@ -8,7 +8,7 @@ class UserInfoLoadFieldsEvent extends BaseEvent {}
 /// Re-emits [UpdateUserInfoUI] after the [UserInfoModel] was mutated in place (form controls).
 class UserInfoFormChangedEvent extends BaseEvent {}
 
-/// Form passed validation; submit one-click-apply then navigate to summary.
+/// Form passed validation; submit request/create then navigate to summary.
 class UserInfoSubmitEvent extends BaseEvent {
   final List<SummaryAnswerItem> answers;
 

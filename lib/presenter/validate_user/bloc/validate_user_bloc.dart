@@ -16,7 +16,7 @@ import '../state/validate_user_state.dart';
 class ValidateUserBloc extends BaseBloc {
   final ValidateUserModel _mobileNumberModel;
   String get _apiUrlCheck => ApiUrls.getIdentityCheckUrl();
-  String get _apiUrlStepVerifyPhone => ApiUrls.getStepVerifyPhoneUrl();
+  String get _apiUrlSendPhoneOtp => ApiUrls.getSendPhoneOtpUrl();
   
   // Flag to prevent duplicate API calls
   bool _isRequestInProgress = false;
@@ -330,7 +330,7 @@ class ValidateUserBloc extends BaseBloc {
       print('═══════════════════════════════════════════════════════');
       print('📤 STEP VERIFY PHONE API REQUEST');
       print('═══════════════════════════════════════════════════════');
-      print('URL: $_apiUrlStepVerifyPhone');
+      print('URL: $_apiUrlSendPhoneOtp');
       print('Method: POST');
       print('Headers: ${HttpHeadersHelper.getDefaultHeaders()}');
       print('Body: $requestBody');
@@ -340,7 +340,7 @@ class ValidateUserBloc extends BaseBloc {
 
       // Make API call
       final response = await SdkHttpClient.post(
-        Uri.parse(_apiUrlStepVerifyPhone),
+        Uri.parse(_apiUrlSendPhoneOtp),
         headers: HttpHeadersHelper.getDefaultHeaders(),
         body: requestBody,
       ).timeout(
@@ -395,21 +395,12 @@ class ValidateUserBloc extends BaseBloc {
               print('✅ Phone already confirmed - navigating to login screen');
               emit(OnPhoneNumberExistsState());
             } else {
-              final phoneOtpId = sendOtpResponse.phoneNumberOtpRequestId?.trim();
-              if (phoneOtpId == null || phoneOtpId.isEmpty) {
-                print(
-                  '❌ Vlens send-otp succeeded but phoneNumberOtpRequestId is missing',
-                );
-                emit(OnValidateUserErrorState(
-                  'تعذر الحصول على معرف التحقق من الهاتف. يرجى المحاولة مرة أخرى.',
-                ));
-              } else {
-                print('✅ Phone not confirmed - showing verification dialog');
-                emit(OnValidateUserSavedState(
-                  phoneNumberOtpRequestId: phoneOtpId,
-                  transactionId: sendOtpResponse.transactionId,
-                ));
-              }
+              print('✅ Phone not confirmed - showing verification dialog');
+              emit(OnValidateUserSavedState(
+                phoneNumberOtpRequestId:
+                    sendOtpResponse.phoneNumberOtpRequestId,
+                transactionId: sendOtpResponse.transactionId,
+              ));
             }
           } else {
             print('❌ StepVerifyPhone API unsuccessful response');

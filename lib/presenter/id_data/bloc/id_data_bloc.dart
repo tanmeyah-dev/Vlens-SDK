@@ -29,33 +29,48 @@ class IdDataBloc extends BaseBloc {
   ) async {
     emit(UpdateIdDataUI(_model));
 
-    await Future.wait<void>([
-      _ensureCachedExtractedData(),
-      _loadCachedVlensTraceResponseBody(emit),
-    ]);
+    // 1) Prefer the fresh VLens success payload passed into this screen.
+    final fresh = _model.effectiveExtractedData ??
+        parseExtractedUserData(_model.extractedData);
+    if (fresh != null) {
+      _model.effectiveExtractedData = fresh;
+      await _overwriteCachedExtractedData(fresh);
+      emit(UpdateIdDataUI(_model));
+    } else {
+      // 2) Only if no fresh scan was provided, show last cached success.
+      await _loadCachedVlensData(emit);
+    }
+
     unawaited(_fetchAndCacheRequestTypeId(emit));
   }
 
-  Future<void> _ensureCachedExtractedData() async {
+  Future<void> _overwriteCachedExtractedData(dynamic data) async {
     try {
-      final normalized =
-          (_model.effectiveExtractedData ??
-                  parseExtractedUserData(_model.extractedData))
-              ?.toJson() ??
-          normalizeDynamicData(_model.extractedData);
+      final normalized = parseExtractedUserData(data)?.toJson() ??
+          normalizeDynamicData(data);
       if (normalized == null) return;
-      await VerificationCache().setVlensExtractedData(normalized);
-    } catch (_) {}
+      final cache = VerificationCache();
+      await cache.setVlensExtractedData(normalized);
+      await cache.setVlensTraceResponseBody(normalized);
+      // ignore: avoid_print
+      print('💾 IdDataBloc: overwritten VLens cache with latest scan');
+    } catch (e) {
+      // ignore: avoid_print
+      print('⚠️ IdDataBloc: failed to overwrite VLens cache: $e');
+    }
   }
 
-  Future<void> _loadCachedVlensTraceResponseBody(dynamic emit) async {
-    final cachedTraceBody = await VerificationCache().getVlensTraceResponseBody();
-    if (cachedTraceBody == null) return;
-    final parsed = parseExtractedUserData(cachedTraceBody);
-    if (_model.effectiveExtractedData == null) {
-      _model.effectiveExtractedData = parsed;
-      emit(UpdateIdDataUI(_model));
-    }
+  Future<void> _loadCachedVlensData(dynamic emit) async {
+    final cache = VerificationCache();
+    final cached = await cache.getVlensExtractedData() ??
+        await cache.getVlensTraceResponseBody();
+    if (cached == null) return;
+    final parsed = parseExtractedUserData(cached);
+    if (parsed == null) return;
+    _model.effectiveExtractedData = parsed;
+    emit(UpdateIdDataUI(_model));
+    // ignore: avoid_print
+    print('📦 IdDataBloc: loaded cached VLens data (no fresh scan provided)');
   }
 
   Future<void> _fetchAndCacheRequestTypeId(dynamic emit) async {
@@ -117,8 +132,12 @@ class IdDataBloc extends BaseBloc {
     emit(UpdateIdDataUI(_model));
 
     try {
-      // Always refresh cached identity so user_info can prefill from it.
-      await _ensureCachedExtractedData();
+      // Always refresh cached identity so user_info can prefill from latest scan.
+      final latest = _model.effectiveExtractedData ??
+          parseExtractedUserData(_model.extractedData);
+      if (latest != null) {
+        await _overwriteCachedExtractedData(latest);
+      }
 
       if (await VerificationCache().getRequestTypeId() == null) {
         await _fetchAndCacheRequestTypeId(emit);

@@ -12,16 +12,21 @@ import '../../../data/models/extracted_user_data.dart';
 import '../../../utils/api_error_parser.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../user_info/model/summary_answer_item.dart';
-import '../utils/device_info_helper.dart';
+import '../../user_info/model/user_info_model.dart';
+import '../../user_info/utils/user_info_one_click_apply_builder.dart';
 import 'waiting_approval_screen.dart';
 import '../../validate_user/constants/api_urls.dart';
 
 class SummaryScreen extends StatefulWidget {
   final List<SummaryAnswerItem> answeredFields;
+  final UserInfoModel userInfoModel;
+  final dynamic createdRequestId;
 
   const SummaryScreen({
     super.key,
     required this.answeredFields,
+    required this.userInfoModel,
+    required this.createdRequestId,
   });
 
   @override
@@ -297,10 +302,15 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
     try {
       final cache = VerificationCache();
-      final requestTypeId = await cache.getRequestTypeId();
-      if (requestTypeId == null) {
-        throw Exception('معرف نوع الطلب غير متوفر');
-      }
+      final cachedEmail = await cache.getEmail();
+      final cachedPhone = await cache.getMobileNumber();
+
+      final built = buildOneClickApplyBody(
+        model: widget.userInfoModel,
+        answers: widget.answeredFields,
+        cachedEmail: cachedEmail,
+        cachedPhone: cachedPhone,
+      );
 
       final accessToken = await cache.getAccessToken();
       final encryptedToken = await cache.getEncryptedAccessToken();
@@ -311,41 +321,29 @@ class _SummaryScreenState extends State<SummaryScreen> {
           ? HttpHeadersHelper.getHeadersWithAuth(token)
           : HttpHeadersHelper.getDefaultHeaders();
 
-      final userDeviceUtcTime = DateTime.now().toUtc().toIso8601String();
+      final url = ApiUrls.getOneClickApplyUrl();
+      final bodyJson = jsonEncode(built.body);
 
-      final requestFieldsValues = <String, dynamic>{};
-      for (final item in widget.answeredFields) {
-        requestFieldsValues[item.key] = item.value.trim();
-      }
-
-      final body = {
-        'requestTypeId': requestTypeId,
-        'geoLocation': await DeviceInfoHelper.getCurrentLocation(),
-        'userDeviceUtcTime': userDeviceUtcTime,
-        'requestFieldsValues': requestFieldsValues,
-      };
-
-      final createUrl = ApiUrls.getRequestCreateUrl();
       print('');
       print('═══════════════════════════════════════════════════════');
-      print('📤 REQUEST CREATE API CALL (SUMMARY)');
+      print('📤 ONE-CLICK APPLY API CALL (SUMMARY)');
       print('═══════════════════════════════════════════════════════');
-      print('URL: $createUrl');
+      print('URL: $url');
       print('Method: POST');
       print('Headers: $headers');
-      print('Body: ${jsonEncode(body)}');
+      print('Body: $bodyJson');
       print('═══════════════════════════════════════════════════════');
       print('');
 
       final response = await SdkHttpClient.post(
-        Uri.parse(createUrl),
+        Uri.parse(url),
         headers: headers,
-        body: jsonEncode(body),
+        body: bodyJson,
       );
 
       print('');
       print('═══════════════════════════════════════════════════════');
-      print('📥 REQUEST CREATE API RESPONSE (SUMMARY)');
+      print('📥 ONE-CLICK APPLY API RESPONSE (SUMMARY)');
       print('═══════════════════════════════════════════════════════');
       print('Status Code: ${response.statusCode}');
       print('Body: ${response.body}');
@@ -353,45 +351,42 @@ class _SummaryScreenState extends State<SummaryScreen> {
       print('');
 
       if (!mounted) return;
-      if (response.statusCode == 200) {
-        final decodedCreateResponse = _tryDecodeMap(response.body);
-        final isCreateSuccess = _isCreateRequestSuccess(decodedCreateResponse);
-        if (!isCreateSuccess) {
-          final createErrorMessage = ApiErrorParser.extractMessage(
-            response.body,
-            fallbackMessage: 'فشل إنشاء الطلب',
-          );
-          throw Exception(createErrorMessage);
-        }
 
-        final createdRequestId = _extractCreatedRequestId(decodedCreateResponse);
-        if (createdRequestId == null) {
-          throw Exception('رقم الطلب الناتج من إنشاء الطلب غير متوفر');
-        }
-
-        setState(() {
-          _isSubmitting = false;
-        });
-        if (!mounted) return;
-        await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => WaitingApprovalScreen(requestId: createdRequestId),
-          ),
+      if (response.statusCode != 200) {
+        final message = ApiErrorParser.extractMessage(
+          response.body,
+          fallbackMessage: 'فشل إرسال طلب القرض (${response.statusCode})',
         );
-      } else {
-        final errorMessage = response.statusCode == 417
-            ? ApiErrorParser.extractMessage(
-                response.body,
-                fallbackMessage: 'تم إرسال الطلب (${response.statusCode})',
-              )
-            : 'تم إرسال الطلب (${response.statusCode})';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        throw Exception(message);
       }
+
+      final decoded = _tryDecodeMap(response.body);
+      if (decoded != null && decoded['success'] == false) {
+        final message = ApiErrorParser.extractMessage(
+          response.body,
+          fallbackMessage: 'فشل إرسال طلب القرض',
+        );
+        throw Exception(message);
+      }
+
+      setState(() {
+        _isSubmitting = false;
+      });
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              WaitingApprovalScreen(requestId: widget.createdRequestId),
+        ),
+      );
+    } on OneClickApplyBuildException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: AppColors.error,
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -419,32 +414,6 @@ class _SummaryScreenState extends State<SummaryScreen> {
       }
     } catch (_) {
       // Ignore malformed JSON and fallback with null map.
-    }
-    return null;
-  }
-
-  bool _isCreateRequestSuccess(Map<String, dynamic>? responseBody) {
-    if (responseBody == null) return false;
-    final rootSuccess = responseBody['success'];
-    if (rootSuccess is bool) return rootSuccess;
-
-    final data = responseBody['data'];
-    if (data is Map) {
-      final dataSuccess = data['success'];
-      if (dataSuccess is bool) return dataSuccess;
-    }
-    return false;
-  }
-
-  dynamic _extractCreatedRequestId(Map<String, dynamic>? responseBody) {
-    if (responseBody == null) return null;
-    if (responseBody['id'] != null) return responseBody['id'];
-
-    final data = responseBody['data'];
-    if (data is Map) {
-      final dataMap = Map<String, dynamic>.from(data);
-      if (dataMap['id'] != null) return dataMap['id'];
-      if (dataMap['requestId'] != null) return dataMap['requestId'];
     }
     return null;
   }

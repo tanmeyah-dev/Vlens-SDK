@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:core/style/app_colors.dart';
@@ -5,6 +6,7 @@ import 'package:core/utils/cache/verification_cache.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:flutter/material.dart';
 
+import '../../../data/models/extracted_user_data.dart';
 import '../../../utils/api_error_parser.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../validate_user/constants/api_urls.dart';
@@ -298,6 +300,9 @@ class EContractOtpHelper {
             : 'فشل التحقق من OTP');
       }
 
+      // Fire-and-forget after successful OTP validate (HTTP 200 + success).
+      unawaited(_fireReadyForDisbursementInBackground(cache, headers));
+
       return parsed;
     } catch (e) {
       if (!context.mounted) return null;
@@ -309,5 +314,99 @@ class EContractOtpHelper {
       );
       return null;
     }
+  }
+
+  /// Background POST to ready-for-disbursement with cached national ID.
+  static Future<void> _fireReadyForDisbursementInBackground(
+    VerificationCache cache,
+    Map<String, String> headers,
+  ) async {
+    try {
+      final nationalId = await _resolveCachedNationalId(cache);
+      if (nationalId == null || nationalId.isEmpty) {
+        print('⚠️ READY-FOR-DISBURSEMENT skipped: nationalId not in cache');
+        return;
+      }
+
+      final url = ApiUrls.getReadyForDisbursementUrl();
+      final body = {'nationalId': nationalId};
+
+      print('');
+      print('═══════════════════════════════════════════════════════');
+      print('📤 READY-FOR-DISBURSEMENT API CALL (BACKGROUND)');
+      print('═══════════════════════════════════════════════════════');
+      print('URL: $url');
+      print('Method: POST');
+      print('Headers: $headers');
+      print('Body: ${jsonEncode(body)}');
+      print('═══════════════════════════════════════════════════════');
+      print('');
+
+      final response = await SdkHttpClient.post(
+        Uri.parse(url),
+        headers: headers,
+        body: jsonEncode(body),
+      );
+
+      print('');
+      print('═══════════════════════════════════════════════════════');
+      print('📥 READY-FOR-DISBURSEMENT API RESPONSE (BACKGROUND)');
+      print('═══════════════════════════════════════════════════════');
+      print('Status Code: ${response.statusCode}');
+      print('Body: ${response.body}');
+      print('═══════════════════════════════════════════════════════');
+      print('');
+    } catch (e) {
+      print('⚠️ READY-FOR-DISBURSEMENT background error: $e');
+    }
+  }
+
+  static Future<String?> _resolveCachedNationalId(VerificationCache cache) async {
+    final cached = await cache.getVlensExtractedData();
+    if (cached == null) return null;
+
+    ExtractedUserData? data;
+    if (cached is ExtractedUserData) {
+      data = cached;
+    } else if (cached is Map<String, dynamic>) {
+      data = ExtractedUserData.fromJson(cached);
+    } else if (cached is Map) {
+      data = ExtractedUserData.fromJson(Map<String, dynamic>.from(cached));
+    }
+
+    final fromModel = data?.idFrontData?.idNumber?.trim() ??
+        data?.idBackData?.idNumber?.trim() ??
+        data?.user?.idNumber?.trim();
+    if (fromModel != null && fromModel.isNotEmpty) return fromModel;
+
+    return _extractNationalIdFromDynamic(cached);
+  }
+
+  static String? _extractNationalIdFromDynamic(dynamic value) {
+    if (value == null) return null;
+    if (value is Map) {
+      final map = Map<String, dynamic>.from(value);
+      for (final key in const [
+        'idNumber',
+        'nationalId',
+        'nationalID',
+        'id_number',
+      ]) {
+        final direct = map[key]?.toString().trim();
+        if (direct != null && direct.isNotEmpty) return direct;
+      }
+      for (final entry in map.values) {
+        final nested = _extractNationalIdFromDynamic(entry);
+        if (nested != null && nested.isNotEmpty) return nested;
+      }
+      return null;
+    }
+    if (value is List) {
+      for (final item in value) {
+        final nested = _extractNationalIdFromDynamic(item);
+        if (nested != null && nested.isNotEmpty) return nested;
+      }
+    }
+    return null;
   }
 }
