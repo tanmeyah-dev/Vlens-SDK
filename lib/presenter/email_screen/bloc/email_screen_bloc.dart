@@ -176,11 +176,7 @@ class EmailScreenBloc extends BaseBloc {
         emit(OnEmailLoadingDismissedState());
         return;
       }
-      emit(OnEmailErrorState(
-        e.description?.trim().isNotEmpty == true
-            ? e.description!
-            : 'فشل تسجيل الدخول بحساب Google',
-      ));
+      emit(OnEmailErrorState(_googleSignInUserMessage(e)));
     } catch (e) {
       print('❌ Google OAuth error: $e');
       _model.isLoading = false;
@@ -204,6 +200,31 @@ class EmailScreenBloc extends BaseBloc {
         ));
       }
     }
+  }
+
+  /// Maps Google Sign-In failures to actionable Arabic messages.
+  /// Release builds often fail with ApiException 10 (DEVELOPER_ERROR) when the
+  /// release / Play App Signing SHA-1 is missing from the Android OAuth client.
+  String _googleSignInUserMessage(GoogleSignInException e) {
+    final raw = '${e.description ?? ''} ${e.code.name}'.toLowerCase();
+    final looksLikeDeveloperError = raw.contains('10:') ||
+        raw.contains('api_exception: 10') ||
+        raw.contains('developer_error') ||
+        raw.contains('developer error') ||
+        raw.contains('12500') ||
+        e.code == GoogleSignInExceptionCode.clientConfigurationError ||
+        e.code == GoogleSignInExceptionCode.providerConfigurationError;
+
+    if (looksLikeDeveloperError) {
+      return 'فشل Google Sign-In في نسخة الـ release.\n'
+          'أضف SHA-1 لمفتاح التوقيع (release / Play App Signing) '
+          'إلى عميل Android في Google Cloud Console ثم انتظر بضع دقائق.';
+    }
+
+    if (e.description?.trim().isNotEmpty == true) {
+      return e.description!.trim();
+    }
+    return 'فشل تسجيل الدخول بحساب Google';
   }
 
   _onSaveEmailEvent(SaveEmailEvent event, emit) async {
