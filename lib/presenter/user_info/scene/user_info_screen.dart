@@ -13,7 +13,6 @@ import '../event/user_info_event.dart';
 import '../model/user_info_model.dart';
 import '../state/user_info_state.dart';
 import '../widget/user_info_dynamic_field.dart';
-import '../widget/user_info_id_card_village_field.dart';
 
 class UserInfoScreen extends StatefulWidget {
   final Map<String, dynamic> eligibilityResponse;
@@ -127,6 +126,8 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
                           const Divider(color: AppColors.border1, height: 28),
                           Expanded(
                             child: ListView(
+                              keyboardDismissBehavior:
+                                  ScrollViewKeyboardDismissBehavior.onDrag,
                               children: [
                                 if (model.isLoadingFields)
                                   const Padding(
@@ -159,14 +160,6 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
                                         onFormChanged: () =>
                                             emit(UserInfoFormChangedEvent()),
                                       ),
-                                    ),
-                                  ],
-                                  if (!model.isLoadingFields &&
-                                      model.fieldsError == null) ...[
-                                    UserInfoIdCardVillageField(
-                                      model: model,
-                                      onFormChanged: () =>
-                                          emit(UserInfoFormChangedEvent()),
                                     ),
                                   ],
                                 ],

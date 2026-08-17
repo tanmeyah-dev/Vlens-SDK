@@ -22,6 +22,10 @@ class UserInfoDynamicField extends StatelessWidget {
   final UserInfoModel model;
   final VoidCallback onFormChanged;
 
+  void _dismissKeyboard(BuildContext context) {
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
   @override
   Widget build(BuildContext context) {
     final title =
@@ -48,6 +52,8 @@ class UserInfoDynamicField extends StatelessWidget {
                 ]
               : null,
           textAlign: TextAlign.right,
+          onEditingComplete: () => _dismissKeyboard(context),
+          onTapOutside: (_) => _dismissKeyboard(context),
           validator: (value) {
             final text = (value ?? '').trim();
             if (text.isEmpty) return 'هذا الحقل مطلوب';
@@ -79,6 +85,8 @@ class UserInfoDynamicField extends StatelessWidget {
             FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
           ],
           textAlign: TextAlign.right,
+          onEditingComplete: () => _dismissKeyboard(context),
+          onTapOutside: (_) => _dismissKeyboard(context),
           validator: (value) {
             final text = (value ?? '').trim();
             if (text.isEmpty) return 'هذا الحقل مطلوب';
@@ -132,6 +140,7 @@ class UserInfoDynamicField extends StatelessWidget {
                 RadioGroup<String>(
                   groupValue: formState.value,
                   onChanged: (value) {
+                    _dismissKeyboard(context);
                     formState.didChange(value);
                     model.selectedValues[field.key] = value;
                     onFormChanged();
@@ -189,6 +198,7 @@ class UserInfoDynamicField extends StatelessWidget {
           ),
           controlAffinity: ListTileControlAffinity.leading,
           onChanged: (value) {
+            _dismissKeyboard(context);
             model.checkboxValues[field.key] = value ?? false;
             onFormChanged();
           },
@@ -225,6 +235,7 @@ class UserInfoDynamicField extends StatelessWidget {
                 const SizedBox(height: 8),
                 InkWell(
                   onTap: () async {
+                    _dismissKeyboard(context);
                     final now = DateTime.now();
                     final picked = await showDatePicker(
                       context: context,
@@ -344,6 +355,7 @@ class UserInfoDynamicField extends StatelessWidget {
                       label: Text(option),
                       selected: isOn,
                       onSelected: (on) {
+                        _dismissKeyboard(context);
                         final next = Set<String>.from(active);
                         if (on) {
                           next.add(option);
@@ -462,6 +474,7 @@ class UserInfoDynamicField extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
               ),
               icon: const Icon(Icons.arrow_drop_down, color: AppColors.secondary),
+              onTap: () => _dismissKeyboard(context),
               items: optionItems
                   .map(
                     (item) => DropdownMenuItem<String>(

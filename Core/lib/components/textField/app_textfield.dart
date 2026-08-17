@@ -13,6 +13,8 @@ class AppTextField extends StatelessWidget {
   final List<TextInputFormatter>? inputFormatters;
   final FormFieldValidator<String>? validator;
   final ValueChanged<String>? onChanged;
+  final VoidCallback? onEditingComplete;
+  final TapRegionCallback? onTapOutside;
   final int? maxLength;
   final bool enabled;
   final bool readOnly;
@@ -34,6 +36,8 @@ class AppTextField extends StatelessWidget {
     this.inputFormatters,
     this.validator,
     this.onChanged,
+    this.onEditingComplete,
+    this.onTapOutside,
     this.maxLength,
     this.enabled = true,
     this.readOnly = false,
@@ -67,6 +71,8 @@ class AppTextField extends StatelessWidget {
           validator: validator,
           autovalidateMode: AutovalidateMode.onUserInteraction,
           onChanged: onChanged,
+          onEditingComplete: onEditingComplete,
+          onTapOutside: onTapOutside,
           maxLength: maxLength,
           enabled: enabled,
           readOnly: readOnly,

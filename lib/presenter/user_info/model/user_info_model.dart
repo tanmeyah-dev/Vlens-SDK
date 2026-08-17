@@ -66,16 +66,6 @@ class UserInfoModel {
     return resolveLookupItemsForFieldKey(field.key, lookups);
   }
 
-  /// City from cached national-ID extract (drives ID-card village dropdown).
-  LocationCity? get idCardCityFromExtract => resolveIdCardCityFromExtract(
-        locations: locations,
-        extracted: cachedExtractedData,
-      );
-
-  /// Villages under [idCardCityFromExtract].
-  List<LookupItem> get idCardVillageOptions =>
-      idCardVillageOptionsForCity(idCardCityFromExtract);
-
   /// Select options: location cascade from lookups, else CIF_* lookups.
   List<LookupItem> selectOptionsForField(RequestFieldItem field) {
     final role = detectLocationFieldRole(field);
@@ -230,22 +220,6 @@ class UserInfoModel {
       );
     }).toList();
 
-    final idVillageId = (selectedValues[idCardVillageFieldKey] ?? '').trim();
-    if (idVillageId.isNotEmpty) {
-      final villageName = findLookupItemByIdOrName(
-            idCardVillageOptions,
-            idVillageId,
-          )?.name ??
-          idVillageId;
-      items.add(
-        SummaryAnswerItem(
-          key: idCardVillageFieldKey,
-          label: idCardVillageFieldLabel,
-          value: idVillageId,
-          displayValue: villageName,
-        ),
-      );
-    }
     return items;
   }
 }

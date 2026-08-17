@@ -194,7 +194,6 @@ OneClickApplyBuildResult buildOneClickApplyBody({
     front?.address1,
     user?.address,
   ]);
-  final idCardStreetName = _extractStreetNameFromAddress(idCardAddressText);
   final idCardBuildingNo = _extractBuildingNoFromAddress(idCardAddressText);
   // address.addMark uses the same value as street («الشارع»).
   final addressAddMark = formStreet;
@@ -215,10 +214,14 @@ OneClickApplyBuildResult buildOneClickApplyBody({
   address['villageCode'] = lookupLocationCodes.villageCode;
   if (formStreet != null && formStreet.isNotEmpty) {
     address['street'] = formStreet;
-    address['addMark'] = formStreet;
   }
   if (formBuildingNo != null && formBuildingNo.isNotEmpty) {
     address['buildingNo'] = formBuildingNo;
+  }
+  // address.addMark must match street.
+  final addressStreet = address['street']?.toString().trim();
+  if (addressStreet != null && addressStreet.isNotEmpty) {
+    address['addMark'] = addressStreet;
   }
   // address.floorNo must match buildingNo.
   final addressBuildingValue = address['buildingNo']?.toString().trim();
@@ -239,7 +242,6 @@ OneClickApplyBuildResult buildOneClickApplyBody({
     );
   }
 
-  // addressInIdCard.street = street number only (e.g. ١٠٨ → 108).
   final addressInIdCard = _buildAddress(
     model: model,
     byKey: byKey,
@@ -248,23 +250,18 @@ OneClickApplyBuildResult buildOneClickApplyBody({
       'IDCARDADDRESS',
       'ADDRESSONID',
     ],
-    streetFallback: idCardBuildingNo,
+    streetFallback: idCardAddressText,
     fallbackAddress: address,
     buildingNoFallback: idCardBuildingNo,
-    addMarkFallback: idCardStreetName,
+    addMarkFallback: idCardAddressText,
   );
   if (idCardBuildingNo != null && idCardBuildingNo.isNotEmpty) {
-    addressInIdCard['street'] = idCardBuildingNo;
     addressInIdCard['buildingNo'] = idCardBuildingNo;
   }
-  if (idCardStreetName != null && idCardStreetName.isNotEmpty) {
-    addressInIdCard['addMark'] = idCardStreetName;
-  }
-  // addressInIdCard.floorNo must match street (building number from ID).
-  final idCardStreetValue = addressInIdCard['street']?.toString().trim();
-  if (idCardStreetValue != null && idCardStreetValue.isNotEmpty) {
+  // addressInIdCard.floorNo must match building number from ID.
+  if (idCardBuildingNo != null && idCardBuildingNo.isNotEmpty) {
     addressInIdCard['floorNo'] =
-        _asInt(idCardStreetValue) ?? idCardStreetValue;
+        _asInt(idCardBuildingNo) ?? idCardBuildingNo;
   }
   // addressInIdCard.flatNo must match buildingNo.
   final previousFlat = addressInIdCard.remove('flatno');
@@ -277,52 +274,22 @@ OneClickApplyBuildResult buildOneClickApplyBody({
     addressInIdCard['flatNo'] = previousFlat;
   }
 
-  // Prefer extracted ID location data for addressInIdCard.
-  addressInIdCard['countryCode'] = 1;
-  final idLocationAddressText = _firstNonEmpty([
-    idCardAddressText,
-    front?.address,
-    front?.address1,
-    front?.address2,
-    addressInIdCard['addMark']?.toString(),
-  ]);
-  final matchedGovernorate = resolveGovernorateFromIdExtract(
-    locations: model.locations,
-    govern: front?.govern,
-    governEnglish: front?.governEnglish,
-    addressText: idLocationAddressText,
-  );
-  if (matchedGovernorate != null) {
-    addressInIdCard['stateCode'] = matchedGovernorate.id;
-    // Drop form city/village — they belong to customer address lookups.
-    addressInIdCard['cityCode'] = null;
-    addressInIdCard['villageCode'] = null;
-  }
-  final matchedCity = resolveCityFromIdExtract(
-    locations: model.locations,
-    governorate: matchedGovernorate,
-    city: front?.city,
-    district: front?.district,
-    addressText: idLocationAddressText,
-  );
-  if (matchedCity != null) {
-    addressInIdCard['cityCode'] = matchedCity.id;
-  }
+  // Keep location codes identical on address and addressInIdCard.
+  addressInIdCard['countryCode'] = address['countryCode'];
+  addressInIdCard['stateCode'] = address['stateCode'];
+  addressInIdCard['cityCode'] = address['cityCode'];
+  addressInIdCard['villageCode'] = address['villageCode'];
 
-  final idCardVillageCode =
-      _asInt(model.selectedValues[idCardVillageFieldKey]);
-  if (matchedCity != null && matchedCity.villages.isNotEmpty) {
-    if (idCardVillageCode == null) {
-      throw OneClickApplyBuildException(
-        'برجاء اختيار المنطقة التابعة للبطاقة',
-      );
-    }
-    addressInIdCard['villageCode'] = idCardVillageCode;
-  } else if (idCardVillageCode != null) {
-    addressInIdCard['villageCode'] = idCardVillageCode;
-  } else {
-    addressInIdCard['villageCode'] = 0;
+  // addressInIdCard.street = full address from cached extracted ID data.
+  if (idCardAddressText != null && idCardAddressText.isNotEmpty) {
+    addressInIdCard['street'] = idCardAddressText;
   }
+  // addressInIdCard.addMark must always match street.
+  final idCardStreetValue = addressInIdCard['street']?.toString().trim();
+  if (idCardStreetValue != null && idCardStreetValue.isNotEmpty) {
+    addressInIdCard['addMark'] = idCardStreetValue;
+  }
+  _normalizeAddressInIdCardDigits(addressInIdCard);
 
   final loanDetails = _buildLoanDetails(
     byKey: byKey,
@@ -609,22 +576,14 @@ String _toWesternDigits(String raw) {
       );
 }
 
-/// Street name after building number, e.g. "108 شارع عدنان المالكي" → "عدنان المالكي".
-String? _extractStreetNameFromAddress(String? address) {
-  if (address == null || address.trim().isEmpty) return null;
-  var text = _toWesternDigits(address.trim());
-
-  final numberMatch = RegExp(r'[0-9]+').firstMatch(text);
-  if (numberMatch != null) {
-    text = text.substring(numberMatch.end).trim();
+/// Converts Arabic digits to Western in all [addressInIdCard] string fields.
+void _normalizeAddressInIdCardDigits(Map<String, dynamic> addressInIdCard) {
+  for (final key in addressInIdCard.keys.toList()) {
+    final value = addressInIdCard[key];
+    if (value is String && value.trim().isNotEmpty) {
+      addressInIdCard[key] = _toWesternDigits(value.trim());
+    }
   }
-
-  // Drop common street prefixes: شارع / ش. / ش
-  text = text.replaceFirst(RegExp(r'^(شارع|ش\.?)\s*'), '').trim();
-  // Keep first street segment before area separators.
-  text = text.split(RegExp(r'[،,]')).first.trim();
-
-  return text.isEmpty ? null : text;
 }
 
 /// Finds a non-empty answer whose key/label matches any Arabic needle.
