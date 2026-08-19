@@ -8,11 +8,13 @@ import 'package:tan_sdk/utils/required_location_helper.dart';
 import 'presenter/email_screen/scene/email_screen_scene.dart';
 import 'presenter/home/scene/home_scene.dart';
 import 'presenter/login_screen/scene/login_screen_scene.dart';
+import 'presenter/login_screen/model/login_screen_nav_args.dart';
 import 'presenter/validate_user/scene/validate_user_scene.dart';
 import 'presenter/splash/scene/splash_scene.dart';
 import 'presenter/register_screen/scene/register_screen_scene.dart';
 import 'presenter/register_screen/model/register_screen_nav_args.dart';
 import 'routes/route_path.dart';
+import 'utils/sdk_navigator.dart';
 
 /// Terracotta accent used on the location gate modal (matches product design).
 const Color _kLocationGateAccent = Color(0xFFC95B50);
@@ -28,10 +30,23 @@ const String _tanSdkPackageName = 'tan_sdk';
 ///
 /// [phoneNumber] is optional. When provided (e.g. from the host app's logged-in
 /// user cache), it is prefilled on the validate-user screen.
+///
+/// [vlenseStatus] is optional. When `200`, the SDK opens the login screen
+/// and after a successful login navigates to [RequestDocumentsScene].
+///
+/// [onCompleted] is optional. Host apps can use it to leave the SDK
+/// (for example, open the CMA main screen).
 class TanSdkEntry extends StatefulWidget {
   final String? phoneNumber;
+  final String? vlenseStatus;
+  final VoidCallback? onCompleted;
 
-  const TanSdkEntry({super.key, this.phoneNumber});
+  const TanSdkEntry({
+    super.key,
+    this.phoneNumber,
+    this.vlenseStatus,
+    this.onCompleted,
+  });
 
   @override
   State<TanSdkEntry> createState() => _TanSdkEntryState();
@@ -44,12 +59,24 @@ class _TanSdkEntryState extends State<TanSdkEntry> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    SdkNavigator.onCompleted = widget.onCompleted;
     WidgetsBinding.instance.addObserver(this);
     _runLocationGate();
   }
 
   @override
+  void didUpdateWidget(covariant TanSdkEntry oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.onCompleted != widget.onCompleted) {
+      SdkNavigator.onCompleted = widget.onCompleted;
+    }
+  }
+
+  @override
   void dispose() {
+    if (SdkNavigator.onCompleted == widget.onCompleted) {
+      SdkNavigator.onCompleted = null;
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -106,6 +133,7 @@ class _TanSdkEntryState extends State<TanSdkEntry> with WidgetsBindingObserver {
 
   Widget _buildSdkNavigator(MediaQueryData? mediaQuery) {
     final navigator = Navigator(
+      key: SdkNavigator.key,
       initialRoute: RoutePath.splash,
       onGenerateRoute: (settings) {
         switch (settings.name) {
@@ -114,6 +142,7 @@ class _TanSdkEntryState extends State<TanSdkEntry> with WidgetsBindingObserver {
               settings: settings,
               builder: (_) => SplashScene(
                 phoneNumber: widget.phoneNumber,
+                vlenseStatus: widget.vlenseStatus,
               ),
             );
           case RoutePath.validateUser:
@@ -133,9 +162,21 @@ class _TanSdkEntryState extends State<TanSdkEntry> with WidgetsBindingObserver {
               ),
             );
           case RoutePath.loginScreen:
+            final args = settings.arguments;
+            String? phoneFromArgs;
+            String? vlenseStatus = widget.vlenseStatus;
+            if (args is LoginScreenNavArgs) {
+              phoneFromArgs = args.phoneNumber;
+              vlenseStatus = args.vlenseStatus ?? vlenseStatus;
+            } else if (args is String && args.trim().isNotEmpty) {
+              phoneFromArgs = args.trim();
+            }
             return MaterialPageRoute<void>(
               settings: settings,
-              builder: (_) => const LoginScreenScene(),
+              builder: (_) => LoginScreenScene(
+                initialPhoneNumber: phoneFromArgs ?? widget.phoneNumber,
+                vlenseStatus: vlenseStatus,
+              ),
             );
           case RoutePath.emailScreen:
             return MaterialPageRoute<void>(
@@ -180,6 +221,7 @@ class _TanSdkEntryState extends State<TanSdkEntry> with WidgetsBindingObserver {
               settings: settings,
               builder: (_) => SplashScene(
                 phoneNumber: widget.phoneNumber,
+                vlenseStatus: widget.vlenseStatus,
               ),
             );
         }

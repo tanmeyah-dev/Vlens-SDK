@@ -31,6 +31,7 @@ class UserInfoDynamicField extends StatelessWidget {
     final title =
         field.displayText.trim().isNotEmpty ? field.displayText : field.key;
     final type = field.type.toLowerCase();
+    final isLockedFromId = isIdExtractedLockedField(field);
 
     if (type == 'text') {
       final isNumberOfChildren = field.key == 'numberOfChildren';
@@ -139,17 +140,20 @@ class UserInfoDynamicField extends StatelessWidget {
                 const SizedBox(height: 8),
                 RadioGroup<String>(
                   groupValue: formState.value,
-                  onChanged: (value) {
-                    _dismissKeyboard(context);
-                    formState.didChange(value);
-                    model.selectedValues[field.key] = value;
-                    onFormChanged();
-                  },
+                  onChanged: isLockedFromId
+                      ? (_) {}
+                      : (value) {
+                          _dismissKeyboard(context);
+                          formState.didChange(value);
+                          model.selectedValues[field.key] = value;
+                          onFormChanged();
+                        },
                   child: Column(
                     children: values
                         .map(
                           (option) => RadioListTile<String>(
                             contentPadding: EdgeInsets.zero,
+                            enabled: !isLockedFromId,
                             title: Text(
                               labelsByValue[option] ?? option,
                               textAlign: TextAlign.right,
@@ -457,7 +461,9 @@ class UserInfoDynamicField extends StatelessWidget {
                   fontSize: 14,
                 ),
                 filled: true,
-                fillColor: AppColors.white,
+                fillColor: isLockedFromId
+                    ? const Color(0xFFF3F3F3)
+                    : AppColors.white,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: const BorderSide(color: AppColors.border1, width: 1),
@@ -470,11 +476,20 @@ class UserInfoDynamicField extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                   borderSide: const BorderSide(color: AppColors.primary, width: 1),
                 ),
+                disabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: AppColors.border1, width: 1),
+                ),
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
               ),
-              icon: const Icon(Icons.arrow_drop_down, color: AppColors.secondary),
-              onTap: () => _dismissKeyboard(context),
+              icon: Icon(
+                Icons.arrow_drop_down,
+                color: isLockedFromId
+                    ? AppColors.hintGray
+                    : AppColors.secondary,
+              ),
+              onTap: isLockedFromId ? null : () => _dismissKeyboard(context),
               items: optionItems
                   .map(
                     (item) => DropdownMenuItem<String>(
@@ -483,7 +498,7 @@ class UserInfoDynamicField extends StatelessWidget {
                     ),
                   )
                   .toList(),
-              onChanged: optionItems.isEmpty
+              onChanged: (isLockedFromId || optionItems.isEmpty)
                   ? null
                   : (value) {
                       if (usesLocations) {

@@ -152,7 +152,7 @@ class ApiUrls {
     return '${getLocalBaseUrl()}/vlens/api/v1/e-contract/customer/validate/otp';
   }
 
-  /// Mark loan ready for disbursement (after e-contract OTP success).
+  /// Mark loan ready for disbursement (after e-contract OTP).
   static String getReadyForDisbursementUrl() {
     return '${getLocalBaseUrl()}/vlens/api/v1/mobile/customers/loans/ready-for-disbursement';
   }

@@ -96,7 +96,7 @@ class UserInfoModel {
     List<RequestFieldItem>? lookupFieldsOverride,
   }) {
     _clearFieldControllers();
-    requestFields = fields;
+    requestFields = reorderStreetAndBuildingAfterDistrict(fields);
     lookupFields = lookupFieldsOverride ??
         buildLookupSelectFields(
           lookups,

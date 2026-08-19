@@ -13,4 +13,6 @@ class AppAssets {
 
   /// Location permission gate illustration (host apps resolve via `package: tan_sdk`).
   static const String locationPermission = 'assets/images/location_permission.png';
+  /// Waiting-for-approval illustration (host apps resolve via `package: tan_sdk`).
+  static const String waittingImg = 'assets/images/waitting_img.png';
 }

@@ -95,6 +95,12 @@ class LoginResponse {
         'maskedPhoneNumber',
         'isPhoneNumberConfirmationRequired',
         'isPhoneConfirmationRequired',
+        'nationalId',
+        'nationalID',
+        'NationalId',
+        'idNumber',
+        'id_number',
+        'CIF_ID',
       ]) {
         mergeRootIfMissing(raw, key);
       }
@@ -198,6 +204,7 @@ class LoginResponseData {
   final dynamic user;
   final String? redirectUri;
   final String? transactionId;
+  final String? nationalId;
 
   const LoginResponseData({
     this.hasPendingRequest = false,
@@ -220,6 +227,7 @@ class LoginResponseData {
     this.user,
     this.redirectUri,
     this.transactionId,
+    this.nationalId,
   });
 
   static bool _bool(dynamic v, {bool fallback = false}) {
@@ -299,7 +307,29 @@ class LoginResponseData {
         'TransactionId',
         'transaction_id',
       ]),
+      nationalId: _pickNationalId(json),
     );
+  }
+
+  static String? _pickNationalId(Map<String, dynamic> json) {
+    String? fromMap(dynamic source) {
+      if (source is! Map) return null;
+      for (final key in const [
+        'nationalId',
+        'nationalID',
+        'NationalId',
+        'idNumber',
+        'id_number',
+        'CIF_ID',
+        'cifId',
+      ]) {
+        final value = source[key]?.toString().trim();
+        if (value != null && value.isNotEmpty) return value;
+      }
+      return null;
+    }
+
+    return fromMap(json) ?? fromMap(json['user']);
   }
 
   Map<String, dynamic> toJson() {
@@ -324,6 +354,7 @@ class LoginResponseData {
       'user': user,
       'redirectUri': redirectUri,
       'transactionId': transactionId,
+      'nationalId': nationalId,
     };
   }
 }

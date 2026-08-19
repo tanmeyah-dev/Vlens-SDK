@@ -18,6 +18,7 @@ import 'package:tan_sdk/data/models/extracted_user_data.dart';
 import 'package:tan_sdk/utils/extracted_data_log.dart';
 import '../../home/scene/home_scene.dart';
 import '../../id_data/scene/id_data_screen.dart';
+import '../../id_data/utils/request_eligibility_helper.dart';
 import '../model/login_response.dart';
 import '../bloc/login_screen_bloc.dart';
 import '../event/login_screen_event.dart';
@@ -27,9 +28,18 @@ import '../utils/phone_validator.dart';
 import '../utils/verify_user_otp_dialog_helper.dart';
 import '../utils/vlens_sdk_launcher.dart';
 import '../../register_screen/widgets/pin_input_field.dart';
+import '../model/login_screen_nav_args.dart';
+import '../utils/request_documents_navigator.dart';
 
 class LoginScreenScene extends StatefulWidget {
-  const LoginScreenScene({super.key});
+  final String? initialPhoneNumber;
+  final String? vlenseStatus;
+
+  const LoginScreenScene({
+    super.key,
+    this.initialPhoneNumber,
+    this.vlenseStatus,
+  });
 
   @override
   State<LoginScreenScene> createState() => _LoginScreenSceneState();
@@ -151,12 +161,22 @@ class _LoginScreenSceneState
       return;
     }
 
+    String? phoneNumber = widget.initialPhoneNumber?.trim();
     final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is String) {
-      final phoneNumber = args.trim();
-      if (phoneNumber.isNotEmpty) {
-        _model.mobileNumberController.text = phoneNumber;
+    if (args is LoginScreenNavArgs) {
+      final fromArgs = args.phoneNumber?.trim();
+      if (fromArgs != null && fromArgs.isNotEmpty) {
+        phoneNumber = fromArgs;
       }
+    } else if (args is String) {
+      final fromArgs = args.trim();
+      if (fromArgs.isNotEmpty) {
+        phoneNumber = fromArgs;
+      }
+    }
+
+    if (phoneNumber != null && phoneNumber.isNotEmpty) {
+      _model.mobileNumberController.text = phoneNumber;
     }
 
     _isPhonePrefilledFromRoute = true;
@@ -433,7 +453,7 @@ class _LoginScreenSceneState
       }
 
       // Run after this frame so the loading route is fully popped before VLens uses Navigator.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted || !context.mounted) return;
 
         if (needsPhoneOtp) {
@@ -458,21 +478,21 @@ class _LoginScreenSceneState
             maskedPhoneNumber: loginResponseData.maskedPhoneNumber,
             phoneNumberOtpRequestId: otpReqId,
             transactionId: txId,
+            vlenseStatus: widget.vlenseStatus,
           ).then((_) {
             if (!mounted) return;
             _model.awaitingOtpVerification = false;
             emit(UpdateLoginScreenUIEvent(_model));
           });
         } else {
-          unawaited(
-            VerificationCache().setLoginSession(
-              accessToken: loginResponseData.accessToken,
-              refreshToken: loginResponseData.refreshToken,
-              encryptedAccessToken: loginResponseData.encryptedAccessToken,
-              transactionId: loginResponseData.transactionId,
-              userName: loginResponseData.userName,
-              userFullName: loginResponseData.userFullName,
-            ),
+          await VerificationCache().setLoginSession(
+            accessToken: loginResponseData.accessToken,
+            refreshToken: loginResponseData.refreshToken,
+            encryptedAccessToken: loginResponseData.encryptedAccessToken,
+            transactionId: loginResponseData.transactionId,
+            userName: loginResponseData.userName,
+            userFullName: loginResponseData.userFullName,
+            nationalId: loginResponseData.nationalId,
           );
           final resolvedMobileNumber =
               (loginResponseData.userName ?? '').trim().isNotEmpty
@@ -485,10 +505,19 @@ class _LoginScreenSceneState
                 '⚠️ Login success without usable token, but OTP is not required by backend.');
           }
 
+          if (!mounted || !context.mounted) return;
+
+          if (RequestDocumentsNavigator.isStatus200(widget.vlenseStatus)) {
+            _dismissLoginLoadingOverlay();
+            if (mounted) setState(() => _isOpeningVlens = true);
+            unawaited(_openRequestDocumentsAfterLogin(context));
+            return;
+          }
+
           if (loginResponseData.isDigitalIdentityVerified == true) {
             _dismissLoginLoadingOverlay();
-            if (mounted) setState(() => _isOpeningVlens = false);
-            unawaited(_openCachedVlensResult(context));
+            if (mounted) setState(() => _isOpeningVlens = true);
+            unawaited(_openUserInfoForVerifiedIdentity(context));
             return;
           }
 
@@ -641,17 +670,41 @@ class _LoginScreenSceneState
     }
   }
 
-  Future<void> _openCachedVlensResult(BuildContext context) async {
+  Future<void> _openRequestDocumentsAfterLogin(BuildContext context) async {
+    try {
+      await RequestDocumentsNavigator.openAfterLogin(context);
+    } finally {
+      if (mounted && _isOpeningVlens) {
+        setState(() => _isOpeningVlens = false);
+      }
+    }
+  }
+
+  Future<void> _openUserInfoForVerifiedIdentity(BuildContext context) async {
     final cachedData = await VerificationCache().getVlensExtractedData();
     if (cachedData != null) {
-      logExtractedDataAfterLogin(cachedData, context: 'after login (cached VLENS)');
+      logExtractedDataAfterLogin(
+        cachedData,
+        context: 'after login (cached VLENS)',
+      );
     }
     if (!mounted || !context.mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => IdDataScreen(extractedData: cachedData),
-      ),
-    );
+    try {
+      await RequestEligibilityHelper.openUserInfoScreen(context);
+    } catch (e) {
+      if (!mounted || !context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', '')),
+          backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } finally {
+      if (mounted && _isOpeningVlens) {
+        setState(() => _isOpeningVlens = false);
+      }
+    }
   }
 
 }

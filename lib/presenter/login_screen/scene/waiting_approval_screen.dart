@@ -1,17 +1,14 @@
 import 'package:core/components/button/app_button.dart';
-import 'package:core/components/image/app_image.dart';
 import 'package:core/style/app_colors.dart';
 import 'package:core/utils/ui.dart';
-import 'package:core/utils/cache/verification_cache.dart';
-import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:flutter/material.dart';
 
-import '../model/request_current_response.dart';
-import '../utils/request_current_fetcher.dart';
-import 'request_documents_scene.dart';
-import 'request_submitted_scene.dart';
+import '../../../utils/sdk_navigator.dart';
 
-/// Shown after successful [request/create]; calls [request/current] only after user taps continue.
+/// Package name from [pubspec.yaml]; required for asset resolution from host apps.
+const String _tanSdkPackageName = 'tan_sdk';
+
+/// Shown after successful [request/create]. [حسناً] returns to the host app.
 class WaitingApprovalScreen extends StatefulWidget {
   final dynamic requestId;
 
@@ -25,68 +22,8 @@ class WaitingApprovalScreen extends StatefulWidget {
 }
 
 class _WaitingApprovalScreenState extends State<WaitingApprovalScreen> {
-  bool _isLoading = false;
-
-  Future<Map<String, String>> _resolveHeaders() async {
-    final cache = VerificationCache();
-    final accessToken = await cache.getAccessToken();
-    final encryptedToken = await cache.getEncryptedAccessToken();
-    final token = (accessToken != null && accessToken.trim().isNotEmpty)
-        ? accessToken.trim()
-        : (encryptedToken ?? '').trim();
-    return token.isNotEmpty
-        ? HttpHeadersHelper.getHeadersWithAuth(token)
-        : HttpHeadersHelper.getDefaultHeaders();
-  }
-
-  Future<void> _onContinuePressed() async {
-    if (_isLoading) return;
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      final headers = await _resolveHeaders();
-      final currentResponse =
-          await RequestCurrentFetcher.fetch(headers, logLabel: 'WAITING_APPROVAL');
-
-      final currentRequestId = currentResponse.data?.id ?? widget.requestId;
-      final documents =
-          currentResponse.data?.documents ?? <RequestCurrentDocument>[];
-
-      if (!mounted) return;
-
-      if (documents.isNotEmpty) {
-        await Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => RequestDocumentsScene(
-              requestId: currentRequestId,
-              documents: documents,
-            ),
-          ),
-        );
-      } else {
-        await Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => RequestSubmittedScene(requestId: currentRequestId),
-          ),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', '')),
-          backgroundColor: AppColors.error,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
+  void _onContinuePressed() {
+    SdkNavigator.returnToHostApp(context);
   }
 
   @override
@@ -101,54 +38,91 @@ class _WaitingApprovalScreenState extends State<WaitingApprovalScreen> {
           surfaceTintColor: Colors.transparent,
           elevation: 0,
           centerTitle: true,
-          title: const AppImage(
-            AppAssets.tanmeyah,
-            height: 44,
+          automaticallyImplyLeading: false,
+          title: const Text(
+            'طلب التمويل',
+            style: TextStyle(
+              color: AppColors.primary,
+              fontSize: 24,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
         bottomNavigationBar: SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
+            padding: const EdgeInsets.fromLTRB(22, 8, 22, 18),
             child: AppButton(
-              title: _isLoading ? 'جاري التحميل...' : 'استكمال البيانات',
-              onPressed: _isLoading ? null : _onContinuePressed,
+              title: 'حسناً',
+              backgroundColor: AppColors.blue,
+              onPressed: _onContinuePressed,
             ),
           ),
         ),
-        body: ColoredBox(
-          color: AppColors.white,
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                children: [
-                  const Expanded(
-                    child: Center(
-                      child: Text(
-                        'تم إنشاء طلبك بنجاح',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          height: 1.35,
+        body: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 22),
+                            child: Container(
+                              width: double.infinity,
+                              alignment: Alignment.center,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Image.asset(
+                                    AppAssets.waittingImg,
+                                    package: _tanSdkPackageName,
+                                    width: 360,
+                                    height: 320,
+                                    fit: BoxFit.contain,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  const Text(
+                                    'الطلب في سير العمل',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Color(0xFF2E2B77),
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 20),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 60),
+                          child: Text(
+                            'لقد تم ارسال طلبك بنجاح\nبرجاء انتظار الموافقة على طلبك\nليتم توقيعك للعقد الالكتروني\nوصرف التمويل المطلوب',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w500,
+                              height: 1.45,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  if (_isLoading)
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 12),
-                      child: SizedBox(
-                        height: 28,
-                        width: 28,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
         ),
       ),

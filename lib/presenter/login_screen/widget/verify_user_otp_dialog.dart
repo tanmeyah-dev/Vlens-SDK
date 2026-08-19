@@ -18,7 +18,10 @@ import '../utils/device_info_helper.dart';
 import '../utils/vlens_sdk_launcher.dart';
 import '../model/login_response.dart';
 import '../../id_data/scene/id_data_screen.dart';
+import '../../id_data/utils/request_eligibility_helper.dart';
+import '../../user_info/scene/user_info_screen.dart';
 import 'package:tan_sdk/utils/extracted_data_log.dart';
+import '../utils/request_documents_navigator.dart';
 
 class VerifyUserOTPDialog extends StatefulWidget {
   final String? phoneNumber;
@@ -27,6 +30,7 @@ class VerifyUserOTPDialog extends StatefulWidget {
   final String? phoneNumberOtpRequestId;
   final String? transactionId;
   final BuildContext? parentContext;
+  final String? vlenseStatus;
 
   const VerifyUserOTPDialog({
     super.key,
@@ -36,6 +40,7 @@ class VerifyUserOTPDialog extends StatefulWidget {
     this.phoneNumberOtpRequestId,
     this.transactionId,
     this.parentContext,
+    this.vlenseStatus,
   });
 
   @override
@@ -253,15 +258,14 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
             final navigationContext = widget.parentContext ?? context;
             if (navigationContext.mounted) {
               final loginData = loginResponse.data!;
-              unawaited(
-                VerificationCache().setLoginSession(
-                  accessToken: loginData.accessToken,
-                  refreshToken: loginData.refreshToken,
-                  encryptedAccessToken: loginData.encryptedAccessToken,
-                  transactionId: loginData.transactionId,
-                  userName: loginData.userName,
-                  userFullName: loginData.userFullName,
-                ),
+              await VerificationCache().setLoginSession(
+                accessToken: loginData.accessToken,
+                refreshToken: loginData.refreshToken,
+                encryptedAccessToken: loginData.encryptedAccessToken,
+                transactionId: loginData.transactionId,
+                userName: loginData.userName,
+                userFullName: loginData.userFullName,
+                nationalId: loginData.nationalId,
               );
               final resolvedMobileNumber =
                   (loginData.userName ?? '').trim().isNotEmpty
@@ -271,6 +275,12 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
                 unawaited(VerificationCache().setMobileNumber(resolvedMobileNumber));
               }
               unawaited(_cacheLoginResponseData(loginData));
+              if (RequestDocumentsNavigator.isStatus200(widget.vlenseStatus)) {
+                unawaited(
+                  RequestDocumentsNavigator.openAfterLogin(navigationContext),
+                );
+                return;
+              }
               if (loginData.isDigitalIdentityVerified == true) {
                 unawaited(_openCachedVlensResult(navigationContext));
                 return;
@@ -474,14 +484,44 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
   Future<void> _openCachedVlensResult(BuildContext navigationContext) async {
     final cachedData = await VerificationCache().getVlensExtractedData();
     if (cachedData != null) {
-      logExtractedDataAfterLogin(cachedData, context: 'after login (cached VLENS)');
+      logExtractedDataAfterLogin(
+        cachedData,
+        context: 'after login (cached VLENS)',
+      );
     }
     if (!navigationContext.mounted) return;
-    Navigator.of(navigationContext).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => IdDataScreen(extractedData: cachedData),
+
+    showDialog<void>(
+      context: navigationContext,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+        ),
       ),
     );
+
+    try {
+      final eligibility =
+          await RequestEligibilityHelper.fetchEligibilityResponse();
+      if (!navigationContext.mounted) return;
+      Navigator.of(navigationContext).pop();
+      Navigator.of(navigationContext).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => UserInfoScreen(eligibilityResponse: eligibility),
+        ),
+      );
+    } catch (e) {
+      if (!navigationContext.mounted) return;
+      Navigator.of(navigationContext).pop();
+      ScaffoldMessenger.of(navigationContext).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', '')),
+          backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
   }
 
   @override

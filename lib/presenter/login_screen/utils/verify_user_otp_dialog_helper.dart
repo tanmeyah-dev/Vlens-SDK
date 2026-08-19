@@ -10,6 +10,7 @@ class VerifyUserOTPDialogHelper {
     String? maskedPhoneNumber,
     String? phoneNumberOtpRequestId,
     String? transactionId,
+    String? vlenseStatus,
   }) {
     return showGeneralDialog<void>(
       context: context,
@@ -29,6 +30,7 @@ class VerifyUserOTPDialogHelper {
             phoneNumberOtpRequestId: phoneNumberOtpRequestId,
             transactionId: transactionId,
             parentContext: context,
+            vlenseStatus: vlenseStatus,
           ),
         );
       },

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:core/style/app_colors.dart';
@@ -9,9 +8,9 @@ import 'package:flutter/material.dart';
 import '../../../data/models/extracted_user_data.dart';
 import '../../../utils/api_error_parser.dart';
 import '../../../utils/sdk_http_client.dart';
+import '../../../utils/sdk_navigator.dart';
 import '../../validate_user/constants/api_urls.dart';
 import '../model/econtract_validate_otp_response.dart';
-import '../scene/payment_webview_scene.dart';
 import '../widget/econtract_verification_dialog.dart';
 import 'device_info_helper.dart';
 
@@ -21,12 +20,11 @@ class EContractOtpHelper {
 
   static const String _emptyGuid = '00000000-0000-0000-0000-000000000000';
 
-  /// After successful validate (no payment link), runs [onVerifiedWithoutPayment].
+  /// After ready-for-disbursement succeeds, returns to the host main screen.
   static Future<void> run(
     BuildContext context,
-    dynamic requestId, {
-    required void Function(BuildContext context) onVerifiedWithoutPayment,
-  }) async {
+    dynamic requestId,
+  ) async {
     final stepOk = await _fireEContractCustomerStepOtp(context, requestId);
     if (!context.mounted || !stepOk) return;
 
@@ -55,17 +53,10 @@ class EContractOtpHelper {
     );
     if (!context.mounted || validateResponse == null) return;
 
-    final paymentLink = validateResponse.data?.paymentLink?.trim();
-    if (paymentLink != null && paymentLink.isNotEmpty) {
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => PaymentWebViewScene(paymentLink: paymentLink),
-        ),
-      );
-      return;
-    }
+    final readyOk = await _fireReadyForDisbursement(context);
+    if (!context.mounted || !readyOk) return;
 
-    onVerifiedWithoutPayment(context);
+    SdkNavigator.returnToHostApp(context);
   }
 
   static Future<bool> _fireEContractCustomerStepOtp(
@@ -300,9 +291,6 @@ class EContractOtpHelper {
             : 'فشل التحقق من OTP');
       }
 
-      // Fire-and-forget after successful OTP validate (HTTP 200 + success).
-      unawaited(_fireReadyForDisbursementInBackground(cache, headers));
-
       return parsed;
     } catch (e) {
       if (!context.mounted) return null;
@@ -316,24 +304,30 @@ class EContractOtpHelper {
     }
   }
 
-  /// Background POST to ready-for-disbursement with cached national ID.
-  static Future<void> _fireReadyForDisbursementInBackground(
-    VerificationCache cache,
-    Map<String, String> headers,
-  ) async {
+  /// POST ready-for-disbursement after e-contract OTP validate. Returns false on error.
+  static Future<bool> _fireReadyForDisbursement(BuildContext context) async {
     try {
+      final cache = VerificationCache();
       final nationalId = await _resolveCachedNationalId(cache);
       if (nationalId == null || nationalId.isEmpty) {
-        print('⚠️ READY-FOR-DISBURSEMENT skipped: nationalId not in cache');
-        return;
+        throw Exception('الرقم القومي غير متوفر');
       }
+
+      final accessToken = await cache.getAccessToken();
+      final encryptedToken = await cache.getEncryptedAccessToken();
+      final token = (accessToken != null && accessToken.trim().isNotEmpty)
+          ? accessToken.trim()
+          : (encryptedToken ?? '').trim();
+      final headers = token.isNotEmpty
+          ? HttpHeadersHelper.getHeadersWithAuth(token)
+          : HttpHeadersHelper.getDefaultHeaders();
 
       final url = ApiUrls.getReadyForDisbursementUrl();
       final body = {'nationalId': nationalId};
 
       print('');
       print('═══════════════════════════════════════════════════════');
-      print('📤 READY-FOR-DISBURSEMENT API CALL (BACKGROUND)');
+      print('📤 READY-FOR-DISBURSEMENT API CALL');
       print('═══════════════════════════════════════════════════════');
       print('URL: $url');
       print('Method: POST');
@@ -350,19 +344,74 @@ class EContractOtpHelper {
 
       print('');
       print('═══════════════════════════════════════════════════════');
-      print('📥 READY-FOR-DISBURSEMENT API RESPONSE (BACKGROUND)');
+      print('📥 READY-FOR-DISBURSEMENT API RESPONSE');
       print('═══════════════════════════════════════════════════════');
       print('Status Code: ${response.statusCode}');
       print('Body: ${response.body}');
       print('═══════════════════════════════════════════════════════');
       print('');
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          ApiErrorParser.extractMessage(
+            response.body,
+            fallbackMessage:
+                'فشل تجهيز القرض للصرف (${response.statusCode})',
+          ),
+        );
+      }
+
+      if (response.body.trim().isNotEmpty) {
+        dynamic decoded;
+        try {
+          decoded = jsonDecode(response.body);
+        } catch (_) {
+          decoded = null;
+        }
+        if (decoded is Map && decoded['success'] == false) {
+          throw Exception(
+            ApiErrorParser.extractMessage(
+              response.body,
+              fallbackMessage: 'فشل تجهيز القرض للصرف',
+            ),
+          );
+        }
+      }
+
+      return true;
     } catch (e) {
-      print('⚠️ READY-FOR-DISBURSEMENT background error: $e');
+      if (!context.mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', '')),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return false;
     }
   }
 
   static Future<String?> _resolveCachedNationalId(VerificationCache cache) async {
-    final cached = await cache.getVlensExtractedData();
+    final persisted = (await cache.getNationalId())?.trim();
+    if (persisted != null && persisted.isNotEmpty) return persisted;
+
+    final fromVlens = _nationalIdFromVlens(await cache.getVlensExtractedData());
+    if (fromVlens != null) return fromVlens;
+
+    final fromTrace = _extractNationalIdFromDynamic(
+      await cache.getVlensTraceResponseBody(),
+    );
+    if (fromTrace != null) return fromTrace;
+
+    final fromLogin = _extractNationalIdFromDynamic(
+      await cache.getLoginResponseData(),
+    );
+    if (fromLogin != null) return fromLogin;
+
+    return null;
+  }
+
+  static String? _nationalIdFromVlens(dynamic cached) {
     if (cached == null) return null;
 
     ExtractedUserData? data;
@@ -390,11 +439,16 @@ class EContractOtpHelper {
         'idNumber',
         'nationalId',
         'nationalID',
+        'NationalId',
         'id_number',
+        'CIF_ID',
+        'cifId',
       ]) {
         final direct = map[key]?.toString().trim();
-        if (direct != null && direct.isNotEmpty) return direct;
+        if (_isUsableNationalId(direct)) return direct;
       }
+      final userName = map['userName']?.toString().trim();
+      if (_looksLikeNationalId(userName)) return userName;
       for (final entry in map.values) {
         final nested = _extractNationalIdFromDynamic(entry);
         if (nested != null && nested.isNotEmpty) return nested;
@@ -408,5 +462,16 @@ class EContractOtpHelper {
       }
     }
     return null;
+  }
+
+  static bool _isUsableNationalId(String? value) {
+    if (value == null || value.isEmpty) return false;
+    return value != _emptyGuid;
+  }
+
+  static bool _looksLikeNationalId(String? value) {
+    if (value == null || value.isEmpty) return false;
+    final digits = value.replaceAll(RegExp(r'\D'), '');
+    return digits.length == 14;
   }
 }

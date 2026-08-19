@@ -54,6 +54,7 @@ class VlensSdkLauncher {
         transactionId: credentials.transactionId,
         userName: loginResponseData.userName,
         userFullName: loginResponseData.userFullName,
+        nationalId: loginResponseData.nationalId,
       ),
     );
 

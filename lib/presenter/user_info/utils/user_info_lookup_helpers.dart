@@ -308,6 +308,18 @@ String? matchLookupIdFromCachedLabel(List<LookupItem> items, String? label) {
 bool shouldPrefillFromNationalId(String fieldKey) =>
     _isGenderReligionOrSocialKey(fieldKey);
 
+/// Gender, religion, and social status come from the ID and must stay read-only.
+bool isIdExtractedLockedField(RequestFieldItem field) {
+  if (_isGenderReligionOrSocialKey(field.key)) return true;
+  final label = normalizeArabicLabel(field.displayText);
+  if (label.isEmpty) return false;
+  return label == normalizeArabicLabel('النوع') ||
+      label == normalizeArabicLabel('الديانة') ||
+      label == normalizeArabicLabel('الديانه') ||
+      label == normalizeArabicLabel('الحالة الاجتماعية') ||
+      label == normalizeArabicLabel('الحاله الاجتماعيه');
+}
+
 /// Prefill map from cached VLens identity → request field keys.
 Map<String, String> buildPrefillMapFromExtractedData(ExtractedUserData? data) {
   if (data == null) return const {};
@@ -441,6 +453,70 @@ LocationFieldRole? detectLocationFieldRole(RequestFieldItem field) {
   }
 
   return null;
+}
+
+bool _fieldArabicHaystackContains(
+  RequestFieldItem field,
+  List<String> needles,
+) {
+  final haystack = normalizeArabicLabel(
+    '${field.key} ${field.displayText} ${field.displayArText ?? ''}',
+  );
+  return needles.any(
+    (needle) => haystack.contains(normalizeArabicLabel(needle)),
+  );
+}
+
+bool isStreetAddressField(RequestFieldItem field) {
+  if (isBuildingNoField(field)) return false;
+  final key = normalizeLookupKey(field.key);
+  if (key == 'STREET' || key.contains('STREET') || key == 'PROPERTYADDRESS') {
+    return true;
+  }
+  return _fieldArabicHaystackContains(field, const ['الشارع', 'شارع']);
+}
+
+bool isBuildingNoField(RequestFieldItem field) {
+  final key = normalizeLookupKey(field.key);
+  if (key.contains('BUILDINGNO') ||
+      key.contains('BUILDINGNUMBER') ||
+      key == 'BUILDING') {
+    return true;
+  }
+  return _fieldArabicHaystackContains(field, const [
+    'رقم المبني',
+    'رقم المبنى',
+    'رقم البناء',
+  ]);
+}
+
+/// Places «الشارع» then «رقم المبني» immediately after المركز/القسم.
+List<RequestFieldItem> reorderStreetAndBuildingAfterDistrict(
+  List<RequestFieldItem> fields,
+) {
+  final streetFields = fields.where(isStreetAddressField).toList();
+  final buildingFields = fields.where(isBuildingNoField).toList();
+  if (streetFields.isEmpty && buildingFields.isEmpty) return fields;
+
+  final rest = fields
+      .where((field) => !isStreetAddressField(field) && !isBuildingNoField(field))
+      .toList();
+  var insertAt = rest.indexWhere(
+    (field) => detectLocationFieldRole(field) == LocationFieldRole.village,
+  );
+  if (insertAt < 0) {
+    insertAt = rest.indexWhere(
+      (field) => detectLocationFieldRole(field) == LocationFieldRole.city,
+    );
+  }
+  insertAt = insertAt < 0 ? rest.length : insertAt + 1;
+
+  return [
+    ...rest.take(insertAt),
+    ...streetFields,
+    ...buildingFields,
+    ...rest.skip(insertAt),
+  ];
 }
 
 RequestFieldItem? findLocationFieldByRole(

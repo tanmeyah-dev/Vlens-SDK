@@ -41,6 +41,7 @@ flutter:
     - assets/images/location_permission.png
     - assets/images/request_submitted.png
     - assets/images/request_submitted_white.png
+    - assets/images/waitting_img.png
   #   - images/a_dot_ham.jpeg
   #
   # For details regarding assets in packages, see

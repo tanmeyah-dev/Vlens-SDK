@@ -188,13 +188,11 @@ OneClickApplyBuildResult buildOneClickApplyBody({
     'رقم المبنى',
     'رقم البناء',
   ]);
-
   final idCardAddressText = _firstNonEmpty([
     front?.address,
     front?.address1,
     user?.address,
   ]);
-  final idCardBuildingNo = _extractBuildingNoFromAddress(idCardAddressText);
   // address.addMark uses the same value as street («الشارع»).
   final addressAddMark = formStreet;
 
@@ -215,26 +213,20 @@ OneClickApplyBuildResult buildOneClickApplyBody({
   if (formStreet != null && formStreet.isNotEmpty) {
     address['street'] = formStreet;
   }
-  if (formBuildingNo != null && formBuildingNo.isNotEmpty) {
-    address['buildingNo'] = formBuildingNo;
-  }
   // address.addMark must match street.
   final addressStreet = address['street']?.toString().trim();
   if (addressStreet != null && addressStreet.isNotEmpty) {
     address['addMark'] = addressStreet;
   }
-  // address.floorNo must match buildingNo.
+  if (formBuildingNo != null && formBuildingNo.isNotEmpty) {
+    address['buildingNo'] = formBuildingNo;
+  }
+  // address.buildingNo / floorNo / flatNo must all match the entered building number.
   final addressBuildingValue = address['buildingNo']?.toString().trim();
   if (addressBuildingValue != null && addressBuildingValue.isNotEmpty) {
-    address['floorNo'] = _asInt(addressBuildingValue) ?? addressBuildingValue;
-  }
-  // address.flatNo must match floorNo.
-  final previousAddressFlat = address.remove('flatno');
-  final addressFloorValue = address['floorNo']?.toString().trim();
-  if (addressFloorValue != null && addressFloorValue.isNotEmpty) {
-    address['flatNo'] = _asInt(addressFloorValue) ?? addressFloorValue;
-  } else if (previousAddressFlat != null) {
-    address['flatNo'] = previousAddressFlat;
+    address['buildingNo'] = addressBuildingValue;
+    address['floorNo'] = addressBuildingValue;
+    address['flatNo'] = addressBuildingValue;
   }
   if ((address['addMark']?.toString().trim().isEmpty ?? true)) {
     throw OneClickApplyBuildException(
@@ -250,29 +242,11 @@ OneClickApplyBuildResult buildOneClickApplyBody({
       'IDCARDADDRESS',
       'ADDRESSONID',
     ],
-    streetFallback: idCardAddressText,
+    streetFallback: formStreet,
     fallbackAddress: address,
-    buildingNoFallback: idCardBuildingNo,
+    buildingNoFallback: formBuildingNo,
     addMarkFallback: idCardAddressText,
   );
-  if (idCardBuildingNo != null && idCardBuildingNo.isNotEmpty) {
-    addressInIdCard['buildingNo'] = idCardBuildingNo;
-  }
-  // addressInIdCard.floorNo must match building number from ID.
-  if (idCardBuildingNo != null && idCardBuildingNo.isNotEmpty) {
-    addressInIdCard['floorNo'] =
-        _asInt(idCardBuildingNo) ?? idCardBuildingNo;
-  }
-  // addressInIdCard.flatNo must match buildingNo.
-  final previousFlat = addressInIdCard.remove('flatno');
-  final idCardBuildingValue =
-      addressInIdCard['buildingNo']?.toString().trim();
-  if (idCardBuildingValue != null && idCardBuildingValue.isNotEmpty) {
-    addressInIdCard['flatNo'] =
-        _asInt(idCardBuildingValue) ?? idCardBuildingValue;
-  } else if (previousFlat != null) {
-    addressInIdCard['flatNo'] = previousFlat;
-  }
 
   // Keep location codes identical on address and addressInIdCard.
   addressInIdCard['countryCode'] = address['countryCode'];
@@ -280,14 +254,21 @@ OneClickApplyBuildResult buildOneClickApplyBody({
   addressInIdCard['cityCode'] = address['cityCode'];
   addressInIdCard['villageCode'] = address['villageCode'];
 
-  // addressInIdCard.street = full address from cached extracted ID data.
-  if (idCardAddressText != null && idCardAddressText.isNotEmpty) {
-    addressInIdCard['street'] = idCardAddressText;
+  // addressInIdCard.street / buildingNo come from form «الشارع» / «رقم المبني».
+  if (formStreet != null && formStreet.isNotEmpty) {
+    addressInIdCard['street'] = formStreet;
   }
-  // addressInIdCard.addMark must always match street.
-  final idCardStreetValue = addressInIdCard['street']?.toString().trim();
-  if (idCardStreetValue != null && idCardStreetValue.isNotEmpty) {
-    addressInIdCard['addMark'] = idCardStreetValue;
+  if (formBuildingNo != null && formBuildingNo.isNotEmpty) {
+    addressInIdCard['buildingNo'] = formBuildingNo;
+  }
+  if (addressBuildingValue != null && addressBuildingValue.isNotEmpty) {
+    addressInIdCard['buildingNo'] = addressBuildingValue;
+    addressInIdCard['floorNo'] = addressBuildingValue;
+    addressInIdCard['flatNo'] = addressBuildingValue;
+  }
+  // addressInIdCard.addMark = full address from cached extracted ID data.
+  if (idCardAddressText != null && idCardAddressText.isNotEmpty) {
+    addressInIdCard['addMark'] = idCardAddressText;
   }
   _normalizeAddressInIdCardDigits(addressInIdCard);
 
@@ -553,14 +534,6 @@ Map<String, dynamic> _buildAddress({
   cityCode = _asInt(cityRaw);
   villageCode = _asInt(villageRaw);
   return (stateCode: stateCode, cityCode: cityCode, villageCode: villageCode);
-}
-
-/// First number in an address string, e.g. "108 شارع النصر" / "١٠٨ شارع..." → "108".
-String? _extractBuildingNoFromAddress(String? address) {
-  if (address == null || address.trim().isEmpty) return null;
-  final normalizedDigits = _toWesternDigits(address.trim());
-  final match = RegExp(r'[0-9]+').firstMatch(normalizedDigits);
-  return match?.group(0);
 }
 
 /// Converts Arabic-Indic (٠-٩) and Extended Arabic-Indic (۰-۹) digits to 0-9.

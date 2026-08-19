@@ -6,11 +6,9 @@ import 'package:core/utils/cache/verification_cache.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:flutter/foundation.dart';
 
-import '../../../utils/api_error_parser.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../id_data/utils/id_data_parser.dart';
 import '../../validate_user/constants/api_urls.dart';
-import '../../login_screen/utils/device_info_helper.dart';
 import '../event/user_info_event.dart';
 import '../model/lookups_response.dart';
 import '../model/request_fields_response.dart';
@@ -40,145 +38,12 @@ class UserInfoBloc extends BaseBloc {
   }
 
   Future<void> _onSubmit(UserInfoSubmitEvent event, emit) async {
-    try {
-      final cache = VerificationCache();
-      final requestTypeId = await cache.getRequestTypeId();
-      if (requestTypeId == null) {
-        emit(UserInfoSubmitFailedState('معرف نوع الطلب غير متوفر'));
-        return;
-      }
-
-      final accessToken = await cache.getAccessToken();
-      final encryptedToken = await cache.getEncryptedAccessToken();
-      final token = (accessToken != null && accessToken.trim().isNotEmpty)
-          ? accessToken.trim()
-          : (encryptedToken ?? '').trim();
-      final headers = token.isNotEmpty
-          ? HttpHeadersHelper.getHeadersWithAuth(token)
-          : HttpHeadersHelper.getDefaultHeaders();
-
-      final requestFieldsValues = <String, dynamic>{};
-      for (final item in event.answers) {
-        requestFieldsValues[item.key] = item.value.trim();
-      }
-
-      final body = {
-        'requestTypeId': requestTypeId,
-        'geoLocation': await DeviceInfoHelper.getCurrentLocation(),
-        'userDeviceUtcTime': DateTime.now().toUtc().toIso8601String(),
-        'requestFieldsValues': requestFieldsValues,
-      };
-
-      final url = ApiUrls.getRequestCreateUrl();
-      final bodyJson = jsonEncode(body);
-
-      if (kDebugMode) {
-        print('');
-        print('═══════════════════════════════════════════════════════');
-        print('📤 REQUEST CREATE API CALL (USER_INFO)');
-        print('═══════════════════════════════════════════════════════');
-        print('URL: $url');
-        print('Method: POST');
-        print('Headers: $headers');
-        print('Body: $bodyJson');
-        print('═══════════════════════════════════════════════════════');
-        print('');
-      }
-
-      final response = await SdkHttpClient.post(
-        Uri.parse(url),
-        headers: headers,
-        body: bodyJson,
-      );
-
-      if (kDebugMode) {
-        print('');
-        print('═══════════════════════════════════════════════════════');
-        print('📥 REQUEST CREATE API RESPONSE (USER_INFO)');
-        print('═══════════════════════════════════════════════════════');
-        print('Status Code: ${response.statusCode}');
-        print('Body: ${response.body}');
-        print('═══════════════════════════════════════════════════════');
-        print('');
-      }
-
-      if (response.statusCode != 200) {
-        final message = ApiErrorParser.extractMessage(
-          response.body,
-          fallbackMessage: 'فشل إنشاء الطلب (${response.statusCode})',
-        );
-        emit(UserInfoSubmitFailedState(message));
-        return;
-      }
-
-      final decoded = _tryDecodeMap(response.body);
-      if (!_isCreateRequestSuccess(decoded)) {
-        final message = ApiErrorParser.extractMessage(
-          response.body,
-          fallbackMessage: 'فشل إنشاء الطلب',
-        );
-        emit(UserInfoSubmitFailedState(message));
-        return;
-      }
-
-      final createdRequestId = _extractCreatedRequestId(decoded);
-      if (createdRequestId == null) {
-        emit(UserInfoSubmitFailedState('رقم الطلب الناتج من إنشاء الطلب غير متوفر'));
-        return;
-      }
-
-      emit(
-        UserInfoNavigateToSummaryState(
-          answeredFields: event.answers,
-          userInfoModel: _model,
-          createdRequestId: createdRequestId,
-        ),
-      );
-    } catch (e) {
-      if (kDebugMode) {
-        print('❌ REQUEST CREATE ERROR: $e');
-      }
-      emit(
-        UserInfoSubmitFailedState(
-          e.toString().replaceAll('Exception: ', ''),
-        ),
-      );
-    }
-  }
-
-  bool _isCreateRequestSuccess(Map<String, dynamic>? responseBody) {
-    if (responseBody == null) return false;
-    final rootSuccess = responseBody['success'];
-    if (rootSuccess is bool) return rootSuccess;
-
-    final data = responseBody['data'];
-    if (data is Map) {
-      final dataSuccess = data['success'];
-      if (dataSuccess is bool) return dataSuccess;
-    }
-    return false;
-  }
-
-  dynamic _extractCreatedRequestId(Map<String, dynamic>? responseBody) {
-    if (responseBody == null) return null;
-    if (responseBody['id'] != null) return responseBody['id'];
-
-    final data = responseBody['data'];
-    if (data is Map) {
-      final dataMap = Map<String, dynamic>.from(data);
-      if (dataMap['id'] != null) return dataMap['id'];
-      if (dataMap['requestId'] != null) return dataMap['requestId'];
-    }
-    return null;
-  }
-
-  Map<String, dynamic>? _tryDecodeMap(String raw) {
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) return decoded;
-      if (decoded is Map) return Map<String, dynamic>.from(decoded);
-    } catch (_) {}
-    return null;
+    emit(
+      UserInfoNavigateToSummaryState(
+        answeredFields: event.answers,
+        userInfoModel: _model,
+      ),
+    );
   }
 
   Future<void> _onLoadFields(UserInfoLoadFieldsEvent event, emit) async {

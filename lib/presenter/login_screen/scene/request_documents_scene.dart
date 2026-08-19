@@ -5,7 +5,6 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../model/request_current_response.dart';
 import '../utils/e_contract_otp_helper.dart';
-import 'request_submitted_scene.dart';
 
 class RequestDocumentsScene extends StatefulWidget {
   final dynamic requestId;
@@ -115,17 +114,6 @@ class _RequestDocumentsSceneState extends State<RequestDocumentsScene> {
       await EContractOtpHelper.run(
         context,
         widget.requestId,
-        onVerifiedWithoutPayment: (ctx) {
-          if (!ctx.mounted) return;
-          Navigator.of(ctx).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => RequestSubmittedScene(
-                requestId: widget.requestId,
-                eContractFlowCompleted: true,
-              ),
-            ),
-          );
-        },
       );
     } finally {
       if (mounted) {

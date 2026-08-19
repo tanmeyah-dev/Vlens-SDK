@@ -3,6 +3,7 @@ import 'package:core/style/app_colors.dart';
 import 'package:core/utils/ui.dart';
 import 'package:flutter/material.dart';
 
+import '../../../utils/sdk_navigator.dart';
 import '../utils/e_contract_otp_helper.dart';
 
 /// Package name from [pubspec.yaml]; required for asset resolution from host apps.
@@ -28,23 +29,13 @@ class _RequestSubmittedSceneState extends State<RequestSubmittedScene> {
   Future<void> _onDonePressed(BuildContext context) async {
     if (widget.eContractFlowCompleted) {
       if (!context.mounted) return;
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      SdkNavigator.returnToHostApp(context);
       return;
     }
 
     await EContractOtpHelper.run(
       context,
       widget.requestId,
-      onVerifiedWithoutPayment: (ctx) {
-        if (!ctx.mounted) return;
-        ScaffoldMessenger.of(ctx).showSnackBar(
-          const SnackBar(
-            content: Text('تم تأكيد التعاقد الإلكتروني بنجاح'),
-            backgroundColor: AppColors.primary,
-          ),
-        );
-        Navigator.of(ctx).popUntil((route) => route.isFirst);
-      },
     );
   }
 

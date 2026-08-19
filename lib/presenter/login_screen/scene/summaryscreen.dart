@@ -13,6 +13,7 @@ import '../../../utils/api_error_parser.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../user_info/model/summary_answer_item.dart';
 import '../../user_info/model/user_info_model.dart';
+import '../../user_info/utils/request_create_helper.dart';
 import '../../user_info/utils/user_info_one_click_apply_builder.dart';
 import 'waiting_approval_screen.dart';
 import '../../validate_user/constants/api_urls.dart';
@@ -20,13 +21,11 @@ import '../../validate_user/constants/api_urls.dart';
 class SummaryScreen extends StatefulWidget {
   final List<SummaryAnswerItem> answeredFields;
   final UserInfoModel userInfoModel;
-  final dynamic createdRequestId;
 
   const SummaryScreen({
     super.key,
     required this.answeredFields,
     required this.userInfoModel,
-    required this.createdRequestId,
   });
 
   @override
@@ -52,6 +51,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
   ExtractedUserData? _identityData;
   String _cardNumber = '';
   bool _isPermissionAccepted = false;
+  dynamic _createdRequestId;
 
   @override
   void initState() {
@@ -301,6 +301,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
     });
 
     try {
+      final created = _createdRequestId != null
+          ? RequestCreateResult(_createdRequestId)
+          : await createLoanRequest(answers: widget.answeredFields);
+      _createdRequestId = created.requestId;
+
       final cache = VerificationCache();
       final cachedEmail = await cache.getEmail();
       final cachedPhone = await cache.getMobileNumber();
@@ -376,7 +381,15 @@ class _SummaryScreenState extends State<SummaryScreen> {
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) =>
-              WaitingApprovalScreen(requestId: widget.createdRequestId),
+              WaitingApprovalScreen(requestId: created.requestId),
+        ),
+      );
+    } on RequestCreateException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: AppColors.error,
         ),
       );
     } on OneClickApplyBuildException catch (e) {

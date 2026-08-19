@@ -16,6 +16,7 @@ class VerificationCache {
   static const String _keyEncryptedAccessToken = 'encrypted_access_token';
   static const String _keyUserName = 'user_name';
   static const String _keyUserFullName = 'user_full_name';
+  static const String _keyNationalId = 'national_id';
   static const String _keyLatitude = 'cached_latitude';
   static const String _keyLongitude = 'cached_longitude';
   static const String _keyRequestTypeId = 'request_type_id';
@@ -124,6 +125,7 @@ class VerificationCache {
     String? transactionId,
     String? userName,
     String? userFullName,
+    String? nationalId,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     if (accessToken != null && accessToken.trim().isNotEmpty) {
@@ -144,6 +146,9 @@ class VerificationCache {
     if (userFullName != null) {
       await prefs.setString(_keyUserFullName, userFullName.trim());
     }
+    if (nationalId != null && nationalId.trim().isNotEmpty) {
+      await prefs.setString(_keyNationalId, nationalId.trim());
+    }
   }
 
   Future<String?> getAccessToken() async {
@@ -154,6 +159,13 @@ class VerificationCache {
   Future<String?> getEncryptedAccessToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_keyEncryptedAccessToken);
+  }
+
+  Future<String?> getNationalId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_keyNationalId)?.trim();
+    if (value == null || value.isEmpty) return null;
+    return value;
   }
 
   /// Save geo location to reuse the same coordinates across API calls.
@@ -263,6 +275,16 @@ class VerificationCache {
     }
   }
 
+  /// Clear session tokens so the user must log in again.
+  /// Keeps identity cache and mobile number for prefilling.
+  Future<void> clearLoginSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyAccessToken);
+    await prefs.remove(_keyRefreshToken);
+    await prefs.remove(_keyEncryptedAccessToken);
+    await prefs.remove(_keyLoginResponseData);
+  }
+
   /// Clear all verification data
   Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
@@ -277,6 +299,7 @@ class VerificationCache {
     await prefs.remove(_keyEncryptedAccessToken);
     await prefs.remove(_keyUserName);
     await prefs.remove(_keyUserFullName);
+    await prefs.remove(_keyNationalId);
     await prefs.remove(_keyLatitude);
     await prefs.remove(_keyLongitude);
     await prefs.remove(_keyRequestTypeId);

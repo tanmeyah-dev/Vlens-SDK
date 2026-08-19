@@ -11,12 +11,10 @@ class UpdateUserInfoUI extends RenderDataState<UserInfoModel> {
 class UserInfoNavigateToSummaryState extends NonRenderState {
   final List<SummaryAnswerItem> answeredFields;
   final UserInfoModel userInfoModel;
-  final dynamic createdRequestId;
 
   UserInfoNavigateToSummaryState({
     required this.answeredFields,
     required this.userInfoModel,
-    required this.createdRequestId,
   });
 }
 

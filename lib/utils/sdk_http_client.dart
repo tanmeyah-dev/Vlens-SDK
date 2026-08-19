@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
+import 'session_expired_redirect.dart';
+
 /// HTTP client for SDK API calls.
 ///
 /// HTTPS to private / loopback hosts can skip certificate validation
@@ -57,24 +59,28 @@ class SdkHttpClient {
     Uri uri,
     Future<http.Response> Function(http.Client client) request,
   ) async {
+    late final http.Response response;
     if (!_shouldAllowInsecureTls(uri)) {
       final client = http.Client();
       try {
-        return await request(client);
+        response = await request(client);
       } finally {
         client.close();
       }
+    } else {
+      final ioHttpClient = HttpClient()
+        ..badCertificateCallback =
+            (X509Certificate cert, String host, int port) => host == uri.host;
+      final ioClient = IOClient(ioHttpClient);
+      try {
+        response = await request(ioClient);
+      } finally {
+        ioClient.close();
+      }
     }
 
-    final ioHttpClient = HttpClient()
-      ..badCertificateCallback =
-          (X509Certificate cert, String host, int port) => host == uri.host;
-    final ioClient = IOClient(ioHttpClient);
-    try {
-      return await request(ioClient);
-    } finally {
-      ioClient.close();
-    }
+    SessionExpiredRedirect.handle(response);
+    return response;
   }
 
   static bool _isPrivateOrLocalDevHost(String host) {

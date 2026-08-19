@@ -38,7 +38,6 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
           builder: (_) => SummaryScreen(
             answeredFields: state.answeredFields,
             userInfoModel: state.userInfoModel,
-            createdRequestId: state.createdRequestId,
           ),
         ),
       )
