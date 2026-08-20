@@ -275,19 +275,19 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
                 unawaited(VerificationCache().setMobileNumber(resolvedMobileNumber));
               }
               unawaited(_cacheLoginResponseData(loginData));
-              if (RequestDocumentsNavigator.isStatus200(widget.vlenseStatus)) {
-                unawaited(
-                  RequestDocumentsNavigator.openAfterLogin(navigationContext),
-                );
-                return;
-              }
-              if (loginData.isDigitalIdentityVerified == true) {
-                unawaited(_openCachedVlensResult(navigationContext));
-                return;
-              }
-              // Open VLens on next frame after OTP dialog is fully dismissed.
+              // Wait until the OTP dialog pop finishes unlocking the navigator.
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (!navigationContext.mounted) return;
+                if (RequestDocumentsNavigator.isStatus200(widget.vlenseStatus)) {
+                  unawaited(
+                    RequestDocumentsNavigator.openAfterLogin(navigationContext),
+                  );
+                  return;
+                }
+                if (loginData.isDigitalIdentityVerified == true) {
+                  unawaited(_openCachedVlensResult(navigationContext));
+                  return;
+                }
                 _initializeVLensSDK(navigationContext, loginData);
               });
             }
@@ -491,6 +491,11 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
     }
     if (!navigationContext.mounted) return;
 
+    // Avoid !_debugLocked when the previous route transition is still active.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!navigationContext.mounted) return;
+
+    var loadingShown = false;
     showDialog<void>(
       context: navigationContext,
       barrierDismissible: false,
@@ -500,12 +505,18 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
         ),
       ),
     );
+    loadingShown = true;
 
     try {
       final eligibility =
           await RequestEligibilityHelper.fetchEligibilityResponse();
       if (!navigationContext.mounted) return;
-      Navigator.of(navigationContext).pop();
+      if (loadingShown) {
+        Navigator.of(navigationContext).pop();
+        loadingShown = false;
+      }
+      await WidgetsBinding.instance.endOfFrame;
+      if (!navigationContext.mounted) return;
       Navigator.of(navigationContext).pushReplacement(
         MaterialPageRoute<void>(
           builder: (_) => UserInfoScreen(eligibilityResponse: eligibility),
@@ -513,7 +524,14 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
       );
     } catch (e) {
       if (!navigationContext.mounted) return;
-      Navigator.of(navigationContext).pop();
+      if (loadingShown) {
+        await WidgetsBinding.instance.endOfFrame;
+        if (navigationContext.mounted &&
+            Navigator.of(navigationContext).canPop()) {
+          Navigator.of(navigationContext).pop();
+        }
+      }
+      if (!navigationContext.mounted) return;
       ScaffoldMessenger.of(navigationContext).showSnackBar(
         SnackBar(
           content: Text(e.toString().replaceAll('Exception: ', '')),

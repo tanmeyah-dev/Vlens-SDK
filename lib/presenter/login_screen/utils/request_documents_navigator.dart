@@ -26,20 +26,23 @@ class RequestDocumentsNavigator {
   }
 
   static Future<void> openAfterLogin(BuildContext context) async {
+    if (!context.mounted) return;
+    // Avoid !_debugLocked when called right after dismissing another dialog.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!context.mounted) return;
+
     var dialogShown = false;
-    if (context.mounted) {
-      dialogShown = true;
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        useRootNavigator: false,
-        builder: (_) => const Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-          ),
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      useRootNavigator: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
         ),
-      );
-    }
+      ),
+    );
+    dialogShown = true;
 
     try {
       final headers = await _resolveHeaders();
@@ -53,6 +56,8 @@ class RequestDocumentsNavigator {
         Navigator.of(context).pop();
         dialogShown = false;
       }
+      await WidgetsBinding.instance.endOfFrame;
+      if (!context.mounted) return;
 
       final documents =
           currentResponse.data?.documents ?? <RequestCurrentDocument>[];
@@ -67,8 +72,12 @@ class RequestDocumentsNavigator {
     } catch (e) {
       if (!context.mounted) return;
       if (dialogShown) {
-        Navigator.of(context).pop();
+        await WidgetsBinding.instance.endOfFrame;
+        if (context.mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
       }
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(e.toString().replaceAll('Exception: ', '')),

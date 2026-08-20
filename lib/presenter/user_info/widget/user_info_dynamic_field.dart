@@ -406,9 +406,18 @@ class UserInfoDynamicField extends StatelessWidget {
           : field.availableValues
               .map((value) => LookupItem(id: value, name: value))
               .toList();
-      final values = optionItems.map((e) => e.id).toList();
-      final current = model.selectedValues[field.key];
-      final selected = values.contains(current) ? current : null;
+      final current = model.selectedValues[field.key]?.trim();
+      // Match by id or display name so short labels like "لا" stay selected.
+      LookupItem? selectedItem;
+      if (current != null && current.isNotEmpty) {
+        for (final item in optionItems) {
+          if (item.id.trim() == current || item.name.trim() == current) {
+            selectedItem = item;
+            break;
+          }
+        }
+      }
+      final selected = selectedItem?.id;
 
       final govField = findLocationFieldByRole(
         model.allFormFields,
@@ -454,8 +463,9 @@ class UserInfoDynamicField extends StatelessWidget {
                 'dd_${field.key}_${parentCascadeKey}_${selected ?? ''}',
               ),
               initialValue: selected,
+              isExpanded: true,
               decoration: InputDecoration(
-                hintText: hintText,
+                hintText: selected == null ? hintText : null,
                 hintStyle: const TextStyle(
                   color: AppColors.hintGray,
                   fontSize: 14,
@@ -480,8 +490,10 @@ class UserInfoDynamicField extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                   borderSide: const BorderSide(color: AppColors.border1, width: 1),
                 ),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
               ),
               icon: Icon(
                 Icons.arrow_drop_down,
@@ -490,11 +502,39 @@ class UserInfoDynamicField extends StatelessWidget {
                     : AppColors.secondary,
               ),
               onTap: isLockedFromId ? null : () => _dismissKeyboard(context),
+              selectedItemBuilder: (context) => optionItems
+                  .map(
+                    (item) => Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: Text(
+                        item.name,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
+                        textDirection: TextDirection.rtl,
+                        style: const TextStyle(
+                          color: AppColors.black,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
               items: optionItems
                   .map(
                     (item) => DropdownMenuItem<String>(
                       value: item.id,
-                      child: Text(item.name, textAlign: TextAlign.right),
+                      child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Text(
+                          item.name,
+                          textAlign: TextAlign.right,
+                          textDirection: TextDirection.rtl,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ),
                   )
                   .toList(),
