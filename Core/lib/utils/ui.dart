@@ -15,4 +15,6 @@ class AppAssets {
   static const String locationPermission = 'assets/images/location_permission.png';
   /// Waiting-for-approval illustration (host apps resolve via `package: tan_sdk`).
   static const String waittingImg = 'assets/images/waitting_img.png';
+  /// Google sign-in logo (host apps resolve via `package: tan_sdk`).
+  static const String googleLogo = 'assets/images/google_logo.png';
 }

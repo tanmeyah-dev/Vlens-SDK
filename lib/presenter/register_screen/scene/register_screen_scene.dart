@@ -8,7 +8,6 @@ import 'package:core/extensions/widget_extension.dart';
 import 'package:core/utils/ui.dart';
 import 'package:core/style/app_colors.dart';
 import 'package:flutter/material.dart';
-import '../../../routes/route_path.dart';
 import '../../validate_user/widgets/app_header.dart';
 import '../bloc/register_screen_bloc.dart';
 import 'package:core/utils/cache/verification_cache.dart';
@@ -18,6 +17,7 @@ import '../model/register_screen_model.dart';
 import '../state/register_screen_state.dart';
 import '../utils/security_code_validator.dart';
 import '../widgets/pin_input_field.dart';
+import '../widgets/register_success_dialog.dart';
 import '../widgets/security_code_guidelines.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -320,33 +320,22 @@ class _RegisterScreenState
     } else if (state is OnRegisterScreenSavedState) {
       _createUserLoadingActive = false;
       _dismissCreateUserLoadingOverlay();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted || !context.mounted) return;
+        var phoneNumber = widget.mobileNumber ?? _cachedMobileNumber ?? '';
+        if (phoneNumber.trim().isEmpty) {
+          phoneNumber =
+              (await VerificationCache().getMobileNumber())?.trim() ?? '';
+        }
         if (!mounted || !context.mounted) return;
         showDialog<void>(
           context: context,
           barrierDismissible: false,
-          builder: (dialogContext) {
-            return AlertDialog(
-              content: const Text(
-                'تهانينا لقد تم انشاء حساب',
-                textAlign: TextAlign.center,
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(dialogContext).pop();
-                    if (mounted && context.mounted) {
-                      Navigator.of(context).pushNamedAndRemoveUntil(
-                        RoutePath.loginScreen,
-                        (route) => false,
-                      );
-                    }
-                  },
-                  child: const Text('حسناً'),
-                ),
-              ],
-            );
-          },
+          barrierColor: Colors.black54,
+          builder: (_) => RegisterSuccessDialog(
+            phoneNumber: phoneNumber.trim(),
+            navigationContext: context,
+          ),
         );
       });
     } else if (state is OnRegisterScreenErrorState) {

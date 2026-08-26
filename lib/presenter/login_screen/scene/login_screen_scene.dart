@@ -18,7 +18,6 @@ import 'package:tan_sdk/data/models/extracted_user_data.dart';
 import 'package:tan_sdk/utils/extracted_data_log.dart';
 import '../../home/scene/home_scene.dart';
 import '../../id_data/scene/id_data_screen.dart';
-import '../../id_data/utils/request_eligibility_helper.dart';
 import '../model/login_response.dart';
 import '../bloc/login_screen_bloc.dart';
 import '../event/login_screen_event.dart';
@@ -498,8 +497,10 @@ class _LoginScreenSceneState
               (loginResponseData.userName ?? '').trim().isNotEmpty
                   ? loginResponseData.userName!.trim()
                   : _model.mobileNumberController.text.trim();
-          unawaited(VerificationCache().setMobileNumber(resolvedMobileNumber));
-          unawaited(_cacheLoginResponseData(loginResponseData));
+          if (resolvedMobileNumber.isNotEmpty) {
+            await VerificationCache().setMobileNumber(resolvedMobileNumber);
+          }
+          await _cacheLoginResponseData(loginResponseData);
           if (!hasUsableToken) {
             print(
                 '⚠️ Login success without usable token, but OTP is not required by backend.');
@@ -517,7 +518,7 @@ class _LoginScreenSceneState
           if (loginResponseData.isDigitalIdentityVerified == true) {
             _dismissLoginLoadingOverlay();
             if (mounted) setState(() => _isOpeningVlens = true);
-            unawaited(_openUserInfoForVerifiedIdentity(context));
+            unawaited(_openIdDataScreenAfterLogin(context));
             return;
           }
 
@@ -680,24 +681,15 @@ class _LoginScreenSceneState
     }
   }
 
-  Future<void> _openUserInfoForVerifiedIdentity(BuildContext context) async {
-    final cachedData = await VerificationCache().getVlensExtractedData();
-    if (cachedData != null) {
-      logExtractedDataAfterLogin(
-        cachedData,
-        context: 'after login (cached VLENS)',
-      );
-    }
-    if (!mounted || !context.mounted) return;
+  /// Verified identity: open [IdDataScreen] so it can GET `/vlens-data` and fill the table.
+  Future<void> _openIdDataScreenAfterLogin(BuildContext context) async {
     try {
-      await RequestEligibilityHelper.openUserInfoScreen(context);
-    } catch (e) {
       if (!mounted || !context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', '')),
-          backgroundColor: AppColors.error,
-          duration: const Duration(seconds: 4),
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || !context.mounted) return;
+      Navigator.of(context, rootNavigator: true).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => const IdDataScreen(loadFromApi: true),
         ),
       );
     } finally {

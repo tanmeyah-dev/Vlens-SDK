@@ -18,6 +18,8 @@ import '../model/email_screen_model.dart';
 import '../state/email_screen_state.dart';
 import '../utils/email_verification_dialog_helper.dart';
 
+const String _tanSdkPackageName = 'tan_sdk';
+
 class EmailScreenScene extends StatefulWidget {
   const EmailScreenScene({super.key});
 
@@ -87,7 +89,7 @@ class _EmailScreenSceneState
                               instructions(),
                               verticalSpacing.height,
                               emailField(),
-                              verticalSpacing.height,
+                              24.height,
                               orDivider(),
                               16.height,
                               googleSignInButton(),
@@ -173,17 +175,17 @@ class _EmailScreenSceneState
   Widget orDivider() {
     return Row(
       children: [
-        const Expanded(child: Divider(color: AppColors.border1)),
+        const Expanded(child: Divider(color: AppColors.border1, height: 1)),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: AppText(
-            'أو',
-            color: AppColors.secondary,
+            'او قم بالتفعيل بواسطة',
+            color: AppColors.gray,
             fontSize: 14,
             fontWeight: FontWeight.w400,
           ),
         ),
-        const Expanded(child: Divider(color: AppColors.border1)),
+        const Expanded(child: Divider(color: AppColors.border1, height: 1)),
       ],
     );
   }
@@ -201,43 +203,36 @@ class _EmailScreenSceneState
               },
         borderRadius: BorderRadius.circular(8),
         child: Ink(
-          height: 64,
+          width: double.infinity,
+          height: 48,
           decoration: BoxDecoration(
             color: disabled ? const Color(0xffE9EAEE) : AppColors.white,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: AppColors.border1),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 22,
-                height: 22,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: const Color(0xFFDADCE0)),
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset(
+                  AppAssets.googleLogo,
+                  package: _tanSdkPackageName,
+                  width: 20,
+                  height: 20,
+                  fit: BoxFit.contain,
                 ),
-                child: const Text(
-                  'G',
+                const SizedBox(width: 12),
+                Text(
+                  'Continue with Google',
                   style: TextStyle(
-                    color: Color(0xFF4285F4),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
+                    color: disabled ? AppColors.gray : AppColors.black,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                'المتابعة باستخدام Google',
-                style: TextStyle(
-                  color: disabled ? AppColors.gray : AppColors.secondary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

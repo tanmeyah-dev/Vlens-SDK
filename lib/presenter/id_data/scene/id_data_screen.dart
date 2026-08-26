@@ -15,11 +15,16 @@ import '../state/id_data_state.dart';
 import '../utils/id_data_display_rows.dart';
 
 class IdDataScreen extends StatefulWidget {
+  /// Fresh VLens scan payload when coming from SDK success → POST `/vlens-data`.
   final dynamic extractedData;
+
+  /// Verified login path → GET `/vlens-data?phoneNumber=...` only (no POST).
+  final bool loadFromApi;
 
   const IdDataScreen({
     super.key,
-    required this.extractedData,
+    this.extractedData,
+    this.loadFromApi = false,
   });
 
   @override
@@ -87,7 +92,13 @@ class _IdDataScreenState extends BaseState<IdDataScreen, IdDataBloc, IdDataModel
                   ),
                   const SizedBox(height: 16),
                   Expanded(
-                    child: SingleChildScrollView(
+                    child: model.isLoadingVlensData
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                            ),
+                          )
+                        : SingleChildScrollView(
                       child: Table(
                         border: TableBorder.all(color: AppColors.border1),
                         columnWidths: const {
@@ -147,7 +158,7 @@ class _IdDataScreenState extends BaseState<IdDataScreen, IdDataBloc, IdDataModel
                     title: model.isCheckingEligibility
                         ? 'جاري التحقق...'
                         : 'اضغط هنا لاستكمال البيانات',
-                    onPressed: model.isCheckingEligibility
+                    onPressed: model.isCheckingEligibility || model.isLoadingVlensData
                         ? null
                         : () => emit(IdDataContinueEvent()),
                   ),
@@ -163,7 +174,11 @@ class _IdDataScreenState extends BaseState<IdDataScreen, IdDataBloc, IdDataModel
   @override
   IdDataBloc createBloc() {
     return IdDataBloc(
-      IdDataModel(extractedData: widget.extractedData),
+      IdDataModel(
+        extractedData: widget.extractedData,
+        loadFromApi: widget.loadFromApi,
+      ),
     );
   }
 }
+

@@ -308,16 +308,100 @@ String? matchLookupIdFromCachedLabel(List<LookupItem> items, String? label) {
 bool shouldPrefillFromNationalId(String fieldKey) =>
     _isGenderReligionOrSocialKey(fieldKey);
 
-/// Gender, religion, and social status come from the ID and must stay read-only.
+bool isNationalityField(RequestFieldItem field) {
+  final key = normalizeLookupKey(field.key);
+  if (key == 'CIFNATIONCODE' ||
+      key == 'NATIONCODE' ||
+      key == 'NATIONALITY' ||
+      key == 'NATIONALITYCODE') {
+    return true;
+  }
+  final label = normalizeArabicLabel(field.displayText);
+  return label == normalizeArabicLabel('الجنسية') ||
+      label == normalizeArabicLabel('الجنسيه') ||
+      label.contains(normalizeArabicLabel('الجنسية'));
+}
+
+/// Gender, religion, social status, and nationality stay read-only.
 bool isIdExtractedLockedField(RequestFieldItem field) {
   if (_isGenderReligionOrSocialKey(field.key)) return true;
+  if (isNationalityField(field)) return true;
   final label = normalizeArabicLabel(field.displayText);
   if (label.isEmpty) return false;
   return label == normalizeArabicLabel('النوع') ||
       label == normalizeArabicLabel('الديانة') ||
       label == normalizeArabicLabel('الديانه') ||
       label == normalizeArabicLabel('الحالة الاجتماعية') ||
-      label == normalizeArabicLabel('الحاله الاجتماعيه');
+      label == normalizeArabicLabel('الحاله الاجتماعيه') ||
+      label == normalizeArabicLabel('الجنسية') ||
+      label == normalizeArabicLabel('الجنسيه');
+}
+
+/// License type and commercial facility name are optional on KYC form.
+bool isOptionalUserInfoField(RequestFieldItem field) {
+  final key = normalizeLookupKey(field.key);
+  if (key == 'CIFLICENSETYPE' ||
+      key == 'LICENSETYPE' ||
+      key == 'LICENSE' ||
+      key.contains('LICENSETYPE') ||
+      key.contains('TRADENAME') ||
+      key.contains('COMMERCIALNAME') ||
+      key.contains('BUSINESSNAME') ||
+      key.contains('FACILITYNAME') ||
+      key.contains('SHOPNAME')) {
+    return true;
+  }
+
+  final label = normalizeArabicLabel(
+    [
+      field.displayText,
+      field.displayArText ?? '',
+    ].join(' '),
+  );
+  if (label.isEmpty) return false;
+
+  final licenseLabel = normalizeArabicLabel('نوع الرخصة');
+  final tradeLabel = normalizeArabicLabel('الاسم التجاري للمنشأة');
+  return label == licenseLabel ||
+      label.contains(licenseLabel) ||
+      label == tradeLabel ||
+      label.contains(normalizeArabicLabel('الاسم التجاري')) ||
+      (label.contains(normalizeArabicLabel('تجاري')) &&
+          label.contains(normalizeArabicLabel('منش')));
+}
+
+/// Picks the Egyptian nationality option id from lookups (`مصري` / Egypt).
+String? findEgyptianNationalityId(List<LookupItem> items) {
+  if (items.isEmpty) return null;
+
+  const preferredLabels = <String>[
+    'مصري',
+    'مصريه',
+    'مصرى',
+    'egypt',
+    'egyptian',
+    'eg',
+  ];
+
+  for (final label in preferredLabels) {
+    final byItem = findLookupItemByIdOrName(items, label);
+    if (byItem != null) return byItem.id;
+    final byMatch = matchLookupIdFromCachedLabel(items, label);
+    if (byMatch != null && byMatch.trim().isNotEmpty) return byMatch;
+  }
+
+  for (final item in items) {
+    final name = normalizeArabicLabel(item.name);
+    final id = normalizeArabicLabel(item.id);
+    if (name.contains('مصر') ||
+        id.contains('مصر') ||
+        name.contains('egypt') ||
+        id.contains('egypt') ||
+        id == 'eg') {
+      return item.id;
+    }
+  }
+  return null;
 }
 
 /// Prefill map from cached VLens identity → request field keys.

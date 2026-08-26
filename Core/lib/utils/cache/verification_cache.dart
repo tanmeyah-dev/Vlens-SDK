@@ -156,6 +156,13 @@ class VerificationCache {
     return prefs.getString(_keyAccessToken);
   }
 
+  Future<String?> getUserName() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_keyUserName)?.trim();
+    if (value == null || value.isEmpty) return null;
+    return value;
+  }
+
   Future<String?> getEncryptedAccessToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_keyEncryptedAccessToken);

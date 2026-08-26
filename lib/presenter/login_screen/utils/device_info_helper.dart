@@ -33,6 +33,39 @@ class DeviceInfoHelper {
     }
   }
 
+  /// Device payload for `/vlens/api/v1/request/vlens-data`.
+  static Future<Map<String, String>> getVlensDeviceInfoPayload() async {
+    final deviceId = await getDeviceId();
+    var deviceModel = '';
+    var osVersion = '';
+    var platform = '';
+
+    try {
+      final plugin = DeviceInfoPlugin();
+      if (Platform.isAndroid) {
+        final info = await plugin.androidInfo;
+        deviceModel = info.model;
+        osVersion = info.version.release;
+        platform = 'Android';
+      } else if (Platform.isIOS) {
+        final info = await plugin.iosInfo;
+        deviceModel = info.utsname.machine;
+        osVersion = info.systemVersion;
+        platform = 'iOS';
+      }
+    } catch (e) {
+      print('Error getting device model/os: $e');
+    }
+
+    return {
+      'deviceId': deviceId,
+      'deviceModel': deviceModel,
+      'osVersion': osVersion,
+      'platform': platform,
+      'ipAddress': '',
+    };
+  }
+
   /// Location with system services + permission + real GPS fix (no placeholder).
   /// Use for login, registration, and SDK entry gate.
   static Future<RequiredLocationResult> obtainRequiredLocationForAuth() async {

@@ -12,6 +12,7 @@ import '../event/id_data_event.dart';
 import '../model/id_data_model.dart';
 import '../state/id_data_state.dart';
 import '../utils/id_data_parser.dart';
+import '../utils/vlens_data_api_helper.dart';
 
 class IdDataBloc extends BaseBloc {
   IdDataBloc(this._model)
@@ -27,21 +28,75 @@ class IdDataBloc extends BaseBloc {
     IdDataInitializeEvent event,
     emit,
   ) async {
+    _model.isLoadingVlensData = true;
+    _model.errorMessage = null;
     emit(UpdateIdDataUI(_model));
 
-    // 1) Prefer the fresh VLens success payload passed into this screen.
-    final fresh = _model.effectiveExtractedData ??
-        parseExtractedUserData(_model.extractedData);
-    if (fresh != null) {
-      _model.effectiveExtractedData = fresh;
-      await _overwriteCachedExtractedData(fresh);
+    try {
+      if (_model.loadFromApi) {
+        // Verified login: GET /vlens-data?phoneNumber=... only (no POST).
+        await _loadFromApi(emit);
+      } else {
+        // After VLens scan: POST extracted data and show it (no GET).
+        await _submitFreshExtractedData(emit);
+      }
+    } finally {
+      _model.isLoadingVlensData = false;
       emit(UpdateIdDataUI(_model));
-    } else {
-      // 2) Only if no fresh scan was provided, show last cached success.
-      await _loadCachedVlensData(emit);
     }
 
     unawaited(_fetchAndCacheRequestTypeId(emit));
+  }
+
+  /// Login (verified) path — GET only.
+  Future<void> _loadFromApi(dynamic emit) async {
+    try {
+      final remote = await fetchVlensData();
+      if (remote != null) {
+        _model.effectiveExtractedData = remote;
+        await _overwriteCachedExtractedData(remote);
+        _model.errorMessage = null;
+        emit(UpdateIdDataUI(_model));
+        // ignore: avoid_print
+        print('📦 IdDataBloc: loaded VLens data from API (login GET)');
+      } else {
+        _model.effectiveExtractedData = null;
+        _model.errorMessage = 'لا توجد بيانات هوية متاحة';
+        emit(UpdateIdDataUI(_model));
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('⚠️ IdDataBloc: failed to fetch VLens data from API: $e');
+      _model.effectiveExtractedData = null;
+      _model.errorMessage = e.toString().replaceAll('Exception: ', '');
+      emit(UpdateIdDataUI(_model));
+    }
+  }
+
+  /// VLens success path — POST extracted payload only (no GET).
+  Future<void> _submitFreshExtractedData(dynamic emit) async {
+    final fresh = _model.effectiveExtractedData ??
+        parseExtractedUserData(_model.extractedData);
+    if (fresh == null) {
+      _model.errorMessage = 'لا توجد بيانات هوية لإرسالها';
+      emit(UpdateIdDataUI(_model));
+      return;
+    }
+
+    _model.effectiveExtractedData = fresh;
+    await _overwriteCachedExtractedData(fresh);
+    emit(UpdateIdDataUI(_model));
+
+    try {
+      await submitVlensData(fresh);
+      // ignore: avoid_print
+      print('✅ IdDataBloc: submitted VLens data to API (POST after scan)');
+    } catch (e) {
+      // ignore: avoid_print
+      print('⚠️ IdDataBloc: failed to submit VLens data: $e');
+      _model.errorMessage = e.toString().replaceAll('Exception: ', '');
+      emit(UpdateIdDataUI(_model));
+    }
   }
 
   Future<void> _overwriteCachedExtractedData(dynamic data) async {
@@ -58,19 +113,6 @@ class IdDataBloc extends BaseBloc {
       // ignore: avoid_print
       print('⚠️ IdDataBloc: failed to overwrite VLens cache: $e');
     }
-  }
-
-  Future<void> _loadCachedVlensData(dynamic emit) async {
-    final cache = VerificationCache();
-    final cached = await cache.getVlensExtractedData() ??
-        await cache.getVlensTraceResponseBody();
-    if (cached == null) return;
-    final parsed = parseExtractedUserData(cached);
-    if (parsed == null) return;
-    _model.effectiveExtractedData = parsed;
-    emit(UpdateIdDataUI(_model));
-    // ignore: avoid_print
-    print('📦 IdDataBloc: loaded cached VLens data (no fresh scan provided)');
   }
 
   Future<void> _fetchAndCacheRequestTypeId(dynamic emit) async {
@@ -115,8 +157,9 @@ class IdDataBloc extends BaseBloc {
       }
 
       await VerificationCache().setRequestTypeId(requestTypeId);
-      _model.errorMessage = null;
-      emit(UpdateIdDataUI(_model));
+      if (_model.errorMessage == null) {
+        emit(UpdateIdDataUI(_model));
+      }
     } catch (e) {
       _model.errorMessage = e.toString().replaceAll('Exception: ', '');
       emit(UpdateIdDataUI(_model));

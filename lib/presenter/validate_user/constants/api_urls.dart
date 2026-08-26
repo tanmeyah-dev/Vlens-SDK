@@ -127,6 +127,15 @@ class ApiUrls {
     return '${getLocalBaseUrl()}/vlens/api/v1/request/create';
   }
 
+  /// Submit / fetch VLens extracted ID data after verification success.
+  /// Pass [phoneNumber] as query param for both GET and POST.
+  static String getVlensDataUrl({String? phoneNumber}) {
+    final base = '${getLocalBaseUrl()}/vlens/api/v1/request/vlens-data';
+    final phone = phoneNumber?.trim();
+    if (phone == null || phone.isEmpty) return base;
+    return '$base?phoneNumber=${Uri.encodeQueryComponent(phone)}';
+  }
+
   /// Get current request.
   static String getRequestCurrentUrl() {
     return '${getLocalBaseUrl()}/vlens/api/v1/request/current';

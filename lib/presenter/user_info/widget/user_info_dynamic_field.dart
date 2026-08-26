@@ -32,6 +32,7 @@ class UserInfoDynamicField extends StatelessWidget {
         field.displayText.trim().isNotEmpty ? field.displayText : field.key;
     final type = field.type.toLowerCase();
     final isLockedFromId = isIdExtractedLockedField(field);
+    final isOptional = isOptionalUserInfoField(field);
 
     if (type == 'text') {
       final isNumberOfChildren = field.key == 'numberOfChildren';
@@ -57,7 +58,9 @@ class UserInfoDynamicField extends StatelessWidget {
           onTapOutside: (_) => _dismissKeyboard(context),
           validator: (value) {
             final text = (value ?? '').trim();
-            if (text.isEmpty) return 'هذا الحقل مطلوب';
+            if (text.isEmpty) {
+              return isOptional ? null : 'هذا الحقل مطلوب';
+            }
             if (isNumberOfChildren) {
               if (text.length != 1) {
                 return 'يجب إدخال رقم واحد فقط';
@@ -90,7 +93,9 @@ class UserInfoDynamicField extends StatelessWidget {
           onTapOutside: (_) => _dismissKeyboard(context),
           validator: (value) {
             final text = (value ?? '').trim();
-            if (text.isEmpty) return 'هذا الحقل مطلوب';
+            if (text.isEmpty) {
+              return isOptional ? null : 'هذا الحقل مطلوب';
+            }
             final normalized = text.replaceAll(',', '').replaceAll(' ', '');
             if (normalized.isEmpty || num.tryParse(normalized) == null) {
               return 'برجاء إدخال رقم صالح';
@@ -558,7 +563,7 @@ class UserInfoDynamicField extends StatelessWidget {
                   }
                 }
                 if ((value ?? '').trim().isEmpty) {
-                  return 'برجاء الاختيار';
+                  return isOptional ? null : 'برجاء الاختيار';
                 }
                 return null;
               },

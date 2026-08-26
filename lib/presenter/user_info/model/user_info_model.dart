@@ -166,6 +166,25 @@ class UserInfoModel {
           }
         }
 
+        // Nationality defaults to Egyptian and stays locked in the UI.
+        if (isNationalityField(field) &&
+            (initial == null || initial.trim().isEmpty)) {
+          if (lookupItems.isNotEmpty) {
+            initial = findEgyptianNationalityId(lookupItems);
+          } else {
+            final fromValues = field.availableValues.cast<String>().where((v) {
+              final n = normalizeArabicLabel(v);
+              return n.contains('مصر') ||
+                  n.contains('egypt') ||
+                  n == 'eg' ||
+                  n == normalizeArabicLabel('مصري');
+            });
+            if (fromValues.isNotEmpty) {
+              initial = fromValues.first;
+            }
+          }
+        }
+
         selectedValues[field.key] = initial;
       } else if (t == 'checkbox') {
         checkboxValues[field.key] = parseBoolLoose(field.value);

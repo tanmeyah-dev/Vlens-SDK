@@ -157,7 +157,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
   List<MapEntry<String, String>> _buildPrimaryIdentityFields() {
     final data = _identityData;
-    return [
+    final rows = <MapEntry<String, String>>[
       MapEntry('الاسم', data?.idFrontData?.name?.trim().isNotEmpty == true
           ? data!.idFrontData!.name!.trim()
           : data?.user?.fullName?.trim() ?? ''),
@@ -173,47 +173,18 @@ class _SummaryScreenState extends State<SummaryScreen> {
             : data?.idBackData?.gender?.trim() ?? '',
       ),
     ];
+    return rows.where((row) => row.value.trim().isNotEmpty).toList();
   }
 
   Widget _buildIdentityFieldRow(MapEntry<String, String> row) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF3F3F3),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        textDirection: TextDirection.rtl,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            row.key,
-            style: const TextStyle(
-              color: AppColors.black,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.right,
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              row.value,
-              style: const TextStyle(
-                color: AppColors.black,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.left,
-            ),
-          ),
-        ],
-      ),
-    );
+    return _buildSummaryFieldRow(row);
   }
 
   Widget _buildAnswerFieldRow(MapEntry<String, String> row) {
+    return _buildSummaryFieldRow(row);
+  }
+
+  Widget _buildSummaryFieldRow(MapEntry<String, String> row) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -223,21 +194,29 @@ class _SummaryScreenState extends State<SummaryScreen> {
       ),
       child: Row(
         textDirection: TextDirection.rtl,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            row.key,
-            style: const TextStyle(
-              color: AppColors.black,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
+          Expanded(
+            flex: 3,
+            child: Text(
+              row.key,
+              maxLines: 2,
+              softWrap: true,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.black,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.right,
             ),
-            textAlign: TextAlign.right,
           ),
           const SizedBox(width: 14),
-          Expanded(
+          Flexible(
+            flex: 1,
             child: Text(
               row.value,
+              softWrap: true,
               style: const TextStyle(
                 color: AppColors.black,
                 fontSize: 16,
@@ -450,7 +429,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
           ),
           const TextSpan(text: '\n'),
           const TextSpan(
-            text: 'بأن هذه البيانات صحيحة وأي خطأ\nبها يعرضني للمساءلة القانونية',
+            text: 'بأن هذه البيانات صحيحة وأي خطأ\nبها يعرضني المسائلة القانونية',
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
         ],
@@ -461,6 +440,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
   @override
   Widget build(BuildContext context) {
     final answersRows = widget.answeredFields
+        .where((item) => item.displayValue.trim().isNotEmpty)
         .map((item) => MapEntry(item.label, item.displayValue))
         .toList();
 

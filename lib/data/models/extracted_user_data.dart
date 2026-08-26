@@ -1,4 +1,6 @@
 
+import 'dart:convert';
+
 class ExtractedUserData {
   final bool? isVerificationProcessCompleted;
   final bool? isDigitalIdentityVerified;
@@ -21,7 +23,7 @@ class ExtractedUserData {
       isVerificationProcessCompleted:
           json['isVerificationProcessCompleted'] as bool?,
       isDigitalIdentityVerified: json['isDigitalIdentityVerified'] as bool?,
-      deviceInfo: json['deviceInfo'] as String?,
+      deviceInfo: _parseDeviceInfo(json['deviceInfo']),
       user: json['user'] != null
           ? User.fromJson(Map<String, dynamic>.from(json['user'] as Map))
           : null,
@@ -36,6 +38,19 @@ class ExtractedUserData {
             )
           : null,
     );
+  }
+
+  static String? _parseDeviceInfo(dynamic value) {
+    if (value == null) return null;
+    if (value is String) return value;
+    if (value is Map) {
+      try {
+        return jsonEncode(value);
+      } catch (_) {
+        return value.toString();
+      }
+    }
+    return value.toString();
   }
 
   factory ExtractedUserData.fromExtractedData(
@@ -146,13 +161,21 @@ class User {
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
+    final rawId = json['id'] ?? json['userId'];
+    int? id;
+    if (rawId is int) {
+      id = rawId;
+    } else if (rawId != null) {
+      id = int.tryParse('$rawId');
+    }
+
     return User(
-      id: json['id'] as int?,
+      id: id,
       name: json['name'] as String?,
       surname: json['surname'] as String?,
       fullName: json['fullName'] as String?,
-      userName: json['userName'] as String?,
-      emailAddress: json['emailAddress'] as String?,
+      userName: (json['userName'] ?? json['username']) as String?,
+      emailAddress: (json['emailAddress'] ?? json['email']) as String?,
       phoneNumber: json['phoneNumber'] as String?,
       idNumber: json['idNumber'] as String?,
       address: json['address'] as String?,

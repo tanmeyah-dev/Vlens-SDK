@@ -114,7 +114,7 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
                           const Align(
                             alignment: Alignment.centerRight,
                             child: Text(
-                              'بيانات العمل',
+                              'بيانات العميل',
                               style: TextStyle(
                                 fontSize: 34,
                                 fontWeight: FontWeight.w400,

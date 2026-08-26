@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:core/style/app_colors.dart';
@@ -11,6 +12,7 @@ import '../../../utils/sdk_http_client.dart';
 import '../../../utils/sdk_navigator.dart';
 import '../../validate_user/constants/api_urls.dart';
 import '../model/econtract_validate_otp_response.dart';
+import '../widget/e_contract_success_dialog.dart';
 import '../widget/econtract_verification_dialog.dart';
 import 'device_info_helper.dart';
 
@@ -53,10 +55,22 @@ class EContractOtpHelper {
     );
     if (!context.mounted || validateResponse == null) return;
 
-    final readyOk = await _fireReadyForDisbursement(context);
-    if (!context.mounted || !readyOk) return;
+    // Fire distribution API while the success alert is visible.
+    unawaited(_fireReadyForDisbursement(context, showError: false));
 
-    SdkNavigator.returnToHostApp(context);
+    final navContext = context;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => EContractSuccessDialog(
+        navigationContext: navContext,
+        onDismiss: () {
+          if (navContext.mounted) {
+            SdkNavigator.returnToHostApp(navContext);
+          }
+        },
+      ),
+    );
   }
 
   static Future<bool> _fireEContractCustomerStepOtp(
@@ -305,7 +319,10 @@ class EContractOtpHelper {
   }
 
   /// POST ready-for-disbursement after e-contract OTP validate. Returns false on error.
-  static Future<bool> _fireReadyForDisbursement(BuildContext context) async {
+  static Future<bool> _fireReadyForDisbursement(
+    BuildContext context, {
+    bool showError = true,
+  }) async {
     try {
       final cache = VerificationCache();
       final nationalId = await _resolveCachedNationalId(cache);
@@ -380,7 +397,8 @@ class EContractOtpHelper {
 
       return true;
     } catch (e) {
-      if (!context.mounted) return false;
+      print('❌ Ready-for-disbursement failed: $e');
+      if (!showError || !context.mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(e.toString().replaceAll('Exception: ', '')),

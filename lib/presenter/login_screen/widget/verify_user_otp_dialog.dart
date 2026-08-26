@@ -18,8 +18,6 @@ import '../utils/device_info_helper.dart';
 import '../utils/vlens_sdk_launcher.dart';
 import '../model/login_response.dart';
 import '../../id_data/scene/id_data_screen.dart';
-import '../../id_data/utils/request_eligibility_helper.dart';
-import '../../user_info/scene/user_info_screen.dart';
 import 'package:tan_sdk/utils/extracted_data_log.dart';
 import '../utils/request_documents_navigator.dart';
 
@@ -272,9 +270,9 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
                       ? loginData.userName!.trim()
                       : (widget.phoneNumber ?? '').trim();
               if (resolvedMobileNumber.isNotEmpty) {
-                unawaited(VerificationCache().setMobileNumber(resolvedMobileNumber));
+                await VerificationCache().setMobileNumber(resolvedMobileNumber);
               }
-              unawaited(_cacheLoginResponseData(loginData));
+              await _cacheLoginResponseData(loginData);
               // Wait until the OTP dialog pop finishes unlocking the navigator.
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (!navigationContext.mounted) return;
@@ -285,7 +283,7 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
                   return;
                 }
                 if (loginData.isDigitalIdentityVerified == true) {
-                  unawaited(_openCachedVlensResult(navigationContext));
+                  unawaited(_openIdDataScreenAfterLogin(navigationContext));
                   return;
                 }
                 _initializeVLensSDK(navigationContext, loginData);
@@ -481,65 +479,16 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
     }
   }
 
-  Future<void> _openCachedVlensResult(BuildContext navigationContext) async {
-    final cachedData = await VerificationCache().getVlensExtractedData();
-    if (cachedData != null) {
-      logExtractedDataAfterLogin(
-        cachedData,
-        context: 'after login (cached VLENS)',
-      );
-    }
-    if (!navigationContext.mounted) return;
-
+  /// Verified identity: open [IdDataScreen] so it can GET `/vlens-data` and fill the table.
+  Future<void> _openIdDataScreenAfterLogin(BuildContext navigationContext) async {
     // Avoid !_debugLocked when the previous route transition is still active.
     await WidgetsBinding.instance.endOfFrame;
     if (!navigationContext.mounted) return;
-
-    var loadingShown = false;
-    showDialog<void>(
-      context: navigationContext,
-      barrierDismissible: false,
-      builder: (_) => const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-        ),
+    Navigator.of(navigationContext, rootNavigator: true).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => const IdDataScreen(loadFromApi: true),
       ),
     );
-    loadingShown = true;
-
-    try {
-      final eligibility =
-          await RequestEligibilityHelper.fetchEligibilityResponse();
-      if (!navigationContext.mounted) return;
-      if (loadingShown) {
-        Navigator.of(navigationContext).pop();
-        loadingShown = false;
-      }
-      await WidgetsBinding.instance.endOfFrame;
-      if (!navigationContext.mounted) return;
-      Navigator.of(navigationContext).pushReplacement(
-        MaterialPageRoute<void>(
-          builder: (_) => UserInfoScreen(eligibilityResponse: eligibility),
-        ),
-      );
-    } catch (e) {
-      if (!navigationContext.mounted) return;
-      if (loadingShown) {
-        await WidgetsBinding.instance.endOfFrame;
-        if (navigationContext.mounted &&
-            Navigator.of(navigationContext).canPop()) {
-          Navigator.of(navigationContext).pop();
-        }
-      }
-      if (!navigationContext.mounted) return;
-      ScaffoldMessenger.of(navigationContext).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', '')),
-          backgroundColor: AppColors.error,
-          duration: const Duration(seconds: 4),
-        ),
-      );
-    }
   }
 
   @override
