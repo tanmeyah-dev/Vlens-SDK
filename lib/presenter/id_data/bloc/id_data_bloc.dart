@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:core/bases/base_bloc.dart';
@@ -45,7 +44,7 @@ class IdDataBloc extends BaseBloc {
       emit(UpdateIdDataUI(_model));
     }
 
-    unawaited(_fetchAndCacheRequestTypeId(emit));
+    await VerificationCache().setRequestTypeId(ApiUrls.kRequestTypeId);
   }
 
   /// Login (verified) path — GET only.
@@ -115,57 +114,6 @@ class IdDataBloc extends BaseBloc {
     }
   }
 
-  Future<void> _fetchAndCacheRequestTypeId(dynamic emit) async {
-    if (await VerificationCache().getRequestTypeId() != null) {
-      return;
-    }
-
-    try {
-      final token = await _resolveToken();
-      final headers = token != null && token.isNotEmpty
-          ? HttpHeadersHelper.getHeadersWithAuth(token)
-          : HttpHeadersHelper.getDefaultHeaders();
-      final requestTypesUrl = ApiUrls.getRequestTypesUrl();
-      final response = await SdkHttpClient.get(
-        Uri.parse(requestTypesUrl),
-        headers: headers,
-      );
-
-      if (response.statusCode != 200) {
-        throw Exception('فشل تحميل أنواع الطلبات (${response.statusCode})');
-      }
-
-      final decoded = jsonDecode(response.body);
-      if (decoded is! Map<String, dynamic>) {
-        throw Exception('استجابة غير صالحة من الخادم');
-      }
-
-      final data = decoded['data'];
-      if (data is! List || data.isEmpty) {
-        throw Exception('لا توجد أنواع طلبات متاحة');
-      }
-
-      final first = data.first;
-      if (first is! Map<String, dynamic> || first['id'] == null) {
-        throw Exception('تعذر قراءة نوع الطلب');
-      }
-
-      final rawId = first['id'];
-      final requestTypeId = rawId is int ? rawId : int.tryParse('$rawId');
-      if (requestTypeId == null) {
-        throw Exception('معرف نوع الطلب غير صالح');
-      }
-
-      await VerificationCache().setRequestTypeId(requestTypeId);
-      if (_model.errorMessage == null) {
-        emit(UpdateIdDataUI(_model));
-      }
-    } catch (e) {
-      _model.errorMessage = e.toString().replaceAll('Exception: ', '');
-      emit(UpdateIdDataUI(_model));
-    }
-  }
-
   Future<void> _onContinue(
     IdDataContinueEvent event,
     emit,
@@ -182,13 +130,7 @@ class IdDataBloc extends BaseBloc {
         await _overwriteCachedExtractedData(latest);
       }
 
-      if (await VerificationCache().getRequestTypeId() == null) {
-        await _fetchAndCacheRequestTypeId(emit);
-      }
-      if (await VerificationCache().getRequestTypeId() == null) {
-        _model.errorMessage ??= 'تعذر تحميل أنواع الطلبات';
-        return;
-      }
+      await VerificationCache().setRequestTypeId(ApiUrls.kRequestTypeId);
 
       final token = await _resolveToken();
       final headers = token != null && token.isNotEmpty

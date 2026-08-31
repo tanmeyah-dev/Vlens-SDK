@@ -105,6 +105,9 @@ class ApiUrls {
     return 'https://api.vlenseg.com/api/DigitalIdentity/Register/StepVerifyOAuthToken';
   }
 
+  /// Fixed request type id for fields, create, and related flows.
+  static const int kRequestTypeId = 418;
+
   /// Request types list.
   static String getRequestTypesUrl() {
     return '${getLocalBaseUrl()}/vlens/api/v1/request/types';
@@ -118,8 +121,8 @@ class ApiUrls {
   /// Request fields by request type id.
   static String getRequestFieldsUrl({int? requestTypeId}) {
     final base = '${getLocalBaseUrl()}/vlens/api/v1/request/fields';
-    if (requestTypeId == null) return base;
-    return '$base?requestTypeId=$requestTypeId';
+    final id = requestTypeId ?? kRequestTypeId;
+    return '$base?requestTypeId=$id';
   }
 
   /// Create request.

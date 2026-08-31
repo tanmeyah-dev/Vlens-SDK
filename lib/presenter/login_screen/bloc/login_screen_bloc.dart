@@ -43,20 +43,23 @@ class LoginScreenBloc extends BaseBloc {
       return;
     }
 
-    final locationResult = await DeviceInfoHelper.obtainRequiredLocationForAuth();
-    if (!locationResult.hasCoordinates) {
-      emit(OnLoginErrorState(locationResult.errorMessage));
-      return;
-    }
-
     _model.isLoading = true;
     emit(UpdateLoginScreenUI(_model));
-    emit(OnLoginLoadingState()); // Emit loading state to show dialog
+    emit(OnLoginLoadingState());
 
     try {
-      // Get device IMEI and location
-      print('📱 Getting device information...');
-      final deviceId = await DeviceInfoHelper.getDeviceId();
+      final locationFuture = DeviceInfoHelper.obtainRequiredLocationForAuth();
+      final deviceIdFuture = DeviceInfoHelper.getDeviceId();
+
+      final locationResult = await locationFuture;
+      if (!locationResult.hasCoordinates) {
+        _model.isLoading = false;
+        emit(UpdateLoginScreenUI(_model));
+        emit(OnLoginErrorState(locationResult.errorMessage));
+        return;
+      }
+
+      final deviceId = await deviceIdFuture;
       final location = <String, double>{
         'latitude': locationResult.latitude!,
         'longitude': locationResult.longitude!,

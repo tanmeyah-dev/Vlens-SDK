@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:core/utils/cache/verification_cache.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -9,9 +10,51 @@ class DeviceInfoHelper {
   static const double _defaultLongitude = 1.0;
   static Map<String, double>? _memoryCachedLocation;
   static Future<Map<String, double>>? _ongoingLocationRequest;
+  static Future<String>? _ongoingDeviceIdRequest;
+
+  /// Seeds memory + disk after SDK entry location gate so login does not re-acquire GPS.
+  static void seedAuthLocation(double latitude, double longitude) {
+    if (RequiredLocationResult.isInvalidOrPlaceholder(latitude, longitude)) {
+      return;
+    }
+    _memoryCachedLocation = {
+      'latitude': latitude,
+      'longitude': longitude,
+    };
+    unawaited(
+      VerificationCache().setGeoLocation(
+        latitude: latitude,
+        longitude: longitude,
+      ),
+    );
+  }
+
+  /// Warm device id + location while the user fills the form.
+  static void prefetchAuthPayload() {
+    _ongoingDeviceIdRequest ??= getDeviceId();
+    unawaited(_ongoingDeviceIdRequest);
+    unawaited(obtainRequiredLocationForAuth());
+  }
 
   /// Get device IMEI (Android) or identifierForVendor (iOS)
   static Future<String> getDeviceId() async {
+    final inFlight = _ongoingDeviceIdRequest;
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    final request = _fetchDeviceId();
+    _ongoingDeviceIdRequest = request;
+    try {
+      return await request;
+    } finally {
+      if (identical(_ongoingDeviceIdRequest, request)) {
+        _ongoingDeviceIdRequest = null;
+      }
+    }
+  }
+
+  static Future<String> _fetchDeviceId() async {
     try {
       final deviceInfo = DeviceInfoPlugin();
 

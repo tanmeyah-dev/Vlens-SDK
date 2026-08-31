@@ -8,6 +8,7 @@ import 'package:tan_sdk/utils/required_location_helper.dart';
 import 'presenter/email_screen/scene/email_screen_scene.dart';
 import 'presenter/home/scene/home_scene.dart';
 import 'presenter/login_screen/scene/login_screen_scene.dart';
+import 'presenter/login_screen/utils/device_info_helper.dart';
 import 'presenter/login_screen/model/login_screen_nav_args.dart';
 import 'presenter/validate_user/scene/validate_user_scene.dart';
 import 'presenter/splash/scene/splash_scene.dart';
@@ -99,6 +100,10 @@ class _TanSdkEntryState extends State<TanSdkEntry> with WidgetsBindingObserver {
     final result = await RequiredLocationHelper.acquire();
     if (!mounted) return;
     if (result.hasCoordinates) {
+      DeviceInfoHelper.seedAuthLocation(
+        result.latitude!,
+        result.longitude!,
+      );
       setState(() {
         _checking = false;
         _failure = null;

@@ -103,11 +103,14 @@ class RequiredLocationHelper {
       );
     }
 
-    // Prefer a quick low-accuracy fix, then fall back to last known position.
+    // Reuse a recent fix first (e.g. SDK entry gate just obtained one).
+    final lastKnown = await _plausibleLastKnown();
+    if (lastKnown != null) return lastKnown;
+
     try {
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.low,
-        timeLimit: const Duration(seconds: 45),
+        timeLimit: const Duration(seconds: 15),
       );
       if (!RequiredLocationResult._isPlausibleCoordinate(
         position.latitude,

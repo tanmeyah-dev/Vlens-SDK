@@ -15,6 +15,10 @@ class UserInfoModel {
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
 
   bool isLoadingFields = true;
+
+  /// Set to true only after both request/fields and customers/lookups succeed.
+  bool areFieldsReady = false;
+
   String? fieldsError;
   List<RequestFieldItem> requestFields = [];
 

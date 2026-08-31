@@ -30,10 +30,8 @@ Future<RequestCreateResult> createLoanRequest({
   required List<SummaryAnswerItem> answers,
 }) async {
   final cache = VerificationCache();
-  final requestTypeId = await cache.getRequestTypeId();
-  if (requestTypeId == null) {
-    throw RequestCreateException('معرف نوع الطلب غير متوفر');
-  }
+  final requestTypeId = ApiUrls.kRequestTypeId;
+  await cache.setRequestTypeId(requestTypeId);
 
   final accessToken = await cache.getAccessToken();
   final encryptedToken = await cache.getEncryptedAccessToken();

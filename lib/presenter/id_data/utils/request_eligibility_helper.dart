@@ -31,39 +31,7 @@ class RequestEligibilityHelper {
   }
 
   static Future<int> ensureRequestTypeIdCached() async {
-    final existing = await VerificationCache().getRequestTypeId();
-    if (existing != null) return existing;
-
-    final headers = await _headers();
-    final response = await SdkHttpClient.get(
-      Uri.parse(ApiUrls.getRequestTypesUrl()),
-      headers: headers,
-    );
-    if (response.statusCode != 200) {
-      throw Exception('فشل تحميل أنواع الطلبات (${response.statusCode})');
-    }
-
-    final decoded = jsonDecode(response.body);
-    if (decoded is! Map<String, dynamic>) {
-      throw Exception('استجابة غير صالحة من الخادم');
-    }
-
-    final data = decoded['data'];
-    if (data is! List || data.isEmpty) {
-      throw Exception('لا توجد أنواع طلبات متاحة');
-    }
-
-    final first = data.first;
-    if (first is! Map<String, dynamic> || first['id'] == null) {
-      throw Exception('تعذر قراءة نوع الطلب');
-    }
-
-    final rawId = first['id'];
-    final requestTypeId = rawId is int ? rawId : int.tryParse('$rawId');
-    if (requestTypeId == null) {
-      throw Exception('معرف نوع الطلب غير صالح');
-    }
-
+    const requestTypeId = ApiUrls.kRequestTypeId;
     await VerificationCache().setRequestTypeId(requestTypeId);
     return requestTypeId;
   }

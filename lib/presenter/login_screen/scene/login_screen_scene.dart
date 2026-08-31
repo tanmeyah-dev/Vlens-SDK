@@ -23,6 +23,7 @@ import '../bloc/login_screen_bloc.dart';
 import '../event/login_screen_event.dart';
 import '../model/login_screen_model.dart';
 import '../state/login_screen_state.dart';
+import '../utils/device_info_helper.dart';
 import '../utils/phone_validator.dart';
 import '../utils/verify_user_otp_dialog_helper.dart';
 import '../utils/vlens_sdk_launcher.dart';
@@ -54,6 +55,14 @@ class _LoginScreenSceneState
   bool _loginLoadingActive = false;
   bool _isOpeningVlens = false;
   BuildContext? _loginLoadingDialogContext;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      DeviceInfoHelper.prefetchAuthPayload();
+    });
+  }
 
   void _dismissLoginLoadingOverlay() {
     final dialogCtx = _loginLoadingDialogContext;
@@ -437,10 +446,6 @@ class _LoginScreenSceneState
       final needsPhoneOtp =
           loginResponseData.isPhoneNumberConfirmationRequired == true &&
               loginResponseData.isPhoneNumberConfirmed != true;
-      final hasUsableToken =
-          (loginResponseData.accessToken?.trim().isNotEmpty == true) ||
-              (loginResponseData.encryptedAccessToken?.trim().isNotEmpty ==
-                  true);
       final openVlensDirectly = !needsPhoneOtp &&
           loginResponseData.isDigitalIdentityVerified != true;
 
@@ -484,27 +489,7 @@ class _LoginScreenSceneState
             emit(UpdateLoginScreenUIEvent(_model));
           });
         } else {
-          await VerificationCache().setLoginSession(
-            accessToken: loginResponseData.accessToken,
-            refreshToken: loginResponseData.refreshToken,
-            encryptedAccessToken: loginResponseData.encryptedAccessToken,
-            transactionId: loginResponseData.transactionId,
-            userName: loginResponseData.userName,
-            userFullName: loginResponseData.userFullName,
-            nationalId: loginResponseData.nationalId,
-          );
-          final resolvedMobileNumber =
-              (loginResponseData.userName ?? '').trim().isNotEmpty
-                  ? loginResponseData.userName!.trim()
-                  : _model.mobileNumberController.text.trim();
-          if (resolvedMobileNumber.isNotEmpty) {
-            await VerificationCache().setMobileNumber(resolvedMobileNumber);
-          }
-          await _cacheLoginResponseData(loginResponseData);
-          if (!hasUsableToken) {
-            print(
-                '⚠️ Login success without usable token, but OTP is not required by backend.');
-          }
+          unawaited(_persistLoginSessionAfterSuccess(loginResponseData));
 
           if (!mounted || !context.mounted) return;
 
@@ -642,6 +627,28 @@ class _LoginScreenSceneState
     });
   }
 
+  Future<void> _persistLoginSessionAfterSuccess(
+    LoginResponseData loginResponseData,
+  ) async {
+    await VerificationCache().setLoginSession(
+      accessToken: loginResponseData.accessToken,
+      refreshToken: loginResponseData.refreshToken,
+      encryptedAccessToken: loginResponseData.encryptedAccessToken,
+      transactionId: loginResponseData.transactionId,
+      userName: loginResponseData.userName,
+      userFullName: loginResponseData.userFullName,
+      nationalId: loginResponseData.nationalId,
+    );
+    final resolvedMobileNumber =
+        (loginResponseData.userName ?? '').trim().isNotEmpty
+            ? loginResponseData.userName!.trim()
+            : _model.mobileNumberController.text.trim();
+    if (resolvedMobileNumber.isNotEmpty) {
+      await VerificationCache().setMobileNumber(resolvedMobileNumber);
+    }
+    await _cacheLoginResponseData(loginResponseData);
+  }
+
   Future<void> _cacheVlensExtractedData(dynamic extractedData) async {
     try {
       final normalized = jsonDecode(jsonEncode(extractedData));
@@ -684,8 +691,6 @@ class _LoginScreenSceneState
   /// Verified identity: open [IdDataScreen] so it can GET `/vlens-data` and fill the table.
   Future<void> _openIdDataScreenAfterLogin(BuildContext context) async {
     try {
-      if (!mounted || !context.mounted) return;
-      await WidgetsBinding.instance.endOfFrame;
       if (!mounted || !context.mounted) return;
       Navigator.of(context, rootNavigator: true).pushReplacement(
         MaterialPageRoute(

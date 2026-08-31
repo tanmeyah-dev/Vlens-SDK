@@ -128,7 +128,7 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
                               keyboardDismissBehavior:
                                   ScrollViewKeyboardDismissBehavior.onDrag,
                               children: [
-                                if (model.isLoadingFields)
+                                if (model.isLoadingFields || !model.areFieldsReady)
                                   const Padding(
                                     padding: EdgeInsets.symmetric(vertical: 24),
                                     child: Center(child: CircularProgressIndicator()),
@@ -168,7 +168,9 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
                           const SizedBox(height: 12),
                           AppButton(
                             title: 'حفظ',
-                            onPressed: (model.isLoadingFields || _isSubmitting)
+                            onPressed: (model.isLoadingFields ||
+                                    !model.areFieldsReady ||
+                                    _isSubmitting)
                                 ? null
                                 : () => _onSavePressed(model),
                           ),

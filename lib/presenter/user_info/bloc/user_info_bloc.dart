@@ -65,19 +65,22 @@ class UserInfoBloc extends BaseBloc {
         print('ℹ️ USER_INFO: isEligible=false, skipping request/fields call.');
       }
       _model.isLoadingFields = false;
+      _model.areFieldsReady = false;
       _model.fieldsError = 'المستخدم غير مؤهل حالياً';
       emit(UpdateUserInfoUI(_model));
       return;
     }
 
     _model.isLoadingFields = true;
+    _model.areFieldsReady = false;
     _model.fieldsError = null;
     emit(UpdateUserInfoUI(_model));
 
     final cache = VerificationCache();
     await _loadCachedExtractedData(cache);
 
-    final requestTypeId = await cache.getRequestTypeId();
+    final requestTypeId = ApiUrls.kRequestTypeId;
+    await cache.setRequestTypeId(requestTypeId);
     final accessToken = await cache.getAccessToken();
     final encryptedToken = await cache.getEncryptedAccessToken();
     final token = (accessToken != null && accessToken.trim().isNotEmpty)
@@ -105,35 +108,13 @@ class UserInfoBloc extends BaseBloc {
     }
 
     try {
-      final fieldsFuture = SdkHttpClient.get(
-        Uri.parse(fieldsUrl),
-        headers: headers,
-      );
-      final lookupsFuture = SdkHttpClient.get(
-        Uri.parse(lookupsUrl),
-        headers: headers,
-      );
+      final responses = await Future.wait([
+        SdkHttpClient.get(Uri.parse(fieldsUrl), headers: headers),
+        SdkHttpClient.get(Uri.parse(lookupsUrl), headers: headers),
+      ]);
 
-      final fieldsResponse = await fieldsFuture;
-      LookupsData? lookupsData;
-      try {
-        final lookupsResponse = await lookupsFuture;
-        if (kDebugMode) {
-          print('');
-          print('═══════════════════════════════════════════════════════');
-          print('📥 LOOKUPS API RESPONSE (USER_INFO)');
-          print('═══════════════════════════════════════════════════════');
-          print('Status Code: ${lookupsResponse.statusCode}');
-          print('Body: ${lookupsResponse.body}');
-          print('═══════════════════════════════════════════════════════');
-          print('');
-        }
-        lookupsData = _parseLookupsResponse(lookupsResponse);
-      } catch (e) {
-        if (kDebugMode) {
-          print('⚠️ LOOKUPS API ERROR (USER_INFO): $e');
-        }
-      }
+      final fieldsResponse = responses[0];
+      final lookupsResponse = responses[1];
 
       if (kDebugMode) {
         print('');
@@ -144,11 +125,20 @@ class UserInfoBloc extends BaseBloc {
         print('Body: ${fieldsResponse.body}');
         print('═══════════════════════════════════════════════════════');
         print('');
+        print('═══════════════════════════════════════════════════════');
+        print('📥 LOOKUPS API RESPONSE (USER_INFO)');
+        print('═══════════════════════════════════════════════════════');
+        print('Status Code: ${lookupsResponse.statusCode}');
+        print('Body: ${lookupsResponse.body}');
+        print('═══════════════════════════════════════════════════════');
+        print('');
       }
 
       if (fieldsResponse.statusCode != 200) {
         throw Exception('فشل تحميل الحقول (${fieldsResponse.statusCode})');
       }
+
+      final lookupsData = _parseLookupsResponse(lookupsResponse);
 
       final decodedFields = jsonDecode(fieldsResponse.body);
       if (decodedFields is! Map<String, dynamic>) {
@@ -162,15 +152,15 @@ class UserInfoBloc extends BaseBloc {
           <RequestFieldItem>[];
       fields.sort((a, b) => a.order.compareTo(b.order));
 
-      _model.lookups = lookupsData?.lookups;
-      _model.jobs = lookupsData?.jobs ?? const [];
-      _model.locations = lookupsData?.locations ?? const [];
+      _model.lookups = lookupsData.lookups;
+      _model.jobs = lookupsData.jobs;
+      _model.locations = lookupsData.locations;
 
       // Prefer request/fields. Only add lookups dropdowns that are not already
       // covered (by key, aliases, or label) to avoid duplicates like
       // «اختر المؤهل الدراسي» + «المؤهل».
       final uniqueLookupFields = buildLookupSelectFields(
-        lookupsData?.lookups,
+        lookupsData.lookups,
         existingRequestFields: fields,
       );
       _model.populateFromRequestFields(
@@ -178,21 +168,19 @@ class UserInfoBloc extends BaseBloc {
         lookupFieldsOverride: uniqueLookupFields,
       );
       _model.isLoadingFields = false;
+      _model.areFieldsReady = true;
       _model.fieldsError = null;
 
       if (kDebugMode) {
         final gender = _model.selectedValues['CIF_GENDER'];
         final religion = _model.selectedValues['CIF_RELIGION'];
         final social = _model.selectedValues['CIF_SOCIAL_STATUS'];
-        final skippedLookups = (lookupsData?.lookups == null)
-            ? 0
-            : buildLookupSelectFields(lookupsData!.lookups).length -
-                uniqueLookupFields.length;
+        final skippedLookups = buildLookupSelectFields(lookupsData.lookups).length -
+            uniqueLookupFields.length;
         print(
           '✅ USER_INFO: requestFields=${fields.length}, '
           'lookupFields=${uniqueLookupFields.length} '
           '(skippedDuplicates≈$skippedLookups), '
-          'lookupsLoaded=${lookupsData != null}, '
           'jobs=${_model.jobs.length}, '
           'locations=${_model.locations.length}',
         );
@@ -209,6 +197,7 @@ class UserInfoBloc extends BaseBloc {
         print('❌ USER_INFO LOAD ERROR: $e');
       }
       _model.isLoadingFields = false;
+      _model.areFieldsReady = false;
       _model.fieldsError = e.toString().replaceAll('Exception: ', '');
       emit(UpdateUserInfoUI(_model));
     }
@@ -232,27 +221,22 @@ class UserInfoBloc extends BaseBloc {
     }
   }
 
-  LookupsData? _parseLookupsResponse(dynamic response) {
-    try {
-      if (response.statusCode != 200) {
-        if (kDebugMode) {
-          print(
-            '⚠️ LOOKUPS API non-200 (${response.statusCode}); '
-            'continuing without lookups.',
-          );
-        }
-        return null;
-      }
-      final decoded = jsonDecode(response.body);
-      if (decoded is! Map<String, dynamic>) return null;
-      final parsed = LookupsResponse.fromJson(decoded);
-      if (!parsed.success && parsed.data == null) return null;
-      return parsed.data;
-    } catch (e) {
-      if (kDebugMode) {
-        print('⚠️ LOOKUPS parse error: $e');
-      }
-      return null;
+  LookupsData _parseLookupsResponse(dynamic response) {
+    if (response.statusCode != 200) {
+      throw Exception('فشل تحميل البيانات المرجعية (${response.statusCode})');
     }
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('استجابة غير صالحة من customers/lookups');
+    }
+    final parsed = LookupsResponse.fromJson(decoded);
+    if (!parsed.success && parsed.data == null) {
+      throw Exception('فشل تحميل البيانات المرجعية');
+    }
+    final data = parsed.data;
+    if (data == null) {
+      throw Exception('البيانات المرجعية فارغة');
+    }
+    return data;
   }
 }
