@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:core/style/app_colors.dart';
@@ -6,7 +5,6 @@ import 'package:core/utils/cache/verification_cache.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:flutter/material.dart';
 
-import '../../../data/models/extracted_user_data.dart';
 import '../../../utils/api_error_parser.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../../utils/sdk_navigator.dart';
@@ -22,7 +20,7 @@ class EContractOtpHelper {
 
   static const String _emptyGuid = '00000000-0000-0000-0000-000000000000';
 
-  /// After ready-for-disbursement succeeds, returns to the host main screen.
+  /// After e-contract OTP succeeds, returns to the host main screen.
   static Future<void> run(
     BuildContext context,
     dynamic requestId,
@@ -55,20 +53,16 @@ class EContractOtpHelper {
     );
     if (!context.mounted || validateResponse == null) return;
 
-    // Fire distribution API while the success alert is visible.
-    unawaited(_fireReadyForDisbursement(context, showError: false));
-
     final navContext = context;
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => EContractSuccessDialog(
-        navigationContext: navContext,
-        onDismiss: () {
-          if (navContext.mounted) {
-            SdkNavigator.returnToHostApp(navContext);
-          }
-        },
+    await Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => EContractSuccessDialog(
+          onDismiss: () {
+            if (navContext.mounted) {
+              SdkNavigator.returnToHostApp(navContext);
+            }
+          },
+        ),
       ),
     );
   }
@@ -316,180 +310,5 @@ class EContractOtpHelper {
       );
       return null;
     }
-  }
-
-  /// POST ready-for-disbursement after e-contract OTP validate. Returns false on error.
-  static Future<bool> _fireReadyForDisbursement(
-    BuildContext context, {
-    bool showError = true,
-  }) async {
-    try {
-      final cache = VerificationCache();
-      final nationalId = await _resolveCachedNationalId(cache);
-      if (nationalId == null || nationalId.isEmpty) {
-        throw Exception('الرقم القومي غير متوفر');
-      }
-
-      final accessToken = await cache.getAccessToken();
-      final encryptedToken = await cache.getEncryptedAccessToken();
-      final token = (accessToken != null && accessToken.trim().isNotEmpty)
-          ? accessToken.trim()
-          : (encryptedToken ?? '').trim();
-      final headers = token.isNotEmpty
-          ? HttpHeadersHelper.getHeadersWithAuth(token)
-          : HttpHeadersHelper.getDefaultHeaders();
-
-      final url = ApiUrls.getReadyForDisbursementUrl();
-      final body = {'nationalId': nationalId};
-
-      print('');
-      print('═══════════════════════════════════════════════════════');
-      print('📤 READY-FOR-DISBURSEMENT API CALL');
-      print('═══════════════════════════════════════════════════════');
-      print('URL: $url');
-      print('Method: POST');
-      print('Headers: $headers');
-      print('Body: ${jsonEncode(body)}');
-      print('═══════════════════════════════════════════════════════');
-      print('');
-
-      final response = await SdkHttpClient.post(
-        Uri.parse(url),
-        headers: headers,
-        body: jsonEncode(body),
-      );
-
-      print('');
-      print('═══════════════════════════════════════════════════════');
-      print('📥 READY-FOR-DISBURSEMENT API RESPONSE');
-      print('═══════════════════════════════════════════════════════');
-      print('Status Code: ${response.statusCode}');
-      print('Body: ${response.body}');
-      print('═══════════════════════════════════════════════════════');
-      print('');
-
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception(
-          ApiErrorParser.extractMessage(
-            response.body,
-            fallbackMessage:
-                'فشل تجهيز القرض للصرف (${response.statusCode})',
-          ),
-        );
-      }
-
-      if (response.body.trim().isNotEmpty) {
-        dynamic decoded;
-        try {
-          decoded = jsonDecode(response.body);
-        } catch (_) {
-          decoded = null;
-        }
-        if (decoded is Map && decoded['success'] == false) {
-          throw Exception(
-            ApiErrorParser.extractMessage(
-              response.body,
-              fallbackMessage: 'فشل تجهيز القرض للصرف',
-            ),
-          );
-        }
-      }
-
-      return true;
-    } catch (e) {
-      print('❌ Ready-for-disbursement failed: $e');
-      if (!showError || !context.mounted) return false;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', '')),
-          backgroundColor: AppColors.error,
-        ),
-      );
-      return false;
-    }
-  }
-
-  static Future<String?> _resolveCachedNationalId(VerificationCache cache) async {
-    final persisted = (await cache.getNationalId())?.trim();
-    if (persisted != null && persisted.isNotEmpty) return persisted;
-
-    final fromVlens = _nationalIdFromVlens(await cache.getVlensExtractedData());
-    if (fromVlens != null) return fromVlens;
-
-    final fromTrace = _extractNationalIdFromDynamic(
-      await cache.getVlensTraceResponseBody(),
-    );
-    if (fromTrace != null) return fromTrace;
-
-    final fromLogin = _extractNationalIdFromDynamic(
-      await cache.getLoginResponseData(),
-    );
-    if (fromLogin != null) return fromLogin;
-
-    return null;
-  }
-
-  static String? _nationalIdFromVlens(dynamic cached) {
-    if (cached == null) return null;
-
-    ExtractedUserData? data;
-    if (cached is ExtractedUserData) {
-      data = cached;
-    } else if (cached is Map<String, dynamic>) {
-      data = ExtractedUserData.fromJson(cached);
-    } else if (cached is Map) {
-      data = ExtractedUserData.fromJson(Map<String, dynamic>.from(cached));
-    }
-
-    final fromModel = data?.idFrontData?.idNumber?.trim() ??
-        data?.idBackData?.idNumber?.trim() ??
-        data?.user?.idNumber?.trim();
-    if (fromModel != null && fromModel.isNotEmpty) return fromModel;
-
-    return _extractNationalIdFromDynamic(cached);
-  }
-
-  static String? _extractNationalIdFromDynamic(dynamic value) {
-    if (value == null) return null;
-    if (value is Map) {
-      final map = Map<String, dynamic>.from(value);
-      for (final key in const [
-        'idNumber',
-        'nationalId',
-        'nationalID',
-        'NationalId',
-        'id_number',
-        'CIF_ID',
-        'cifId',
-      ]) {
-        final direct = map[key]?.toString().trim();
-        if (_isUsableNationalId(direct)) return direct;
-      }
-      final userName = map['userName']?.toString().trim();
-      if (_looksLikeNationalId(userName)) return userName;
-      for (final entry in map.values) {
-        final nested = _extractNationalIdFromDynamic(entry);
-        if (nested != null && nested.isNotEmpty) return nested;
-      }
-      return null;
-    }
-    if (value is List) {
-      for (final item in value) {
-        final nested = _extractNationalIdFromDynamic(item);
-        if (nested != null && nested.isNotEmpty) return nested;
-      }
-    }
-    return null;
-  }
-
-  static bool _isUsableNationalId(String? value) {
-    if (value == null || value.isEmpty) return false;
-    return value != _emptyGuid;
-  }
-
-  static bool _looksLikeNationalId(String? value) {
-    if (value == null || value.isEmpty) return false;
-    final digits = value.replaceAll(RegExp(r'\D'), '');
-    return digits.length == 14;
   }
 }

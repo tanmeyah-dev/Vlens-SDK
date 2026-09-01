@@ -11,6 +11,7 @@ import '../../../utils/api_error_parser.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../validate_user/constants/api_urls.dart';
 import '../constants/google_oauth_helper.dart';
+import '../constants/google_oauth_config.dart';
 import '../event/email_screen_event.dart';
 import '../model/email_screen_model.dart';
 import '../model/send_email_otp_response.dart';
@@ -184,7 +185,9 @@ class EmailScreenBloc extends BaseBloc {
       emit(UpdateEmailScreenUI(_model));
 
       final msg = e.toString();
-      if (msg.contains('IdToken')) {
+      if (_looksLikeMissingIosUrlScheme(msg)) {
+        emit(OnEmailErrorState(_missingIosUrlSchemeMessage()));
+      } else if (msg.contains('IdToken')) {
         emit(OnEmailErrorState(
           'تعذر الحصول على رمز Google. تأكد من إعداد Web Client ID.',
         ));
@@ -207,6 +210,10 @@ class EmailScreenBloc extends BaseBloc {
   /// release / Play App Signing SHA-1 is missing from the Android OAuth client.
   String _googleSignInUserMessage(GoogleSignInException e) {
     final raw = '${e.description ?? ''} ${e.code.name}'.toLowerCase();
+    if (_looksLikeMissingIosUrlScheme(raw)) {
+      return _missingIosUrlSchemeMessage();
+    }
+
     final looksLikeDeveloperError = raw.contains('10:') ||
         raw.contains('api_exception: 10') ||
         raw.contains('developer_error') ||
@@ -225,6 +232,20 @@ class EmailScreenBloc extends BaseBloc {
       return e.description!.trim();
     }
     return 'فشل تسجيل الدخول بحساب Google';
+  }
+
+  bool _looksLikeMissingIosUrlScheme(String raw) {
+    final lower = raw.toLowerCase();
+    return lower.contains('url schemes') ||
+        lower.contains('url scheme') ||
+        lower.contains('nsinvalidargumentexception') ||
+        lower.contains(GoogleOAuthConfig.iosReversedClientId.toLowerCase());
+  }
+
+  String _missingIosUrlSchemeMessage() {
+    return 'إعداد Google Sign-In على iOS غير مكتمل.\n'
+        'أضف CFBundleURLTypes في ios/Runner/Info.plist:\n'
+        '${GoogleOAuthConfig.iosReversedClientId}';
   }
 
   _onSaveEmailEvent(SaveEmailEvent event, emit) async {

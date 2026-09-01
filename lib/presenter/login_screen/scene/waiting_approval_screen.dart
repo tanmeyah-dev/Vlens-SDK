@@ -3,12 +3,12 @@ import 'package:core/style/app_colors.dart';
 import 'package:core/utils/ui.dart';
 import 'package:flutter/material.dart';
 
-import '../../../utils/sdk_navigator.dart';
+import '../utils/request_documents_navigator.dart';
 
 /// Package name from [pubspec.yaml]; required for asset resolution from host apps.
 const String _tanSdkPackageName = 'tan_sdk';
 
-/// Shown after successful [request/create]. [حسناً] returns to the host app.
+/// Shown after successful [request/create]. [حسناً] opens [RequestDocumentsScene].
 class WaitingApprovalScreen extends StatefulWidget {
   final dynamic requestId;
 
@@ -23,7 +23,10 @@ class WaitingApprovalScreen extends StatefulWidget {
 
 class _WaitingApprovalScreenState extends State<WaitingApprovalScreen> {
   void _onContinuePressed() {
-    SdkNavigator.returnToHostApp(context);
+    RequestDocumentsNavigator.openDocumentsScene(
+      context,
+      logLabel: 'WAITING_APPROVAL',
+    );
   }
 
   @override

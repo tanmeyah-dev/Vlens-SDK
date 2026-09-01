@@ -1,22 +1,15 @@
-import 'dart:convert';
-
 import 'package:core/components/button/app_button.dart';
 import 'package:core/components/image/app_image.dart';
 import 'package:core/style/app_colors.dart';
 import 'package:core/utils/ui.dart';
 import 'package:core/utils/cache/verification_cache.dart';
-import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:flutter/material.dart';
 
 import '../../../data/models/extracted_user_data.dart';
-import '../../../utils/api_error_parser.dart';
-import '../../../utils/sdk_http_client.dart';
 import '../../user_info/model/summary_answer_item.dart';
 import '../../user_info/model/user_info_model.dart';
 import '../../user_info/utils/request_create_helper.dart';
-import '../../user_info/utils/user_info_one_click_apply_builder.dart';
-import 'waiting_approval_screen.dart';
-import '../../validate_user/constants/api_urls.dart';
+import '../utils/request_documents_navigator.dart';
 
 class SummaryScreen extends StatefulWidget {
   final List<SummaryAnswerItem> answeredFields;
@@ -285,93 +278,17 @@ class _SummaryScreenState extends State<SummaryScreen> {
           : await createLoanRequest(answers: widget.answeredFields);
       _createdRequestId = created.requestId;
 
-      final cache = VerificationCache();
-      final cachedEmail = await cache.getEmail();
-      final cachedPhone = await cache.getMobileNumber();
-
-      final built = buildOneClickApplyBody(
-        model: widget.userInfoModel,
-        answers: widget.answeredFields,
-        cachedEmail: cachedEmail,
-        cachedPhone: cachedPhone,
-      );
-
-      final accessToken = await cache.getAccessToken();
-      final encryptedToken = await cache.getEncryptedAccessToken();
-      final token = (accessToken != null && accessToken.trim().isNotEmpty)
-          ? accessToken.trim()
-          : (encryptedToken ?? '').trim();
-      final headers = token.isNotEmpty
-          ? HttpHeadersHelper.getHeadersWithAuth(token)
-          : HttpHeadersHelper.getDefaultHeaders();
-
-      final url = ApiUrls.getOneClickApplyUrl();
-      final bodyJson = jsonEncode(built.body);
-
-      print('');
-      print('═══════════════════════════════════════════════════════');
-      print('📤 ONE-CLICK APPLY API CALL (SUMMARY)');
-      print('═══════════════════════════════════════════════════════');
-      print('URL: $url');
-      print('Method: POST');
-      print('Headers: $headers');
-      print('Body: $bodyJson');
-      print('═══════════════════════════════════════════════════════');
-      print('');
-
-      final response = await SdkHttpClient.post(
-        Uri.parse(url),
-        headers: headers,
-        body: bodyJson,
-      );
-
-      print('');
-      print('═══════════════════════════════════════════════════════');
-      print('📥 ONE-CLICK APPLY API RESPONSE (SUMMARY)');
-      print('═══════════════════════════════════════════════════════');
-      print('Status Code: ${response.statusCode}');
-      print('Body: ${response.body}');
-      print('═══════════════════════════════════════════════════════');
-      print('');
-
       if (!mounted) return;
-
-      if (response.statusCode != 200) {
-        final message = ApiErrorParser.extractMessage(
-          response.body,
-          fallbackMessage: 'فشل إرسال طلب القرض (${response.statusCode})',
-        );
-        throw Exception(message);
-      }
-
-      final decoded = _tryDecodeMap(response.body);
-      if (decoded != null && decoded['success'] == false) {
-        final message = ApiErrorParser.extractMessage(
-          response.body,
-          fallbackMessage: 'فشل إرسال طلب القرض',
-        );
-        throw Exception(message);
-      }
 
       setState(() {
         _isSubmitting = false;
       });
-      if (!mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) =>
-              WaitingApprovalScreen(requestId: created.requestId),
-        ),
+
+      await RequestDocumentsNavigator.openDocumentsScene(
+        context,
+        logLabel: 'REQUEST_CREATE',
       );
     } on RequestCreateException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.message),
-          backgroundColor: AppColors.error,
-        ),
-      );
-    } on OneClickApplyBuildException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -395,19 +312,6 @@ class _SummaryScreenState extends State<SummaryScreen> {
         });
       }
     }
-  }
-
-  Map<String, dynamic>? _tryDecodeMap(String rawBody) {
-    if (rawBody.trim().isEmpty) return null;
-    try {
-      final decoded = jsonDecode(rawBody);
-      if (decoded is Map) {
-        return Map<String, dynamic>.from(decoded);
-      }
-    } catch (_) {
-      // Ignore malformed JSON and fallback with null map.
-    }
-    return null;
   }
 
   Widget _buildConsentText() {

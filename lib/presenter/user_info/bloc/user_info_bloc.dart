@@ -10,11 +10,9 @@ import '../../../utils/sdk_http_client.dart';
 import '../../id_data/utils/id_data_parser.dart';
 import '../../validate_user/constants/api_urls.dart';
 import '../event/user_info_event.dart';
-import '../model/lookups_response.dart';
 import '../model/request_fields_response.dart';
 import '../model/user_info_model.dart';
 import '../state/user_info_state.dart';
-import '../utils/user_info_lookup_helpers.dart';
 
 class UserInfoBloc extends BaseBloc {
   UserInfoBloc(this._model)
@@ -91,15 +89,13 @@ class UserInfoBloc extends BaseBloc {
         ? HttpHeadersHelper.getHeadersWithAuth(token)
         : HttpHeadersHelper.getDefaultHeaders();
     final fieldsUrl = ApiUrls.getRequestFieldsUrl(requestTypeId: requestTypeId);
-    final lookupsUrl = ApiUrls.getCustomersLookupsUrl();
 
     if (kDebugMode) {
       print('');
       print('═══════════════════════════════════════════════════════');
-      print('📤 USER_INFO API CALLS');
+      print('📤 USER_INFO API CALL');
       print('═══════════════════════════════════════════════════════');
       print('Fields URL: $fieldsUrl');
-      print('Lookups URL: $lookupsUrl');
       print('requestTypeId (cached): $requestTypeId');
       print('Has Bearer Token: ${token.isNotEmpty}');
       print('Cached extracted data: ${_model.cachedExtractedData != null}');
@@ -108,13 +104,8 @@ class UserInfoBloc extends BaseBloc {
     }
 
     try {
-      final responses = await Future.wait([
-        SdkHttpClient.get(Uri.parse(fieldsUrl), headers: headers),
-        SdkHttpClient.get(Uri.parse(lookupsUrl), headers: headers),
-      ]);
-
-      final fieldsResponse = responses[0];
-      final lookupsResponse = responses[1];
+      final fieldsResponse =
+          await SdkHttpClient.get(Uri.parse(fieldsUrl), headers: headers);
 
       if (kDebugMode) {
         print('');
@@ -125,20 +116,11 @@ class UserInfoBloc extends BaseBloc {
         print('Body: ${fieldsResponse.body}');
         print('═══════════════════════════════════════════════════════');
         print('');
-        print('═══════════════════════════════════════════════════════');
-        print('📥 LOOKUPS API RESPONSE (USER_INFO)');
-        print('═══════════════════════════════════════════════════════');
-        print('Status Code: ${lookupsResponse.statusCode}');
-        print('Body: ${lookupsResponse.body}');
-        print('═══════════════════════════════════════════════════════');
-        print('');
       }
 
       if (fieldsResponse.statusCode != 200) {
         throw Exception('فشل تحميل الحقول (${fieldsResponse.statusCode})');
       }
-
-      final lookupsData = _parseLookupsResponse(lookupsResponse);
 
       final decodedFields = jsonDecode(fieldsResponse.body);
       if (decodedFields is! Map<String, dynamic>) {
@@ -152,21 +134,7 @@ class UserInfoBloc extends BaseBloc {
           <RequestFieldItem>[];
       fields.sort((a, b) => a.order.compareTo(b.order));
 
-      _model.lookups = lookupsData.lookups;
-      _model.jobs = lookupsData.jobs;
-      _model.locations = lookupsData.locations;
-
-      // Prefer request/fields. Only add lookups dropdowns that are not already
-      // covered (by key, aliases, or label) to avoid duplicates like
-      // «اختر المؤهل الدراسي» + «المؤهل».
-      final uniqueLookupFields = buildLookupSelectFields(
-        lookupsData.lookups,
-        existingRequestFields: fields,
-      );
-      _model.populateFromRequestFields(
-        fields,
-        lookupFieldsOverride: uniqueLookupFields,
-      );
+      _model.populateFromRequestFields(fields);
       _model.isLoadingFields = false;
       _model.areFieldsReady = true;
       _model.fieldsError = null;
@@ -175,14 +143,8 @@ class UserInfoBloc extends BaseBloc {
         final gender = _model.selectedValues['CIF_GENDER'];
         final religion = _model.selectedValues['CIF_RELIGION'];
         final social = _model.selectedValues['CIF_SOCIAL_STATUS'];
-        final skippedLookups = buildLookupSelectFields(lookupsData.lookups).length -
-            uniqueLookupFields.length;
         print(
-          '✅ USER_INFO: requestFields=${fields.length}, '
-          'lookupFields=${uniqueLookupFields.length} '
-          '(skippedDuplicates≈$skippedLookups), '
-          'jobs=${_model.jobs.length}, '
-          'locations=${_model.locations.length}',
+          '✅ USER_INFO: requestFields=${fields.length}',
         );
         print(
           '✅ USER_INFO defaults from national ID => '
@@ -204,6 +166,16 @@ class UserInfoBloc extends BaseBloc {
   }
 
   Future<void> _loadCachedExtractedData(VerificationCache cache) async {
+    if (_model.cachedExtractedData != null) {
+      if (kDebugMode) {
+        print(
+          '📦 USER_INFO: using extracted data passed from IdDataScreen '
+          '(marital=${_model.cachedExtractedData?.idBackData?.maritalStatus})',
+        );
+      }
+      return;
+    }
+
     try {
       final cached = await cache.getVlensExtractedData();
       _model.cachedExtractedData = parseExtractedUserData(cached);
@@ -221,22 +193,4 @@ class UserInfoBloc extends BaseBloc {
     }
   }
 
-  LookupsData _parseLookupsResponse(dynamic response) {
-    if (response.statusCode != 200) {
-      throw Exception('فشل تحميل البيانات المرجعية (${response.statusCode})');
-    }
-    final decoded = jsonDecode(response.body);
-    if (decoded is! Map<String, dynamic>) {
-      throw Exception('استجابة غير صالحة من customers/lookups');
-    }
-    final parsed = LookupsResponse.fromJson(decoded);
-    if (!parsed.success && parsed.data == null) {
-      throw Exception('فشل تحميل البيانات المرجعية');
-    }
-    final data = parsed.data;
-    if (data == null) {
-      throw Exception('البيانات المرجعية فارغة');
-    }
-    return data;
-  }
 }

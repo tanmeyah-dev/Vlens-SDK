@@ -6,6 +6,7 @@ import 'package:core/components/image/app_image.dart';
 import 'package:core/style/app_colors.dart';
 import 'package:core/utils/ui.dart';
 import 'package:flutter/material.dart';
+import 'package:tan_sdk/data/models/extracted_user_data.dart';
 
 import '../../login_screen/scene/summaryscreen.dart';
 import '../bloc/user_info_bloc.dart';
@@ -16,10 +17,12 @@ import '../widget/user_info_dynamic_field.dart';
 
 class UserInfoScreen extends StatefulWidget {
   final Map<String, dynamic> eligibilityResponse;
+  final ExtractedUserData? extractedData;
 
   const UserInfoScreen({
     super.key,
     required this.eligibilityResponse,
+    this.extractedData,
   });
 
   @override
@@ -219,6 +222,11 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
 
   @override
   UserInfoBloc createBloc() {
-    return UserInfoBloc(UserInfoModel(eligibilityResponse: widget.eligibilityResponse));
+    return UserInfoBloc(
+      UserInfoModel(
+        eligibilityResponse: widget.eligibilityResponse,
+        extractedData: widget.extractedData,
+      ),
+    );
   }
 }

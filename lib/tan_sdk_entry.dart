@@ -29,6 +29,42 @@ const String _tanSdkPackageName = 'tan_sdk';
 /// Location services and permission must be granted and a GPS fix obtained
 /// before the SDK flow is shown (Android: GPS on + permission; iOS: permission + fix).
 ///
+/// **Camera (VLens identity scan):** the SDK requests runtime camera permission
+/// automatically before opening VLens. Host apps must also declare:
+///
+/// **Android** — merged from this package (`CAMERA` permission).
+///
+/// **iOS** — add to `ios/Runner/Info.plist`:
+/// ```xml
+/// <key>NSCameraUsageDescription</key>
+/// <string>Camera access is required for identity verification.</string>
+/// ```
+/// And in `ios/Podfile` inside `post_install`, enable camera for permission_handler:
+/// ```ruby
+/// config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+/// config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'PERMISSION_CAMERA=1'
+/// ```
+/// Without these, iOS may block camera access right after login without showing a prompt.
+///
+/// **Google Sign-In (email screen):** host apps must add to `ios/Runner/Info.plist`:
+/// ```xml
+/// <key>GIDClientID</key>
+/// <string>310544200746-ipahem5reva3j927ppjdjmlt4htjhoq2.apps.googleusercontent.com</string>
+/// <key>CFBundleURLTypes</key>
+/// <array>
+///   <dict>
+///     <key>CFBundleTypeRole</key>
+///     <string>Editor</string>
+///     <key>CFBundleURLSchemes</key>
+///     <array>
+///       <string>com.googleusercontent.apps.310544200746-ipahem5reva3j927ppjdjmlt4htjhoq2</string>
+///     </array>
+///   </dict>
+/// </array>
+/// ```
+/// See [GoogleOAuthConfig.iosReversedClientId]. Without `CFBundleURLTypes`, iOS throws
+/// "Your app is missing support for the following URL schemes".
+///
 /// [phoneNumber] is optional. When provided (e.g. from the host app's logged-in
 /// user cache), it is prefilled on the validate-user screen.
 ///

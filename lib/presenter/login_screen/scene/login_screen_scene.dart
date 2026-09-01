@@ -570,7 +570,14 @@ class _LoginScreenSceneState
 
   void _initializeVLensSDK(
       BuildContext context, LoginResponseData loginResponseData) {
-    final launched = VlensSdkLauncher.launch(
+    unawaited(_openVlensSdk(context, loginResponseData));
+  }
+
+  Future<void> _openVlensSdk(
+    BuildContext context,
+    LoginResponseData loginResponseData,
+  ) async {
+    final launched = await VlensSdkLauncher.launch(
       context: context,
       loginResponseData: loginResponseData,
       onSuccess: (data) {
@@ -598,6 +605,11 @@ class _LoginScreenSceneState
               duration: const Duration(seconds: 4),
             ),
           );
+        }
+      },
+      onCameraPermissionDenied: (_) {
+        if (_isOpeningVlens && mounted) {
+          setState(() => _isOpeningVlens = false);
         }
       },
     );

@@ -6,12 +6,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:vlens/vlens.dart';
 
+import '../../../utils/camera_permission_dialog_helper.dart';
+import '../../../utils/required_camera_helper.dart';
 import '../model/login_response.dart';
 import 'vlens_sdk_credentials.dart';
 
-/// Fast path to open VLens: resolve credentials → init immediately → cache in background.
+/// Fast path to open VLens: camera permission → credentials → init → cache in background.
 class VlensSdkLauncher {
   VlensSdkLauncher._();
+
+  static const String cameraPermissionDeniedMessage =
+      'يلزم إذن الكاميرا للتحقق من الهوية. اضغط السماح عند الطلب.';
 
   static final ColorsConfig _colors = ColorsConfig(
     light: ColorConfig(
@@ -32,14 +37,21 @@ class VlensSdkLauncher {
     ),
   );
 
-  /// Returns `false` when credentials are missing (caller should show [missingMessage]).
-  static bool launch({
+  /// Returns `false` when camera permission or credentials are missing.
+  static Future<bool> launch({
     required BuildContext context,
     required LoginResponseData loginResponseData,
     required void Function(dynamic extractedData) onSuccess,
     required void Function(String errorCode, String errorMsg) onFailure,
     String? missingMessageOut,
-  }) {
+    void Function(CameraGateIssue issue)? onCameraPermissionDenied,
+  }) async {
+    final granted = await CameraPermissionDialogHelper.ensureWithUi(context);
+    if (!granted) {
+      onCameraPermissionDenied?.call(CameraGateIssue.denied);
+      return false;
+    }
+
     final credentials = VlensSdkCredentials.tryResolve(loginResponseData);
     if (credentials == null || !credentials.isReadyForVlensInit) {
       return false;
@@ -90,6 +102,10 @@ class VlensSdkLauncher {
       detectionRetryCounter: 3,
       enableSounds: false,
     );
+
+    if (!context.mounted) {
+      return false;
+    }
 
     VLensManager().init(context, sdkConfig);
     return true;

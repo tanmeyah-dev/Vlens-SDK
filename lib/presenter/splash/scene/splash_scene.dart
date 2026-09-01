@@ -23,7 +23,7 @@ class _SplashSceneState extends State<SplashScene> {
   @override
   void initState() {
     super.initState();
-    // Navigate to validate user after 2 seconds
+    // Navigate to validate user after 2 seconds (login when vlenseStatus == 200).
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
         final phone = widget.phoneNumber?.trim();

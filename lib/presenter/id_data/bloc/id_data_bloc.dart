@@ -154,7 +154,13 @@ class IdDataBloc extends BaseBloc {
       final data = decoded['data'];
       final isEligible = data is Map<String, dynamic> && data['isEligible'] == true;
       if (isEligible) {
-        emit(IdDataNavigateToUserInfoState(decoded));
+        emit(
+          IdDataNavigateToUserInfoState(
+            decoded,
+            extractedData: _model.effectiveExtractedData ??
+                parseExtractedUserData(_model.extractedData),
+          ),
+        );
       } else {
         _model.errorMessage = 'عذراً، المستخدم غير مؤهل حالياً';
       }

@@ -270,7 +270,7 @@ String? matchLookupIdFromCachedLabel(List<LookupItem> items, String? label) {
   // selects "متزوج" not "متزوج و يعول").
   const socialAliases = <String, List<String>>{
     'اعزب': ['اعزب', 'أعزب', 'single', 'unmarried'],
-    'متزوج': ['متزوج', 'married'],
+    'متزوج': ['متزوج', 'متزوجه', 'متزوجة', 'married'],
     'مطلق': ['مطلق', 'divorced'],
     'مطلقه': ['مطلقه', 'مطلقة', 'divorced female'],
     'ارمل': ['ارمل', 'أرمل', 'widowed', 'widow', 'widower'],
@@ -280,8 +280,27 @@ String? matchLookupIdFromCachedLabel(List<LookupItem> items, String? label) {
   for (final item in items) {
     final nameKey = normalizeArabicLabel(item.name);
     for (final entry in socialAliases.entries) {
-      if (nameKey != entry.key) continue;
+      if (nameKey != entry.key &&
+          !nameKey.startsWith('${entry.key} ') &&
+          !nameKey.startsWith(entry.key)) {
+        continue;
+      }
       if (entry.value.any((a) => normalizeArabicLabel(a) == normalized)) {
+        return item.id;
+      }
+    }
+  }
+
+  // ID label maps to a social bucket — pick the option in that bucket.
+  for (final entry in socialAliases.entries) {
+    if (!entry.value.any((a) => normalizeArabicLabel(a) == normalized)) {
+      continue;
+    }
+    for (final item in items) {
+      final nameKey = normalizeArabicLabel(item.name);
+      if (nameKey == entry.key ||
+          nameKey.startsWith(entry.key) ||
+          nameKey.contains(entry.key)) {
         return item.id;
       }
     }
@@ -452,8 +471,280 @@ Map<String, String> buildPrefillMapFromExtractedData(ExtractedUserData? data) {
   return map;
 }
 
+/// Marital status from [IdDataScreen] `/vlens-data` → `idBackData.maritalStatus`.
+String? maritalStatusFromIdData(ExtractedUserData? data) {
+  final back = data?.idBackData;
+  return _firstNonEmpty([back?.maritalStatus, back?.maritalStatusEnglish]);
+}
+
+/// Applies `CIF_SOCIAL_STATUS` (and label aliases) from national-ID marital status.
+void applyMaritalStatusFromIdData({
+  required ExtractedUserData? extractedData,
+  required List<RequestFieldItem> fields,
+  required Map<String, String?> selectedValues,
+  required List<LookupItem> Function(RequestFieldItem field) optionsFor,
+}) {
+  final marital = maritalStatusFromIdData(extractedData);
+  if (marital == null || marital.isEmpty) return;
+
+  for (final field in fields) {
+    if (!isMaritalStatusField(field)) continue;
+    final type = field.type.toLowerCase();
+    if (type != 'select' && type != 'radiogroup') continue;
+
+    final optionItems = optionsFor(field);
+    final resolved = resolveSelectInitialValue(
+      field: field,
+      optionItems: optionItems,
+      fieldValue: selectedValues[field.key],
+      cachedRaw: marital,
+      preferNationalId: true,
+    );
+    if (resolved != null &&
+        resolved.isNotEmpty &&
+        isValidSelectOptionValue(resolved, optionItems)) {
+      selectedValues[field.key] = resolved;
+    } else if (resolved != null && resolved.isNotEmpty) {
+      selectedValues[field.key] = resolved;
+    } else {
+      selectedValues[field.key] = marital;
+    }
+  }
+}
+
+/// Whether [value] matches one of the dropdown option ids/names.
+bool isValidSelectOptionValue(String? value, List<LookupItem> optionItems) {
+  if (value == null || value.trim().isEmpty || optionItems.isEmpty) {
+    return false;
+  }
+  return findLookupItemByIdOrName(optionItems, value) != null;
+}
+
+/// Syncs submit value and returns the id_data marital label for display.
+String? syncMaritalStatusFromIdData({
+  required RequestFieldItem field,
+  required ExtractedUserData? extractedData,
+  required List<LookupItem> optionItems,
+  required Map<String, String?> selectedValues,
+}) {
+  final marital = maritalStatusFromIdData(extractedData);
+  if (marital == null || marital.isEmpty) return null;
+
+  final resolved = resolveSelectInitialValue(
+    field: field,
+    optionItems: optionItems,
+    fieldValue: selectedValues[field.key],
+    cachedRaw: marital,
+    preferNationalId: true,
+  );
+  if (resolved != null &&
+      resolved.isNotEmpty &&
+      isValidSelectOptionValue(resolved, optionItems)) {
+    selectedValues[field.key] = resolved;
+  } else if (resolved != null && resolved.isNotEmpty) {
+    selectedValues[field.key] = resolved;
+  }
+
+  return marital;
+}
+
 String? lookupPrefillValue(Map<String, String> prefill, String fieldKey) {
   return prefill[normalizeLookupKey(fieldKey)];
+}
+
+/// Resolves prefill using field key and known aliases (e.g. marital status label).
+String? lookupPrefillValueForField(
+  Map<String, String> prefill,
+  RequestFieldItem field, {
+  ExtractedUserData? extractedData,
+}) {
+  if (isMaritalStatusField(field)) {
+    final fromId = maritalStatusFromIdData(extractedData);
+    if (fromId != null && fromId.isNotEmpty) return fromId;
+  }
+
+  final direct = lookupPrefillValue(prefill, field.key);
+  if (direct != null && direct.isNotEmpty) return direct;
+
+  if (isMaritalStatusField(field)) {
+    for (final key in const [
+      'MARITALSTATUS',
+      'CIFSOCIALSTATUS',
+      'SOCIALSTATUS',
+    ]) {
+      final value = prefill[key];
+      if (value != null && value.isNotEmpty) return value;
+    }
+  }
+
+  if (isGenderField(field)) {
+    for (final key in const ['CIFGENDER', 'GENDER', 'SEX']) {
+      final value = prefill[key];
+      if (value != null && value.isNotEmpty) return value;
+    }
+  }
+
+  if (isReligionField(field)) {
+    for (final key in const ['CIFRELIGION', 'RELIGION']) {
+      final value = prefill[key];
+      if (value != null && value.isNotEmpty) return value;
+    }
+  }
+
+  return null;
+}
+
+bool isMaritalStatusField(RequestFieldItem field) {
+  if (_isGenderReligionOrSocialKey(field.key)) {
+    final key = normalizeLookupKey(field.key);
+    if (key == 'CIFGENDER' ||
+        key == 'GENDER' ||
+        key == 'SEX' ||
+        key == 'CIFRELIGION' ||
+        key == 'RELIGION') {
+      return false;
+    }
+    return true;
+  }
+  final label = normalizeArabicLabel(
+    [
+      field.displayText,
+      field.displayArText ?? '',
+    ].join(' '),
+  );
+  return label.contains(normalizeArabicLabel('الحالة الاجتماعية')) ||
+      label.contains(normalizeArabicLabel('الحاله الاجتماعيه'));
+}
+
+bool isGenderField(RequestFieldItem field) {
+  final key = normalizeLookupKey(field.key);
+  if (key == 'CIFGENDER' || key == 'GENDER' || key == 'SEX') return true;
+  final label = normalizeArabicLabel(field.displayText);
+  return label == normalizeArabicLabel('النوع');
+}
+
+bool isReligionField(RequestFieldItem field) {
+  final key = normalizeLookupKey(field.key);
+  if (key == 'CIFRELIGION' || key == 'RELIGION') return true;
+  final label = normalizeArabicLabel(field.displayText);
+  return label == normalizeArabicLabel('الديانة') ||
+      label == normalizeArabicLabel('الديانه');
+}
+
+/// Builds select options from request/fields when lookups API is not used.
+List<LookupItem> selectOptionsFromRequestField(RequestFieldItem field) {
+  if (field.availableValuesItems.isNotEmpty) {
+    return field.availableValuesItems
+        .map(
+          (item) => LookupItem(
+            id: (item.id?.toString().trim().isNotEmpty == true)
+                ? item.id.toString()
+                : item.name,
+            name: item.name,
+          ),
+        )
+        .where((item) => item.id.isNotEmpty || item.name.isNotEmpty)
+        .toList();
+  }
+
+  final arValues = field.availableArValues;
+  if (arValues != null &&
+      arValues.isNotEmpty &&
+      arValues.length == field.availableValues.length) {
+    return List<LookupItem>.generate(field.availableValues.length, (index) {
+      final id = field.availableValues[index];
+      final arName = arValues[index].trim();
+      return LookupItem(
+        id: id,
+        name: arName.isNotEmpty ? arName : id,
+      );
+    }).where((item) => item.id.isNotEmpty).toList();
+  }
+
+  return field.availableValues
+      .map((value) => LookupItem(id: value, name: value))
+      .where((item) => item.id.isNotEmpty)
+      .toList();
+}
+
+/// Maps a cached national-ID label to a request/fields select option id.
+String? matchRequestFieldOptionByLabel(
+  RequestFieldItem field,
+  String? label,
+) {
+  if (label == null || label.trim().isEmpty) return null;
+  final options = selectOptionsFromRequestField(field);
+  if (options.isEmpty) return null;
+
+  return matchLookupIdFromCachedLabel(options, label) ??
+      findLookupItemByIdOrName(options, label)?.id;
+}
+
+/// Resolves the stored select value (option id) from API field value + ID card cache.
+String? resolveSelectInitialValue({
+  required RequestFieldItem field,
+  required List<LookupItem> optionItems,
+  String? fieldValue,
+  String? cachedRaw,
+  bool preferNationalId = false,
+}) {
+  String? initial = fieldValue?.trim();
+  if (initial != null && initial.isEmpty) initial = null;
+
+  final shouldPreferId = preferNationalId ||
+      isMaritalStatusField(field) ||
+      isGenderField(field) ||
+      isReligionField(field);
+
+  if (shouldPreferId && cachedRaw != null && cachedRaw.isNotEmpty) {
+    if (optionItems.isNotEmpty) {
+      initial = matchLookupIdFromCachedLabel(optionItems, cachedRaw) ??
+          findLookupItemByIdOrName(optionItems, cachedRaw)?.id ??
+          matchRequestFieldOptionByLabel(field, cachedRaw);
+    } else {
+      initial = cachedRaw;
+    }
+  } else if (initial == null && cachedRaw != null && cachedRaw.isNotEmpty) {
+    if (optionItems.isNotEmpty) {
+      initial = matchLookupIdFromCachedLabel(optionItems, cachedRaw) ??
+          findLookupItemByIdOrName(optionItems, cachedRaw)?.id ??
+          matchRequestFieldOptionByLabel(field, cachedRaw) ??
+          cachedRaw;
+    } else {
+      initial = cachedRaw;
+    }
+  } else if (initial != null && optionItems.isNotEmpty) {
+    initial = findLookupItemByIdOrName(optionItems, initial)?.id ?? initial;
+  }
+
+  if (initial != null && optionItems.isNotEmpty) {
+    final ids = optionItems.map((e) => e.id).toSet();
+    if (!ids.contains(initial)) {
+      initial = matchLookupIdFromCachedLabel(optionItems, initial) ??
+          findLookupItemByIdOrName(optionItems, initial)?.id ??
+          matchRequestFieldOptionByLabel(field, initial);
+    }
+  }
+
+  return initial;
+}
+
+/// Human-readable label for a locked ID field (shown when dropdown cannot bind).
+String? lockedIdFieldDisplayLabel(
+  RequestFieldItem field,
+  ExtractedUserData? extractedData,
+) {
+  if (isMaritalStatusField(field)) {
+    final marital = maritalStatusFromIdData(extractedData);
+    if (marital != null && marital.isNotEmpty) return marital;
+  }
+
+  final prefill = buildPrefillMapFromExtractedData(extractedData);
+  return lookupPrefillValueForField(
+    prefill,
+    field,
+    extractedData: extractedData,
+  );
 }
 
 String? _firstNonEmpty(List<String?> values) {

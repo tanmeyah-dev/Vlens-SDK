@@ -26,6 +26,14 @@ class RequestDocumentsNavigator {
   }
 
   static Future<void> openAfterLogin(BuildContext context) async {
+    return openDocumentsScene(context, logLabel: 'VLENSE_STATUS_200');
+  }
+
+  /// Fetches the current request documents and opens [RequestDocumentsScene].
+  static Future<void> openDocumentsScene(
+    BuildContext context, {
+    String logLabel = 'REQUEST_DOCUMENTS',
+  }) async {
     if (!context.mounted) return;
     // Avoid !_debugLocked when called right after dismissing another dialog.
     await WidgetsBinding.instance.endOfFrame;
@@ -48,7 +56,7 @@ class RequestDocumentsNavigator {
       final headers = await _resolveHeaders();
       final currentResponse = await RequestCurrentFetcher.fetch(
         headers,
-        logLabel: 'VLENSE_STATUS_200',
+        logLabel: logLabel,
       );
 
       if (!context.mounted) return;

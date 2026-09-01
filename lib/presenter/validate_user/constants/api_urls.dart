@@ -144,16 +144,6 @@ class ApiUrls {
     return '${getLocalBaseUrl()}/vlens/api/v1/request/current';
   }
 
-  /// Customer lookups (gender, religion, qualification, …).
-  static String getCustomersLookupsUrl() {
-    return '${getLocalBaseUrl()}/vlens/api/v1/mobile/customers/lookups';
-  }
-
-  /// One-click loan apply.
-  static String getOneClickApplyUrl() {
-    return '${getLocalBaseUrl()}/vlens/api/v1/mobile/customers/loans/one-click-apply';
-  }
-
   /// E-contract customer step OTP.
   static String getEContractCustomerStepOtpUrl() {
     return '${getLocalBaseUrl()}/vlens/api/v1/e-contract/customer/step/otp';
@@ -162,11 +152,6 @@ class ApiUrls {
   /// E-contract customer validate OTP.
   static String getEContractCustomerValidateOtpUrl() {
     return '${getLocalBaseUrl()}/vlens/api/v1/e-contract/customer/validate/otp';
-  }
-
-  /// Mark loan ready for disbursement (after e-contract OTP).
-  static String getReadyForDisbursementUrl() {
-    return '${getLocalBaseUrl()}/vlens/api/v1/mobile/customers/loans/ready-for-disbursement';
   }
 
   /// Check if running on emulator/simulator

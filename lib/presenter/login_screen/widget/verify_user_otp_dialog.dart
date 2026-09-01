@@ -413,7 +413,14 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
 
   void _initializeVLensSDK(
       BuildContext context, LoginResponseData loginResponseData) {
-    final launched = VlensSdkLauncher.launch(
+    unawaited(_openVlensSdk(context, loginResponseData));
+  }
+
+  Future<void> _openVlensSdk(
+    BuildContext context,
+    LoginResponseData loginResponseData,
+  ) async {
+    final launched = await VlensSdkLauncher.launch(
       context: context,
       loginResponseData: loginResponseData,
       onSuccess: (extractedData) {
@@ -438,6 +445,7 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
           );
         }
       },
+      onCameraPermissionDenied: (_) {},
     );
 
     if (!launched && context.mounted) {

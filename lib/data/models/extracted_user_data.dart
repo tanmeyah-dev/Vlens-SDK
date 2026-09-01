@@ -350,29 +350,63 @@ class IdBackData {
 
   factory IdBackData.fromJson(Map<String, dynamic> json) {
     return IdBackData(
-      maritalStatus: json['maritalStatus'] as String?,
-      job: json['job'] as String?,
-      jobTitle: json['jobTitle'] as String?,
-      religion: json['religion'] as String?,
-      husbandName: json['husbandName'] as String?,
-      releaseDate: json['releaseDate'] != null
-          ? DateTime.tryParse(json['releaseDate'].toString())
-          : null,
-      idExpiry: json['idExpiry'] != null
-          ? DateTime.tryParse(json['idExpiry'].toString())
-          : null,
-      maritalStatusEnglish: json['marital_status_english'] as String?,
-      religionEnglish: json['religion_english'] as String?,
-      genderEnglish: json['gender_english'] as String?,
-      husbandNameEnglish: json['husbandName_english'] as String?,
-      jobEnglish: json['job_english'] as String?,
-      jobTitleEnglish: json['job_title_english'] as String?,
-      idNumber: json['idNumber'] as String?,
-      gender: json['gender'] as String?,
-      clientTransactionId: json['client_transaction_id'] as String?,
-      requestId: json['request_id'] as String?,
-      transactionId: json['transaction_id'] as String?,
+      maritalStatus: _readString(json, const ['maritalStatus', 'marital_status']),
+      job: _readString(json, const ['job']),
+      jobTitle: _readString(json, const ['jobTitle', 'job_title']),
+      religion: _readString(json, const ['religion']),
+      husbandName: _readString(json, const ['husbandName', 'husband_name']),
+      releaseDate: _readDate(json['releaseDate']),
+      idExpiry: _readDate(json['idExpiry'] ?? json['id_expiry']),
+      maritalStatusEnglish: _readString(json, const [
+        'maritalStatusEnglish',
+        'marital_status_english',
+        'maritalStatus_english',
+      ]),
+      religionEnglish: _readString(json, const [
+        'religionEnglish',
+        'religion_english',
+      ]),
+      genderEnglish: _readString(json, const [
+        'genderEnglish',
+        'gender_english',
+      ]),
+      husbandNameEnglish: _readString(json, const [
+        'husbandNameEnglish',
+        'husbandName_english',
+        'husband_name_english',
+      ]),
+      jobEnglish: _readString(json, const ['jobEnglish', 'job_english']),
+      jobTitleEnglish: _readString(json, const [
+        'jobTitleEnglish',
+        'job_title_english',
+      ]),
+      idNumber: _readString(json, const ['idNumber', 'id_number']),
+      gender: _readString(json, const ['gender']),
+      clientTransactionId: _readString(json, const [
+        'clientTransactionId',
+        'client_transaction_id',
+      ]),
+      requestId: _readString(json, const ['requestId', 'request_id']),
+      transactionId: _readString(json, const [
+        'transactionId',
+        'transaction_id',
+      ]),
     );
+  }
+
+  static String? _readString(Map<String, dynamic> json, List<String> keys) {
+    for (final key in keys) {
+      final value = json[key]?.toString().trim();
+      if (value != null && value.isNotEmpty && value.toLowerCase() != 'null') {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  static DateTime? _readDate(dynamic raw) {
+    if (raw == null) return null;
+    return DateTime.tryParse(raw.toString());
   }
 
   Map<String, dynamic> toJson() {

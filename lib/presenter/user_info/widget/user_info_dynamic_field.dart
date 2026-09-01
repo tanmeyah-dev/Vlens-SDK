@@ -107,7 +107,19 @@ class UserInfoDynamicField extends StatelessWidget {
     }
 
     if (type == 'radiogroup') {
-      final lookupItems = model.lookupItemsForField(field);
+      final lookupItems = model.selectOptionsForField(field);
+      if (isLockedFromId && isMaritalStatusField(field)) {
+        final maritalLabel = syncMaritalStatusFromIdData(
+          field: field,
+          extractedData: model.cachedExtractedData,
+          optionItems: lookupItems,
+          selectedValues: model.selectedValues,
+        );
+        if (maritalLabel != null && maritalLabel.isNotEmpty) {
+          return _buildLockedIdentityValueField(title: title, value: maritalLabel);
+        }
+      }
+
       final useLookups = lookupItems.isNotEmpty;
       final values = useLookups
           ? lookupItems.map((e) => e.id).toList()
@@ -402,16 +414,25 @@ class UserInfoDynamicField extends StatelessWidget {
       final locationRole = detectLocationFieldRole(field);
       final usesLocations =
           locationRole != null && model.locations.isNotEmpty;
-      final lookupItems = usesLocations
-          ? model.selectOptionsForField(field)
-          : model.lookupItemsForField(field);
-      final useLookups = lookupItems.isNotEmpty || usesLocations;
-      final optionItems = useLookups
-          ? lookupItems
-          : field.availableValues
-              .map((value) => LookupItem(id: value, name: value))
-              .toList();
+      final optionItems = model.selectOptionsForField(field);
+
+      // Marital status from id_data: always show the ID value (e.g. «أعزب»).
+      if (isLockedFromId && isMaritalStatusField(field)) {
+        final maritalLabel = syncMaritalStatusFromIdData(
+          field: field,
+          extractedData: model.cachedExtractedData,
+          optionItems: optionItems,
+          selectedValues: model.selectedValues,
+        );
+        if (maritalLabel != null && maritalLabel.isNotEmpty) {
+          return _buildLockedIdentityValueField(title: title, value: maritalLabel);
+        }
+      }
+
+      final lockedLabel =
+          lockedIdFieldDisplayLabel(field, model.cachedExtractedData);
       final current = model.selectedValues[field.key]?.trim();
+
       // Match by id or display name so short labels like "لا" stay selected.
       LookupItem? selectedItem;
       if (current != null && current.isNotEmpty) {
@@ -422,7 +443,36 @@ class UserInfoDynamicField extends StatelessWidget {
           }
         }
       }
-      final selected = selectedItem?.id;
+
+      var selected = selectedItem?.id;
+      if ((selected == null || selected.isEmpty) &&
+          isLockedFromId &&
+          lockedLabel != null &&
+          lockedLabel.isNotEmpty) {
+        selected = resolveSelectInitialValue(
+          field: field,
+          optionItems: optionItems,
+          fieldValue: current,
+          cachedRaw: lockedLabel,
+          preferNationalId: true,
+        );
+        if (selected != null && selected.isNotEmpty) {
+          model.selectedValues[field.key] = selected;
+        }
+      }
+
+      final displayLabel = lockedLabel ?? '';
+      final hasValidSelection = isValidSelectOptionValue(selected, optionItems);
+
+      // Locked ID field: show read-only text when dropdown cannot bind the value.
+      if (isLockedFromId &&
+          !hasValidSelection &&
+          displayLabel.isNotEmpty) {
+        return _buildLockedIdentityValueField(
+          title: title,
+          value: displayLabel,
+        );
+      }
 
       final govField = findLocationFieldByRole(
         model.allFormFields,
@@ -574,5 +624,59 @@ class UserInfoDynamicField extends StatelessWidget {
     }
 
     return const SizedBox.shrink();
+  }
+
+  Widget _buildLockedIdentityValueField({
+    required String title,
+    required String value,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: AppColors.secondary,
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+          const SizedBox(height: 8),
+          InputDecorator(
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: const Color(0xFFF3F3F3),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.border1, width: 1),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.border1, width: 1),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+            ),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                value,
+                textAlign: TextAlign.right,
+                textDirection: TextDirection.rtl,
+                style: const TextStyle(
+                  color: AppColors.black,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

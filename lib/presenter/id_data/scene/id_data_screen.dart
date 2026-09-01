@@ -37,7 +37,10 @@ class _IdDataScreenState extends BaseState<IdDataScreen, IdDataBloc, IdDataModel
     if (state is IdDataNavigateToUserInfoState) {
       Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => UserInfoScreen(eligibilityResponse: state.eligibilityResponse),
+          builder: (_) => UserInfoScreen(
+            eligibilityResponse: state.eligibilityResponse,
+            extractedData: state.extractedData,
+          ),
         ),
       );
     }

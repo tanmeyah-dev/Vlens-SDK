@@ -9,32 +9,36 @@ import '../utils/user_info_lookup_helpers.dart';
 
 /// Mutable UI + loaded fields for the user-info (KYC) step.
 class UserInfoModel {
-  UserInfoModel({required this.eligibilityResponse});
+  UserInfoModel({
+    required this.eligibilityResponse,
+    ExtractedUserData? extractedData,
+  }) : cachedExtractedData = extractedData;
 
   final Map<String, dynamic> eligibilityResponse;
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
 
   bool isLoadingFields = true;
 
-  /// Set to true only after both request/fields and customers/lookups succeed.
+  /// Set to true after request/fields load succeeds.
   bool areFieldsReady = false;
 
   String? fieldsError;
   List<RequestFieldItem> requestFields = [];
 
-  /// Standalone dropdowns built from `/mobile/customers/lookups`.
+  /// Extra lookup-driven dropdowns (unused when lookups API is not called).
   List<RequestFieldItem> lookupFields = [];
 
-  /// Lookups from `/mobile/customers/lookups`.
+  /// Optional lookup lists (populated only when a lookups source is wired).
   Lookups? lookups;
 
-  /// Jobs from `/mobile/customers/lookups` (`data.jobs`).
+  /// Optional jobs list for one-click apply job code resolution.
   List<JobItem> jobs = const [];
 
-  /// Locations hierarchy from `/mobile/customers/lookups` (`data.locations`).
+  /// Optional location hierarchy for governorate/city/village cascades.
   List<LocationGovernorate> locations = const [];
 
   /// Cached VLens identity used to prefill matching fields.
+  /// Set from [IdDataScreen] after `/vlens-data` or from local cache.
   ExtractedUserData? cachedExtractedData;
 
   final Map<String, TextEditingController> textControllers = {};
@@ -70,7 +74,7 @@ class UserInfoModel {
     return resolveLookupItemsForFieldKey(field.key, lookups);
   }
 
-  /// Select options: location cascade from lookups, else CIF_* lookups.
+  /// Dropdown options: lookups when present, else request/fields choices.
   List<LookupItem> selectOptionsForField(RequestFieldItem field) {
     final role = detectLocationFieldRole(field);
     if (role != null && locations.isNotEmpty) {
@@ -81,7 +85,9 @@ class UserInfoModel {
         selectedValues: selectedValues,
       );
     }
-    return lookupItemsForField(field);
+    final fromLookups = lookupItemsForField(field);
+    if (fromLookups.isNotEmpty) return fromLookups;
+    return selectOptionsFromRequestField(field);
   }
 
   void onLocationSelectionChanged(RequestFieldItem field, String? value) {
@@ -111,8 +117,12 @@ class UserInfoModel {
 
     for (final field in allFormFields) {
       final t = field.type.toLowerCase();
-      final cachedRaw = lookupPrefillValue(prefill, field.key);
-      final lookupItems = lookupItemsForField(field);
+      final cachedRaw = lookupPrefillValueForField(
+        prefill,
+        field,
+        extractedData: cachedExtractedData,
+      );
+      final optionItems = selectOptionsForField(field);
 
       if (t == 'text' || t == 'number') {
         final initial = (field.value != null && field.value!.trim().isNotEmpty)
@@ -120,7 +130,6 @@ class UserInfoModel {
             : (cachedRaw ?? '');
         textControllers[field.key] = TextEditingController(text: initial);
       } else if (t == 'select' || t == 'radiogroup') {
-        String? initial = field.value;
         final preferNationalId = shouldPrefillFromNationalId(field.key);
         final locationRole = detectLocationFieldRole(field);
         final usesLocations =
@@ -129,7 +138,7 @@ class UserInfoModel {
         // Location selects come from lookups hierarchy — do not keep FIELDS
         // availableValues / default names that are not location ids.
         if (usesLocations) {
-          final optionItems = selectOptionsForField(field);
+          String? initial = field.value;
           if (initial != null && optionItems.isNotEmpty) {
             initial =
                 findLookupItemByIdOrName(optionItems, initial)?.id;
@@ -140,41 +149,19 @@ class UserInfoModel {
           continue;
         }
 
-        // Gender / religion / social status: always prefer cached national ID.
-        if (preferNationalId && cachedRaw != null) {
-          if (lookupItems.isNotEmpty) {
-            initial = matchLookupIdFromCachedLabel(lookupItems, cachedRaw) ??
-                findLookupItemByIdOrName(lookupItems, cachedRaw)?.id;
-          } else {
-            initial = cachedRaw;
-          }
-        } else if ((initial == null || initial.trim().isEmpty) &&
-            cachedRaw != null) {
-          if (lookupItems.isNotEmpty) {
-            initial = matchLookupIdFromCachedLabel(lookupItems, cachedRaw) ??
-                findLookupItemByIdOrName(lookupItems, cachedRaw)?.id ??
-                cachedRaw;
-          } else {
-            initial = cachedRaw;
-          }
-        } else if (initial != null && lookupItems.isNotEmpty) {
-          initial =
-              findLookupItemByIdOrName(lookupItems, initial)?.id ?? initial;
-        }
-
-        // Only keep a value that exists in the dropdown options.
-        if (initial != null && lookupItems.isNotEmpty) {
-          final ids = lookupItems.map((e) => e.id).toSet();
-          if (!ids.contains(initial)) {
-            initial = matchLookupIdFromCachedLabel(lookupItems, initial);
-          }
-        }
+        var initial = resolveSelectInitialValue(
+          field: field,
+          optionItems: optionItems,
+          fieldValue: field.value,
+          cachedRaw: cachedRaw,
+          preferNationalId: preferNationalId,
+        );
 
         // Nationality defaults to Egyptian and stays locked in the UI.
         if (isNationalityField(field) &&
             (initial == null || initial.trim().isEmpty)) {
-          if (lookupItems.isNotEmpty) {
-            initial = findEgyptianNationalityId(lookupItems);
+          if (optionItems.isNotEmpty) {
+            initial = findEgyptianNationalityId(optionItems);
           } else {
             final fromValues = field.availableValues.cast<String>().where((v) {
               final n = normalizeArabicLabel(v);
@@ -198,6 +185,13 @@ class UserInfoModel {
         initMultiSelectFromField(field, multiSelectValues);
       }
     }
+
+    applyMaritalStatusFromIdData(
+      extractedData: cachedExtractedData,
+      fields: allFormFields,
+      selectedValues: selectedValues,
+      optionsFor: selectOptionsForField,
+    );
   }
 
   List<SummaryAnswerItem> buildSummaryAnswers() {
