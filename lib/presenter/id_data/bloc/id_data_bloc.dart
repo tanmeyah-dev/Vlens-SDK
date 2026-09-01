@@ -1,10 +1,11 @@
-import 'dart:convert';
+import 'dart:async';
 
 import 'package:core/bases/base_bloc.dart';
 import 'package:core/bases/states/base/init_screen.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 
+import '../../../utils/sdk_api_response.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../validate_user/constants/api_urls.dart';
 import '../event/id_data_event.dart';
@@ -142,12 +143,17 @@ class IdDataBloc extends BaseBloc {
         headers: headers,
       );
 
-      if (response.statusCode != 200) {
-        throw Exception('فشل التحقق من الأهلية (${response.statusCode})');
+      final api = SdkApiResponse.from(response);
+      final blockingError = api.blockingError(
+        httpFallback: 'فشل التحقق من الأهلية',
+        businessFallback: 'فشل التحقق من الأهلية',
+      );
+      if (blockingError != null) {
+        throw Exception(blockingError);
       }
 
-      final decoded = jsonDecode(response.body);
-      if (decoded is! Map<String, dynamic>) {
+      final decoded = api.decoded;
+      if (decoded == null) {
         throw Exception('استجابة الأهلية غير صالحة');
       }
 

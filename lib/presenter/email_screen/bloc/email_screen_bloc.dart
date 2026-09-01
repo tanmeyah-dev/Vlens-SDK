@@ -8,6 +8,7 @@ import 'package:core/utils/cache/verification_cache.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import '../../../utils/api_error_parser.dart';
+import '../../../utils/sdk_api_response.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../validate_user/constants/api_urls.dart';
 import '../constants/google_oauth_helper.dart';
@@ -95,6 +96,19 @@ class EmailScreenBloc extends BaseBloc {
         _model.isGoogleLoading = false;
         emit(UpdateEmailScreenUI(_model));
         emit(OnEmailErrorState(errorMessage));
+        return;
+      }
+
+      final oauthApi = SdkApiResponse.from(response);
+      final oauthBlockingError = oauthApi.blockingError(
+        checkHttp: false,
+        businessFallback: 'فشل التحقق من حساب Google',
+      );
+      if (oauthBlockingError != null) {
+        _model.isLoading = false;
+        _model.isGoogleLoading = false;
+        emit(UpdateEmailScreenUI(_model));
+        emit(OnEmailErrorState(oauthBlockingError));
         return;
       }
 
@@ -293,6 +307,18 @@ class EmailScreenBloc extends BaseBloc {
       print('═══════════════════════════════════════════════════════');
       print('');
 
+
+      final sendEmailApi = SdkApiResponse.from(response);
+      final sendEmailBlockingError = sendEmailApi.blockingError(
+        httpFallback: 'فشل في التحقق من الإيميل',
+        businessFallback: 'فشل في التحقق من الإيميل',
+      );
+      if (sendEmailBlockingError != null) {
+        _model.isLoading = false;
+        emit(UpdateEmailScreenUI(_model));
+        emit(OnEmailErrorState(sendEmailBlockingError));
+        return;
+      }
 
       if (response.statusCode == 200) {
         // Success - parse response and show verification dialog

@@ -10,8 +10,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import '../../../utils/sdk_http_client.dart';
 import '../../../utils/api_error_parser.dart';
+import '../../../utils/sdk_api_response.dart';
+import '../../../utils/sdk_http_client.dart';
 import '../../validate_user/constants/api_urls.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import '../utils/device_info_helper.dart';
@@ -208,6 +209,17 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
       print('Body: ${response.body}');
       print('═══════════════════════════════════════════════════════');
       print('');
+
+      if (mounted) {
+        final blockingError = response.sdk.blockingError(
+          httpFallback: 'فشل في تسجيل الدخول',
+          businessFallback: 'فشل في تسجيل الدخول',
+        );
+        if (blockingError != null) {
+          _showError(blockingError);
+          return;
+        }
+      }
 
       if (response.statusCode == 200) {
         try {

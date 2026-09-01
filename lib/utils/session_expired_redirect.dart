@@ -5,17 +5,40 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../routes/route_path.dart';
+import 'sdk_api_response.dart';
 import 'sdk_navigator.dart';
 
-/// Forces the SDK flow back to login whenever an API returns HTTP 417.
+/// Forces the SDK flow back to login when an API returns HTTP 417 for session
+/// expiry. Responses with `success: false` are business validation errors and
+/// must stay on the current screen so the caller can show the API message.
 class SessionExpiredRedirect {
   static bool _isHandling = false;
 
-  static void handle(http.Response response) {
+  static const _otpPathSegments = <String>[
+    'verify-otp',
+    'send-otp',
+    'send-email-otp',
+  ];
+
+  static void handle(http.Response response, {Uri? requestUri}) {
     if (response.statusCode != 417) return;
+    if (_shouldStayOnCurrentScreen(response, requestUri)) return;
     if (_isHandling) return;
     _isHandling = true;
     unawaited(_redirectToLogin());
+  }
+
+  static bool _shouldStayOnCurrentScreen(
+    http.Response response,
+    Uri? requestUri,
+  ) {
+    if (SdkApiResponse.hasBusinessFailure(response)) return true;
+
+    final path = (requestUri?.path ?? '').toLowerCase();
+    for (final segment in _otpPathSegments) {
+      if (path.contains(segment)) return true;
+    }
+    return false;
   }
 
   static Future<void> _redirectToLogin() async {

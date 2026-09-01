@@ -4,6 +4,7 @@ import 'package:core/bases/base_bloc.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:http/http.dart' as http;
 import '../../../utils/api_error_parser.dart';
+import '../../../utils/sdk_api_response.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../validate_user/constants/api_urls.dart';
 import '../event/login_screen_event.dart';
@@ -137,6 +138,18 @@ class LoginScreenBloc extends BaseBloc {
       print('');
 
       // Only navigate to home if status code is exactly 200
+      final loginApi = SdkApiResponse.from(response);
+      final loginBlockingError = loginApi.blockingError(
+        httpFallback: 'فشل في تسجيل الدخول',
+        businessFallback: 'فشل في تسجيل الدخول',
+      );
+      if (loginBlockingError != null) {
+        _model.isLoading = false;
+        emit(UpdateLoginScreenUI(_model));
+        emit(OnLoginErrorState(loginBlockingError));
+        return;
+      }
+
       if (response.statusCode == 200) {
         // Success - parse response
         print('✅ Login API successful - Status Code: 200');

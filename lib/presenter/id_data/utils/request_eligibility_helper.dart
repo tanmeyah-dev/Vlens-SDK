@@ -1,9 +1,8 @@
-import 'dart:convert';
-
 import 'package:core/utils/cache/verification_cache.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:flutter/material.dart';
 
+import '../../../utils/sdk_api_response.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../user_info/scene/user_info_screen.dart';
 import '../../validate_user/constants/api_urls.dart';
@@ -44,15 +43,19 @@ class RequestEligibilityHelper {
       Uri.parse(ApiUrls.getRequestEligibilityUrl()),
       headers: headers,
     );
-    if (response.statusCode != 200) {
-      throw Exception('فشل التحقق من الأهلية (${response.statusCode})');
+    final api = SdkApiResponse.from(response);
+    final blockingError = api.blockingError(
+      httpFallback: 'فشل التحقق من الأهلية',
+      businessFallback: 'فشل التحقق من الأهلية',
+    );
+    if (blockingError != null) {
+      throw Exception(blockingError);
     }
 
-    final decodedRaw = jsonDecode(response.body);
-    if (decodedRaw is! Map) {
+    final decoded = api.decoded;
+    if (decoded == null) {
       throw Exception('استجابة الأهلية غير صالحة');
     }
-    final decoded = Map<String, dynamic>.from(decodedRaw);
 
     final data = decoded['data'];
     final isEligible = data is Map && data['isEligible'] == true;

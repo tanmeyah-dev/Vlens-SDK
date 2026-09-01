@@ -79,7 +79,7 @@ class SdkHttpClient {
       }
     }
 
-    SessionExpiredRedirect.handle(response);
+    SessionExpiredRedirect.handle(response, requestUri: uri);
     return response;
   }
 

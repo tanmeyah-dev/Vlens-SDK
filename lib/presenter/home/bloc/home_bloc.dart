@@ -1,9 +1,9 @@
 import 'package:core/bases/base_bloc.dart';
 import 'package:core/bases/states/base/init_screen.dart';
-import 'dart:convert';
 import 'dart:io';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:http/http.dart' as http;
+import '../../../utils/sdk_api_response.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../event/home_event.dart';
 import '../model/home_model.dart';
@@ -43,10 +43,14 @@ class HomeBloc extends BaseBloc {
         },
       );
 
-      if (response.statusCode != 200) {
+      final api = SdkApiResponse.from(response);
+      final blockingError = api.blockingError(
+        httpFallback: 'فشل في تحميل انواع الطلبات',
+        businessFallback: 'فشل في تحميل انواع الطلبات',
+      );
+      if (blockingError != null) {
         _model.isLoading = false;
-        _model.errorMessage =
-            'فشل في تحميل انواع الطلبات (رمز: ${response.statusCode})';
+        _model.errorMessage = blockingError;
         emit(InitHomeScreen(_model));
         return;
       }
@@ -58,24 +62,15 @@ class HomeBloc extends BaseBloc {
         return;
       }
 
-      final decoded = jsonDecode(response.body);
-      if (decoded is! Map) {
+      final decoded = api.decoded;
+      if (decoded == null) {
         _model.isLoading = false;
         _model.errorMessage = 'استجابة غير صالحة من الخادم';
         emit(InitHomeScreen(_model));
         return;
       }
 
-      final parsed = RequestTypesResponse.fromJson(
-        Map<String, dynamic>.from(decoded),
-      );
-      if (!parsed.success) {
-        _model.isLoading = false;
-        _model.errorMessage = parsed.message ?? 'فشل في تحميل انواع الطلبات';
-        emit(InitHomeScreen(_model));
-        return;
-      }
-
+      final parsed = RequestTypesResponse.fromJson(decoded);
       _model.requestTypes = parsed.data;
       _model.isLoading = false;
       _model.errorMessage = null;

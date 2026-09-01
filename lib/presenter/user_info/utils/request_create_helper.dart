@@ -4,7 +4,7 @@ import 'package:core/utils/cache/verification_cache.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:flutter/foundation.dart';
 
-import '../../../utils/api_error_parser.dart';
+import '../../../utils/sdk_api_response.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../login_screen/utils/device_info_helper.dart';
 import '../../validate_user/constants/api_urls.dart';
@@ -87,24 +87,16 @@ Future<RequestCreateResult> createLoanRequest({
     print('');
   }
 
-  if (response.statusCode != 200) {
-    throw RequestCreateException(
-      ApiErrorParser.extractMessage(
-        response.body,
-        fallbackMessage: 'فشل إنشاء الطلب (${response.statusCode})',
-      ),
-    );
+  final api = SdkApiResponse.from(response);
+  final blockingError = api.blockingError(
+    httpFallback: 'فشل إنشاء الطلب',
+    businessFallback: 'فشل إنشاء الطلب',
+  );
+  if (blockingError != null) {
+    throw RequestCreateException(blockingError);
   }
 
-  final decoded = _tryDecodeMap(response.body);
-  if (!_isCreateRequestSuccess(decoded)) {
-    throw RequestCreateException(
-      ApiErrorParser.extractMessage(
-        response.body,
-        fallbackMessage: 'فشل إنشاء الطلب',
-      ),
-    );
-  }
+  final decoded = api.decoded ?? _tryDecodeMap(response.body);
 
   final createdRequestId = _extractCreatedRequestId(decoded);
   if (createdRequestId == null) {
@@ -112,19 +104,6 @@ Future<RequestCreateResult> createLoanRequest({
   }
 
   return RequestCreateResult(createdRequestId);
-}
-
-bool _isCreateRequestSuccess(Map<String, dynamic>? responseBody) {
-  if (responseBody == null) return false;
-  final rootSuccess = responseBody['success'];
-  if (rootSuccess is bool) return rootSuccess;
-
-  final data = responseBody['data'];
-  if (data is Map) {
-    final dataSuccess = data['success'];
-    if (dataSuccess is bool) return dataSuccess;
-  }
-  return false;
 }
 
 dynamic _extractCreatedRequestId(Map<String, dynamic>? responseBody) {

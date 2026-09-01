@@ -5,6 +5,7 @@ import 'package:core/bases/states/base/init_screen.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:http/http.dart' as http;
 import '../../../utils/api_error_parser.dart';
+import '../../../utils/sdk_api_response.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../constants/api_urls.dart';
 import '../event/validate_user_event.dart';
@@ -129,6 +130,21 @@ class ValidateUserBloc extends BaseBloc {
       
 
       // Handle response
+      final identityApi = SdkApiResponse.from(response);
+      final identityBlockingError = identityApi.blockingError(
+        httpFallback: 'فشل التحقق من رقم الموبايل',
+        businessFallback: 'فشل التحقق من رقم الموبايل',
+      );
+      if (identityBlockingError != null) {
+        _mobileNumberModel.isLoading = false;
+        _isRequestInProgress = false;
+        _currentRequestCompleter?.complete();
+        _currentRequestCompleter = null;
+        emit(UpdateValidateUserUI(_mobileNumberModel));
+        emit(OnValidateUserErrorState(identityBlockingError));
+        return;
+      }
+
       if (response.statusCode == 200) {
         // Try to parse response body
         try {
@@ -358,6 +374,16 @@ class ValidateUserBloc extends BaseBloc {
       print('Body: ${response.body}');
       print('═══════════════════════════════════════════════════════');
       print('');
+      final sendOtpApi = SdkApiResponse.from(response);
+      final sendOtpBlockingError = sendOtpApi.blockingError(
+        httpFallback: 'فشل في إرسال كود التحقق',
+        businessFallback: 'فشل في إرسال كود التحقق',
+      );
+      if (sendOtpBlockingError != null) {
+        emit(OnValidateUserErrorState(sendOtpBlockingError));
+        return;
+      }
+
       if (response.statusCode == 200) {
         // Parse send-otp response using dedicated model
         try {

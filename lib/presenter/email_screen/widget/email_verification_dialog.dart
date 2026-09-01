@@ -12,6 +12,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import '../../../utils/sdk_api_response.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../../routes/route_path.dart';
 import '../../register_screen/model/register_screen_nav_args.dart';
@@ -177,6 +178,15 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
       print('');
 
       if (mounted) {
+        final blockingError = response.sdk.blockingError(
+          httpFallback: 'فشل في إعادة إرسال كود التحقق',
+          businessFallback: 'فشل في إعادة إرسال كود التحقق',
+        );
+        if (blockingError != null) {
+          _showError(blockingError);
+          return;
+        }
+
         if (response.statusCode == 200) {
           try {
             if (response.body.isEmpty) {
@@ -430,6 +440,15 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
         setState(() {
           _isLoading = false;
         });
+
+        final blockingError = response.sdk.blockingError(
+          httpFallback: 'فشل في التحقق من الإيميل',
+          businessFallback: 'فشل في التحقق من الإيميل',
+        );
+        if (blockingError != null) {
+          _showError(blockingError);
+          return;
+        }
 
         if (response.statusCode == 200) {
           // Parse response

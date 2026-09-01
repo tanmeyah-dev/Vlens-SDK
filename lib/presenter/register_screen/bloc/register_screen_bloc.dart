@@ -7,6 +7,7 @@ import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../../../utils/sdk_api_response.dart';
 import '../../../utils/sdk_http_client.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import '../../validate_user/constants/api_urls.dart';
@@ -207,6 +208,16 @@ class RegisterScreenBloc extends BaseBloc {
       print('Body: ${response.body}');
       print('═══════════════════════════════════════════════════════');
       print('');
+
+      final createUserApi = SdkApiResponse.from(response);
+      final createUserBlockingError = createUserApi.blockingError(
+        httpFallback: 'فشل إنشاء المستخدم',
+        businessFallback: 'فشل إنشاء المستخدم',
+      );
+      if (createUserBlockingError != null) {
+        emit(OnRegisterScreenErrorState(createUserBlockingError));
+        return;
+      }
 
       CreateUserResponse? parsed;
       if (response.body.isNotEmpty) {

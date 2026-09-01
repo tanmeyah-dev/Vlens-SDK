@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 
 import '../../../data/models/extracted_user_data.dart';
 import '../../../utils/api_error_parser.dart';
+import '../../../utils/sdk_api_response.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../user_info/model/summary_answer_item.dart';
 import '../../user_info/model/user_info_model.dart';
@@ -336,21 +337,13 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
       if (!mounted) return;
 
-      if (response.statusCode != 200) {
-        final message = ApiErrorParser.extractMessage(
-          response.body,
-          fallbackMessage: 'فشل إرسال طلب القرض (${response.statusCode})',
-        );
-        throw Exception(message);
-      }
-
-      final decoded = _tryDecodeMap(response.body);
-      if (decoded != null && decoded['success'] == false) {
-        final message = ApiErrorParser.extractMessage(
-          response.body,
-          fallbackMessage: 'فشل إرسال طلب القرض',
-        );
-        throw Exception(message);
+      final api = SdkApiResponse.from(response);
+      final blockingError = api.blockingError(
+        httpFallback: 'فشل إرسال طلب القرض',
+        businessFallback: 'فشل إرسال طلب القرض',
+      );
+      if (blockingError != null) {
+        throw Exception(blockingError);
       }
 
       setState(() {

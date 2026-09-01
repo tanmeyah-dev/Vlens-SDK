@@ -13,6 +13,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../../../../routes/route_path.dart';
+import '../../../utils/sdk_api_response.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../constants/api_urls.dart';
 import '../utils/verification_success_dialog_helper.dart';
@@ -173,6 +174,15 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
       print('');
 
       if (mounted) {
+        final blockingError = response.sdk.blockingError(
+          httpFallback: 'فشل في إعادة إرسال كود التحقق',
+          businessFallback: 'فشل في إعادة إرسال كود التحقق',
+        );
+        if (blockingError != null) {
+          _showError(blockingError);
+          return;
+        }
+
         if (response.statusCode == 200) {
           try {
             if (response.body.isEmpty) {
@@ -469,6 +479,15 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
           _isLoading = false;
         });
 
+        final blockingError = response.sdk.blockingError(
+          httpFallback: 'فشل في التحقق من رقم الموبايل',
+          businessFallback: 'فشل في التحقق من رقم الموبايل',
+        );
+        if (blockingError != null) {
+          _showError(blockingError);
+          return;
+        }
+
         if (response.statusCode == 200) {
           // Parse response using StepVerifyPhoneResponse model
           try {
@@ -510,6 +529,10 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
               rawErrorMessage = getStringValue('error_message') ??
                   getStringValue('errorMessage') ??
                   getStringValue('error');
+              if ((rawErrorMessage == null || rawErrorMessage.isEmpty) &&
+                  rawSuccess == false) {
+                rawErrorMessage = getStringValue('message');
+              }
 
               // If not found, check nested data object
               if ((rawErrorMessage == null || rawErrorMessage.isEmpty) &&

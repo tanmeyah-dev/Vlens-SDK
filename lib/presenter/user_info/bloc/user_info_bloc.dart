@@ -6,6 +6,7 @@ import 'package:core/utils/cache/verification_cache.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../../utils/sdk_api_response.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../id_data/utils/id_data_parser.dart';
 import '../../validate_user/constants/api_urls.dart';
@@ -134,13 +135,18 @@ class UserInfoBloc extends BaseBloc {
         print('');
       }
 
-      if (fieldsResponse.statusCode != 200) {
-        throw Exception('فشل تحميل الحقول (${fieldsResponse.statusCode})');
+      final fieldsApi = SdkApiResponse.from(fieldsResponse);
+      final fieldsBlockingError = fieldsApi.blockingError(
+        httpFallback: 'فشل تحميل الحقول',
+        businessFallback: 'فشل تحميل الحقول',
+      );
+      if (fieldsBlockingError != null) {
+        throw Exception(fieldsBlockingError);
       }
 
       final lookupsData = _parseLookupsResponse(lookupsResponse);
 
-      final decodedFields = jsonDecode(fieldsResponse.body);
+      final decodedFields = fieldsApi.decoded;
       if (decodedFields is! Map<String, dynamic>) {
         throw Exception('استجابة غير صالحة من request/fields');
       }
@@ -222,17 +228,20 @@ class UserInfoBloc extends BaseBloc {
   }
 
   LookupsData _parseLookupsResponse(dynamic response) {
-    if (response.statusCode != 200) {
-      throw Exception('فشل تحميل البيانات المرجعية (${response.statusCode})');
+    final api = SdkApiResponse.from(response);
+    final blockingError = api.blockingError(
+      httpFallback: 'فشل تحميل البيانات المرجعية',
+      businessFallback: 'فشل تحميل البيانات المرجعية',
+    );
+    if (blockingError != null) {
+      throw Exception(blockingError);
     }
-    final decoded = jsonDecode(response.body);
-    if (decoded is! Map<String, dynamic>) {
+
+    final decoded = api.decoded;
+    if (decoded == null) {
       throw Exception('استجابة غير صالحة من customers/lookups');
     }
     final parsed = LookupsResponse.fromJson(decoded);
-    if (!parsed.success && parsed.data == null) {
-      throw Exception('فشل تحميل البيانات المرجعية');
-    }
     final data = parsed.data;
     if (data == null) {
       throw Exception('البيانات المرجعية فارغة');

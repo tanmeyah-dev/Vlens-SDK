@@ -5,7 +5,7 @@ import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:flutter/foundation.dart';
 import 'package:tan_sdk/data/models/extracted_user_data.dart';
 
-import '../../../utils/api_error_parser.dart';
+import '../../../utils/sdk_api_response.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../login_screen/utils/device_info_helper.dart';
 import '../../validate_user/constants/api_urls.dart';
@@ -120,13 +120,13 @@ Future<void> submitVlensData(
     print('');
   }
 
-  if (response.statusCode < 200 || response.statusCode >= 300) {
-    throw VlensDataApiException(
-      ApiErrorParser.extractMessage(
-        response.body,
-        fallbackMessage: 'فشل إرسال بيانات الهوية (${response.statusCode})',
-      ),
-    );
+  final api = SdkApiResponse.from(response);
+  final blockingError = api.blockingError(
+    httpFallback: 'فشل إرسال بيانات الهوية',
+    businessFallback: 'فشل إرسال بيانات الهوية',
+  );
+  if (blockingError != null) {
+    throw VlensDataApiException(blockingError);
   }
 }
 
@@ -176,13 +176,13 @@ Future<ExtractedUserData?> fetchVlensData({String? phoneNumber}) async {
     print('');
   }
 
-  if (response.statusCode < 200 || response.statusCode >= 300) {
-    throw VlensDataApiException(
-      ApiErrorParser.extractMessage(
-        response.body,
-        fallbackMessage: 'فشل تحميل بيانات الهوية (${response.statusCode})',
-      ),
-    );
+  final api = SdkApiResponse.from(response);
+  final blockingError = api.blockingError(
+    httpFallback: 'فشل تحميل بيانات الهوية',
+    businessFallback: 'فشل تحميل بيانات الهوية',
+  );
+  if (blockingError != null) {
+    throw VlensDataApiException(blockingError);
   }
 
   final payload = _extractPayloadMap(response.body);

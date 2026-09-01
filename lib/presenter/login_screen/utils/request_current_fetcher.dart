@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import '../../../utils/api_error_parser.dart';
+import '../../../utils/sdk_api_response.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../validate_user/constants/api_urls.dart';
 import '../model/request_current_response.dart';
@@ -50,28 +50,21 @@ class RequestCurrentFetcher {
     print('═══════════════════════════════════════════════════════');
     print('');
 
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        ApiErrorParser.extractMessage(
-          response.body,
-          fallbackMessage: 'فشل جلب الطلب الحالي (${response.statusCode})',
-        ),
-      );
+    final api = SdkApiResponse.from(response);
+    final blockingError = api.blockingError(
+      httpFallback: 'فشل جلب الطلب الحالي',
+      businessFallback: 'فشل جلب الطلب الحالي',
+    );
+    if (blockingError != null) {
+      throw Exception(blockingError);
     }
 
-    final decoded = _tryDecodeMap(response.body);
+    final decoded = api.decoded ?? _tryDecodeMap(response.body);
     if (decoded == null) {
       throw Exception('استجابة غير صالحة من request/current');
     }
 
     final parsed = RequestCurrentResponse.fromJson(decoded);
-    if (!parsed.success) {
-      throw Exception(
-        parsed.message?.trim().isNotEmpty == true
-            ? parsed.message!
-            : 'فشل جلب الطلب الحالي',
-      );
-    }
     return parsed;
   }
 }

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../../../data/models/extracted_user_data.dart';
 import '../../../utils/api_error_parser.dart';
+import '../../../utils/sdk_api_response.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../../utils/sdk_navigator.dart';
 import '../../validate_user/constants/api_urls.dart';
@@ -145,6 +146,14 @@ class EContractOtpHelper {
             : 'فشل تفعيل خطوة OTP للعقد الإلكتروني (${jsonResponse.statusCode})';
         throw Exception(errorMessage);
       }
+
+      final blockingError = SdkApiResponse.from(jsonResponse).blockingError(
+        checkHttp: false,
+        businessFallback: 'فشل تفعيل خطوة OTP للعقد الإلكتروني',
+      );
+      if (blockingError != null) {
+        throw Exception(blockingError);
+      }
       return true;
     } catch (e) {
       if (!context.mounted) return false;
@@ -276,34 +285,21 @@ class EContractOtpHelper {
       print('═══════════════════════════════════════════════════════');
       print('');
 
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        final errorMessage = response.statusCode == 417
-            ? ApiErrorParser.extractMessage(
-                response.body,
-                fallbackMessage: 'فشل التحقق من OTP (${response.statusCode})',
-              )
-            : 'فشل التحقق من OTP (${response.statusCode})';
-        throw Exception(errorMessage);
+      final api = SdkApiResponse.from(response);
+      final blockingError = api.blockingError(
+        httpFallback: 'فشل التحقق من OTP',
+        businessFallback: 'فشل التحقق من OTP',
+      );
+      if (blockingError != null) {
+        throw Exception(blockingError);
       }
 
-      final decodedBody = jsonDecode(response.body);
-      if (decodedBody is! Map) {
+      final decodedBody = api.decoded;
+      if (decodedBody == null) {
         throw Exception('استجابة غير صالحة من الخادم');
       }
 
-      final parsed = EContractValidateOtpResponse.fromJson(
-        Map<String, dynamic>.from(decodedBody),
-      );
-
-      if (!parsed.success) {
-        final serverMessage = parsed.data?.errorMessage?.trim();
-        if (serverMessage != null && serverMessage.isNotEmpty) {
-          throw Exception(serverMessage);
-        }
-        throw Exception(parsed.message?.trim().isNotEmpty == true
-            ? parsed.message!
-            : 'فشل التحقق من OTP');
-      }
+      final parsed = EContractValidateOtpResponse.fromJson(decodedBody);
 
       return parsed;
     } catch (e) {
@@ -368,31 +364,13 @@ class EContractOtpHelper {
       print('═══════════════════════════════════════════════════════');
       print('');
 
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception(
-          ApiErrorParser.extractMessage(
-            response.body,
-            fallbackMessage:
-                'فشل تجهيز القرض للصرف (${response.statusCode})',
-          ),
-        );
-      }
-
-      if (response.body.trim().isNotEmpty) {
-        dynamic decoded;
-        try {
-          decoded = jsonDecode(response.body);
-        } catch (_) {
-          decoded = null;
-        }
-        if (decoded is Map && decoded['success'] == false) {
-          throw Exception(
-            ApiErrorParser.extractMessage(
-              response.body,
-              fallbackMessage: 'فشل تجهيز القرض للصرف',
-            ),
-          );
-        }
+      final api = SdkApiResponse.from(response);
+      final blockingError = api.blockingError(
+        httpFallback: 'فشل تجهيز القرض للصرف',
+        businessFallback: 'فشل تجهيز القرض للصرف',
+      );
+      if (blockingError != null) {
+        throw Exception(blockingError);
       }
 
       return true;
