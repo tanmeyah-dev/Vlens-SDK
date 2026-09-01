@@ -10,6 +10,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import '../../../utils/api_exception_message.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../../utils/api_error_parser.dart';
 import '../../validate_user/constants/api_urls.dart';
@@ -367,17 +368,10 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
         _showError(errorMessage);
       }
     } catch (e) {
-      String errorMessage = e.toString().replaceAll('Exception: ', '');
-      String userFriendlyMessage;
-
-      if (errorMessage.contains('SocketException') ||
-          errorMessage.contains('connection refused')) {
-        userFriendlyMessage = 'لا يمكن الاتصال بالخادم. يرجى التحقق من الاتصال بالإنترنت';
-      } else if (errorMessage.contains('timeout')) {
-        userFriendlyMessage = 'انتهت مهلة الاتصال. يرجى المحاولة مرة أخرى';
-      } else {
-        userFriendlyMessage = 'حدث خطأ أثناء التحقق. يرجى المحاولة مرة أخرى';
-      }
+      final userFriendlyMessage = apiExceptionMessage(
+        e,
+        fallback: 'حدث خطأ أثناء التحقق. يرجى المحاولة مرة أخرى',
+      );
 
       print('❌ OTP verify caught exception type: ${e.runtimeType}');
       print('❌ OTP verify exception details: $e');

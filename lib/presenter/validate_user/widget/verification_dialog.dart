@@ -13,6 +13,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../../../../routes/route_path.dart';
+import '../../../utils/api_exception_message.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../constants/api_urls.dart';
 import '../utils/verification_success_dialog_helper.dart';
@@ -204,6 +205,11 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
             print('═══════════════════════════════════════════════════════');
             print('');
 
+            if (stepVerifyPhoneResponse.success == false) {
+              _showError(stepVerifyPhoneResponse.userMessage);
+              return;
+            }
+
             // Check for error_message first
             String? errorMessage =
                 stepVerifyPhoneResponse.errorMessage?.trim() ??
@@ -340,32 +346,12 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
       }
     } catch (e) {
       if (mounted) {
-        String errorMessage = e.toString().replaceAll('Exception: ', '');
-        String userFriendlyMessage;
+        final userFriendlyMessage = apiExceptionMessage(
+          e,
+          fallback: 'حدث خطأ أثناء إعادة إرسال كود التحقق. يرجى المحاولة مرة أخرى',
+        );
 
-        if (errorMessage.contains('SocketException') ||
-            errorMessage.contains('connection refused') ||
-            errorMessage.contains('Connection refused') ||
-            errorMessage.contains('SocketConnection') ||
-            errorMessage.contains('Failed host lookup')) {
-          userFriendlyMessage = 'لا يمكن الاتصال بالخادم.\n\n'
-              'يرجى التحقق من:\n'
-              '• الاتصال بالإنترنت\n'
-              '• أن الخادم متاح\n'
-              '• المحاولة مرة أخرى';
-        } else if (errorMessage.contains('timeout') ||
-            errorMessage.contains('Timeout')) {
-          userFriendlyMessage = 'انتهت مهلة الاتصال. يرجى المحاولة مرة أخرى';
-        } else if (errorMessage.contains('Certificate') ||
-            errorMessage.contains('SSL') ||
-            errorMessage.contains('TLS')) {
-          userFriendlyMessage = 'خطأ في شهادة الاتصال الآمن';
-        } else {
-          userFriendlyMessage =
-              'حدث خطأ أثناء إعادة إرسال كود التحقق. يرجى المحاولة مرة أخرى';
-        }
-
-        print('❌ Error resending OTP: $errorMessage');
+        print('❌ Error resending OTP: $e');
         print('❌ User-friendly message: $userFriendlyMessage');
 
         _showError(userFriendlyMessage);
@@ -468,276 +454,7 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
         setState(() {
           _isLoading = false;
         });
-
-        if (response.statusCode == 200) {
-          // Parse response using StepVerifyPhoneResponse model
-          try {
-            print('🔍 Attempting to parse response body...');
-
-            // Check if body is empty
-            if (response.body.isEmpty) {
-              print('⚠️ Response body is empty');
-              _showError('استجابة فارغة من الخادم');
-              return;
-            }
-
-            final responseBody = jsonDecode(response.body);
-            print('✅ JSON decoded successfully');
-            print('📋 Response body type: ${responseBody.runtimeType}');
-            print('📋 Response body content: $responseBody');
-
-            // Check for explicit error fields in raw response body first.
-            // Do not treat generic `message` as an error when success=true.
-            String? rawErrorMessage;
-            bool? rawSuccess;
-            if (responseBody is Map<String, dynamic>) {
-              final rawSuccessValue = responseBody['success'];
-              if (rawSuccessValue is bool) {
-                rawSuccess = rawSuccessValue;
-              } else if (rawSuccessValue != null) {
-                rawSuccess = rawSuccessValue.toString().toLowerCase() == 'true';
-              }
-
-              // Helper function to safely extract string value
-              String? getStringValue(String key) {
-                final value = responseBody[key];
-                if (value == null) return null;
-                final str = value.toString().trim();
-                return str.isEmpty ? null : str;
-              }
-
-              // Check top-level fields first
-              rawErrorMessage = getStringValue('error_message') ??
-                  getStringValue('errorMessage') ??
-                  getStringValue('error');
-
-              // If not found, check nested data object
-              if ((rawErrorMessage == null || rawErrorMessage.isEmpty) &&
-                  responseBody['data'] != null) {
-                final data = responseBody['data'];
-                if (data is Map<String, dynamic>) {
-                  String? getDataStringValue(String key) {
-                    final value = data[key];
-                    if (value == null) return null;
-                    final str = value.toString().trim();
-                    return str.isEmpty ? null : str;
-                  }
-
-                  rawErrorMessage = getDataStringValue('error_message') ??
-                      getDataStringValue('errorMessage') ??
-                      getDataStringValue('error');
-                }
-              }
-            }
-
-            // Show explicit error only when API indicates failure.
-            if (rawErrorMessage != null &&
-                rawErrorMessage.isNotEmpty &&
-                rawSuccess == false) {
-              print(
-                  '❌ Error message detected in raw response - Showing error and staying on verification dialog');
-              print('❌ Error message from API: $rawErrorMessage');
-
-              // Show the error message from API response
-              _showError(rawErrorMessage);
-              return; // Stop here, don't navigate
-            }
-
-            final stepVerifyPhoneResponse = StepVerifyPhoneResponse.fromJson(
-              responseBody is Map<String, dynamic>
-                  ? responseBody
-                  : <String, dynamic>{},
-            );
-
-            print('✅ StepVerifyPhoneResponse model created successfully');
-
-            print('');
-            print('═══════════════════════════════════════════════════════');
-            print('📊 STEP VERIFY PHONE RESPONSE MODEL');
-            print('═══════════════════════════════════════════════════════');
-            print('Code: ${stepVerifyPhoneResponse.code ?? "N/A"}');
-            print('Message: ${stepVerifyPhoneResponse.message ?? "N/A"}');
-            print('API Success: ${stepVerifyPhoneResponse.apiSuccess ?? "N/A"}');
-            print('Success: ${stepVerifyPhoneResponse.success}');
-            print(
-                'PhoneNumberOtpRequestId: ${stepVerifyPhoneResponse.phoneNumberOtpRequestId ?? "N/A"}');
-            print(
-                'TransactionId: ${stepVerifyPhoneResponse.transactionId ?? "N/A"}');
-            print('Error Code: ${stepVerifyPhoneResponse.errorCode ?? "N/A"}');
-            print(
-                'Error Message: ${stepVerifyPhoneResponse.errorMessage ?? "N/A"}');
-            print('═══════════════════════════════════════════════════════');
-            print('');
-
-            // Check parsed dedicated error fields only.
-            String? errorMessage =
-                stepVerifyPhoneResponse.errorMessage?.trim() ??
-                    stepVerifyPhoneResponse.errorDescriptions?.trim();
-
-            // Verify endpoint is successful when API returns success=true.
-            final isVerificationSuccessful = stepVerifyPhoneResponse.success;
-            if (isVerificationSuccessful) {
-              print(
-                  '✅ Verify phone OTP successful - Navigating to username security code screen');
-
-              final mobile = (widget.mobileNumber ?? '').trim();
-              if (mobile.isNotEmpty) {
-                await VerificationCache().setMobileNumber(mobile);
-                print('💾 Saved to cache - mobileNumber: $mobile');
-              }
-
-              final optionalOtpId =
-                  (stepVerifyPhoneResponse.phoneNumberOtpRequestId ??
-                          _phoneNumberOtpRequestId)
-                      ?.trim();
-              final optionalTxId =
-                  (stepVerifyPhoneResponse.transactionId ?? _transactionId)
-                      ?.trim();
-              if (optionalOtpId != null &&
-                  optionalOtpId.isNotEmpty &&
-                  optionalTxId != null &&
-                  optionalTxId.isNotEmpty) {
-                await VerificationCache().setVerificationData(
-                  phoneNumberOtpRequestId: optionalOtpId,
-                  transactionId: optionalTxId,
-                  mobileNumber: mobile,
-                );
-              }
-
-              // Success - close verification dialog and show success dialog
-              Navigator.of(context).pop();
-              final successContext = widget.parentContext ?? context;
-              SchedulerBinding.instance.addPostFrameCallback((_) {
-                if (successContext.mounted) {
-                  print('✅ Showing verification success dialog');
-                  VerificationSuccessDialogHelper.showVerificationSuccessDialog(
-                    successContext,
-                    onDismiss: () {
-                      print(
-                          '✅ Success dialog dismissed, onDismiss callback called');
-                      widget.onConfirm(pinController.text);
-                    },
-                  );
-                } else {
-                  print('⚠️ Success context not mounted');
-                }
-              });
-            } else {
-              print('❌ StepVerifyPhone API verification failed');
-
-              final defaultErrorMessage = errorMessage ??
-                  stepVerifyPhoneResponse.message ??
-                  'فشل في التحقق من رقم الموبايل. يرجى التحقق من الكود المدخل';
-              _showError(defaultErrorMessage);
-            }
-          } catch (e, stackTrace) {
-            print('');
-            print('═══════════════════════════════════════════════════════');
-            print('❌ ERROR PARSING STEP VERIFY PHONE RESPONSE');
-            print('═══════════════════════════════════════════════════════');
-            print('Error: $e');
-            print('Error Type: ${e.runtimeType}');
-            print('Stack Trace: $stackTrace');
-            print('Response Status Code: ${response.statusCode}');
-            print('Response Body: ${response.body}');
-            print('Response Body Length: ${response.body.length}');
-            print('═══════════════════════════════════════════════════════');
-            print('');
-
-            // Try to extract error message from response if parsing failed
-            String errorMessage = 'فشل في معالجة الاستجابة من الخادم';
-            try {
-              if (response.body.isNotEmpty) {
-                final errorBody = jsonDecode(response.body);
-                errorMessage = errorBody['message'] ??
-                    errorBody['error'] ??
-                    errorBody['errorMessage'] ??
-                    errorBody['error_message'] ??
-                    errorBody['data']?['message'] ??
-                    errorBody['data']?['error'] ??
-                    errorMessage;
-              }
-            } catch (_) {
-              // If we can't parse error, use default message
-            }
-
-            _showError(errorMessage);
-          }
-        } else {
-          // Error response - show error message for any non-200 status code
-          String? errorMessage;
-
-          try {
-            if (response.body.isNotEmpty) {
-              final errorBody = jsonDecode(response.body);
-
-              print('');
-              print('═══════════════════════════════════════════════════════');
-              print('📋 EXTRACTING ERROR MESSAGE FROM RESPONSE');
-              print('═══════════════════════════════════════════════════════');
-              print('Response Body: $errorBody');
-              print('Response Body Type: ${errorBody.runtimeType}');
-
-              // Try to extract error message from different possible response formats
-              // Priority: error_message > errorMessage > message > error > data.message > data.error
-              if (errorBody is Map<String, dynamic>) {
-                // Helper function to safely extract string value
-                String? getStringValue(String key) {
-                  final value = errorBody[key];
-                  if (value == null) return null;
-                  final str = value.toString().trim();
-                  return str.isEmpty ? null : str;
-                }
-
-                // Check top-level fields first
-                errorMessage = getStringValue('error_message') ??
-                    getStringValue('errorMessage') ??
-                    getStringValue('message') ??
-                    getStringValue('error');
-
-                // If not found, check nested data object
-                if ((errorMessage == null || errorMessage.isEmpty) &&
-                    errorBody['data'] != null) {
-                  final data = errorBody['data'];
-                  if (data is Map<String, dynamic>) {
-                    String? getDataStringValue(String key) {
-                      final value = data[key];
-                      if (value == null) return null;
-                      final str = value.toString().trim();
-                      return str.isEmpty ? null : str;
-                    }
-
-                    errorMessage = getDataStringValue('error_message') ??
-                        getDataStringValue('errorMessage') ??
-                        getDataStringValue('message') ??
-                        getDataStringValue('error');
-                  }
-                }
-              }
-
-              print('Extracted Error Message: ${errorMessage ?? "N/A"}');
-              print('═══════════════════════════════════════════════════════');
-              print('');
-            }
-          } catch (e) {
-            // If JSON parsing fails, log and continue to use default message
-            print('⚠️ Error parsing error response: $e');
-            print('⚠️ Response body: ${response.body}');
-          }
-
-          // Only use default error message if no error message found in response
-          if (errorMessage == null || errorMessage.isEmpty) {
-            errorMessage = _getDefaultErrorMessage(response.statusCode);
-            print(
-                '⚠️ No error message found in response, using default message');
-          }
-
-          print(
-              '❌ Verification failed with status code: ${response.statusCode}');
-          print('❌ Final error message to show: $errorMessage');
-
-          _showError(errorMessage);
-        }
+        await _processVerifyPhoneOtpResponse(response);
       }
     } catch (e, stackTrace) {
       if (mounted) {
@@ -756,37 +473,103 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
         print('');
 
         // Provide user-friendly error messages
-        String errorMessage = e.toString().replaceAll('Exception: ', '');
-        String userFriendlyMessage;
+        final userFriendlyMessage = apiExceptionMessage(
+          e,
+          fallback: 'حدث خطأ أثناء التحقق. يرجى المحاولة مرة أخرى',
+        );
 
-        if (errorMessage.contains('SocketException') ||
-            errorMessage.contains('connection refused') ||
-            errorMessage.contains('Connection refused') ||
-            errorMessage.contains('SocketConnection') ||
-            errorMessage.contains('Failed host lookup')) {
-          // Connection error - provide user-friendly message
-          userFriendlyMessage = 'لا يمكن الاتصال بالخادم.\n\n'
-              'يرجى التحقق من:\n'
-              '• الاتصال بالإنترنت\n'
-              '• أن الخادم متاح\n'
-              '• المحاولة مرة أخرى';
-        } else if (errorMessage.contains('timeout') ||
-            errorMessage.contains('Timeout')) {
-          userFriendlyMessage = 'انتهت مهلة الاتصال. يرجى المحاولة مرة أخرى';
-        } else if (errorMessage.contains('Certificate') ||
-            errorMessage.contains('SSL') ||
-            errorMessage.contains('TLS')) {
-          userFriendlyMessage = 'خطأ في شهادة الاتصال الآمن';
-        } else {
-          // For other errors, show a generic message without technical details
-          userFriendlyMessage = 'حدث خطأ أثناء التحقق. يرجى المحاولة مرة أخرى';
-        }
-
-        print('❌ Verification error: $errorMessage');
+        print('❌ Verification error: $e');
         print('❌ User-friendly message: $userFriendlyMessage');
 
         _showError(userFriendlyMessage);
       }
+    }
+  }
+
+  /// Handles verify-otp for any HTTP status (200, 417, etc.) using the envelope model.
+  Future<void> _processVerifyPhoneOtpResponse(http.Response response) async {
+    if (response.body.trim().isEmpty) {
+      _showError('استجابة فارغة من الخادم');
+      return;
+    }
+
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        _showError('استجابة غير صالحة من الخادم');
+        return;
+      }
+
+      final parsed = StepVerifyPhoneResponse.fromJson(decoded);
+
+      print('');
+      print('═══════════════════════════════════════════════════════');
+      print('📊 VERIFY PHONE OTP RESPONSE MODEL');
+      print('═══════════════════════════════════════════════════════');
+      print('HTTP Status: ${response.statusCode}');
+      print('Code: ${parsed.code ?? "N/A"}');
+      print('Message: ${parsed.message ?? "N/A"}');
+      print('Success: ${parsed.success}');
+      print('IsVerified: ${parsed.isVerified}');
+      print('═══════════════════════════════════════════════════════');
+      print('');
+
+      if (!parsed.isVerified) {
+        print(
+            '❌ verify-otp failed — staying on dialog: ${parsed.userMessage}');
+        _showError(parsed.userMessage);
+        return;
+      }
+
+      print(
+          '✅ Verify phone OTP successful - Navigating to username security code screen');
+
+      final mobile = (widget.mobileNumber ?? '').trim();
+      if (mobile.isNotEmpty) {
+        await VerificationCache().setMobileNumber(mobile);
+        print('💾 Saved to cache - mobileNumber: $mobile');
+      }
+
+      final optionalOtpId =
+          (parsed.phoneNumberOtpRequestId ?? _phoneNumberOtpRequestId)?.trim();
+      final optionalTxId =
+          (parsed.transactionId ?? _transactionId)?.trim();
+      if (optionalOtpId != null &&
+          optionalOtpId.isNotEmpty &&
+          optionalTxId != null &&
+          optionalTxId.isNotEmpty) {
+        await VerificationCache().setVerificationData(
+          phoneNumberOtpRequestId: optionalOtpId,
+          transactionId: optionalTxId,
+          mobileNumber: mobile,
+        );
+      }
+
+      Navigator.of(context).pop();
+      final successContext = widget.parentContext ?? context;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (successContext.mounted) {
+          print('✅ Showing verification success dialog');
+          VerificationSuccessDialogHelper.showVerificationSuccessDialog(
+            successContext,
+            onDismiss: () {
+              print('✅ Success dialog dismissed, onDismiss callback called');
+              widget.onConfirm(pinController.text);
+            },
+          );
+        } else {
+          print('⚠️ Success context not mounted');
+        }
+      });
+    } catch (e, stackTrace) {
+      print('❌ ERROR PARSING VERIFY PHONE OTP RESPONSE: $e');
+      print(stackTrace);
+      _showError(
+        apiExceptionMessage(
+          e,
+          fallback: 'فشل في معالجة الاستجابة من الخادم',
+        ),
+      );
     }
   }
 

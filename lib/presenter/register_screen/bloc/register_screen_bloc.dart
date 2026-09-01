@@ -7,6 +7,7 @@ import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../../../utils/api_exception_message.dart';
 import '../../../utils/sdk_http_client.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import '../../validate_user/constants/api_urls.dart';
@@ -245,30 +246,12 @@ class RegisterScreenBloc extends BaseBloc {
         emit(OnRegisterScreenErrorState(errorMessage));
       }
     } catch (e) {
-      String errorMessage = e.toString().replaceAll('Exception: ', '');
-      String userFriendlyMessage;
-      
-      if (errorMessage.contains('SocketException') || 
-          errorMessage.contains('connection refused') ||
-          errorMessage.contains('Connection refused') ||
-          errorMessage.contains('SocketConnection') ||
-          errorMessage.contains('Failed host lookup')) {
-        // Connection error - provide user-friendly message
-        userFriendlyMessage = 'لا يمكن الاتصال بالخادم.\n\n'
-            'يرجى التحقق من:\n'
-            '• الاتصال بالإنترنت\n'
-            '• أن الخادم متاح\n'
-            '• المحاولة مرة أخرى';
-      } else if (errorMessage.contains('timeout') || errorMessage.contains('Timeout')) {
-        userFriendlyMessage = 'انتهت مهلة الاتصال. يرجى المحاولة مرة أخرى';
-      } else if (errorMessage.contains('Certificate') || errorMessage.contains('SSL') || errorMessage.contains('TLS')) {
-        userFriendlyMessage = 'خطأ في شهادة الاتصال الآمن';
-      } else {
-        // For other errors, show a generic message without technical details
-        userFriendlyMessage = 'حدث خطأ أثناء إنشاء المستخدم. يرجى المحاولة مرة أخرى';
-      }
-      
-      print('❌ Error creating user: $errorMessage');
+      final userFriendlyMessage = apiExceptionMessage(
+        e,
+        fallback: 'حدث خطأ أثناء إنشاء المستخدم. يرجى المحاولة مرة أخرى',
+      );
+
+      print('❌ Error creating user: $e');
       print('❌ User-friendly message: $userFriendlyMessage');
       emit(OnRegisterScreenErrorState(userFriendlyMessage));
     }

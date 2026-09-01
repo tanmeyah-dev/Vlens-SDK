@@ -9,6 +9,7 @@ import '../../../data/models/extracted_user_data.dart';
 import '../../user_info/model/summary_answer_item.dart';
 import '../../user_info/model/user_info_model.dart';
 import '../../user_info/utils/request_create_helper.dart';
+import '../../../utils/api_exception_message.dart';
 import '../utils/request_documents_navigator.dart';
 
 class SummaryScreen extends StatefulWidget {
@@ -300,7 +301,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', '')),
+          content: Text(apiExceptionMessage(e)),
           backgroundColor: AppColors.error,
         ),
       );

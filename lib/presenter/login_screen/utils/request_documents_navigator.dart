@@ -3,6 +3,7 @@ import 'package:core/utils/cache/verification_cache.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:flutter/material.dart';
 
+import '../../../utils/api_exception_message.dart';
 import '../model/request_current_response.dart';
 import '../scene/request_documents_scene.dart';
 import 'request_current_fetcher.dart';
@@ -88,7 +89,7 @@ class RequestDocumentsNavigator {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', '')),
+          content: Text(apiExceptionMessage(e)),
           backgroundColor: AppColors.error,
           duration: const Duration(seconds: 4),
         ),

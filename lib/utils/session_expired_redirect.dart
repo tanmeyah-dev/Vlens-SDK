@@ -5,14 +5,27 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../routes/route_path.dart';
+import 'api_response_envelope.dart';
 import 'sdk_navigator.dart';
 
-/// Forces the SDK flow back to login whenever an API returns HTTP 417.
+/// Forces the SDK flow back to login when an API returns HTTP 417 for session expiry.
+///
+/// Wrong OTP / validation errors also use HTTP 417 with `"success": false` — those
+/// must stay on the current screen and are **not** treated as session expiry.
 class SessionExpiredRedirect {
   static bool _isHandling = false;
 
-  static void handle(http.Response response) {
+  static void handle(http.Response response, {Uri? requestUri}) {
     if (response.statusCode != 417) return;
+
+    // OTP verify endpoints always handle 417 locally (wrong code, etc.).
+    if (requestUri != null && ApiResponseEnvelope.isOtpVerifyEndpoint(requestUri)) {
+      return;
+    }
+
+    // Business failure envelope — show error on current screen, do not redirect.
+    if (ApiResponseEnvelope.isExplicitFailure(response)) return;
+
     if (_isHandling) return;
     _isHandling = true;
     unawaited(_redirectToLogin());

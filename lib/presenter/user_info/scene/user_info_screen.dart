@@ -13,6 +13,7 @@ import '../bloc/user_info_bloc.dart';
 import '../event/user_info_event.dart';
 import '../model/user_info_model.dart';
 import '../state/user_info_state.dart';
+import '../../../utils/api_exception_message.dart';
 import '../widget/user_info_dynamic_field.dart';
 
 class UserInfoScreen extends StatefulWidget {
@@ -212,7 +213,7 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', '')),
+          content: Text(apiExceptionMessage(e)),
           backgroundColor: AppColors.error,
         ),
       );

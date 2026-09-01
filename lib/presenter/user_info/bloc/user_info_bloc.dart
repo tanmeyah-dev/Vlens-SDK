@@ -6,6 +6,7 @@ import 'package:core/utils/cache/verification_cache.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../../utils/api_exception_message.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../id_data/utils/id_data_parser.dart';
 import '../../validate_user/constants/api_urls.dart';
@@ -160,7 +161,10 @@ class UserInfoBloc extends BaseBloc {
       }
       _model.isLoadingFields = false;
       _model.areFieldsReady = false;
-      _model.fieldsError = e.toString().replaceAll('Exception: ', '');
+      _model.fieldsError = apiExceptionMessage(
+        e,
+        fallback: 'فشل تحميل الحقول',
+      );
       emit(UpdateUserInfoUI(_model));
     }
   }

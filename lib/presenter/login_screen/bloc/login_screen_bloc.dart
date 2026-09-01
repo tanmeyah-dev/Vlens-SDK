@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:core/bases/base_bloc.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:http/http.dart' as http;
+import '../../../utils/api_exception_message.dart';
 import '../../../utils/api_error_parser.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../validate_user/constants/api_urls.dart';
@@ -340,30 +341,12 @@ class LoginScreenBloc extends BaseBloc {
         emit(OnLoginErrorState(errorMessage));
       }
     } catch (e) {
-      String errorMessage = e.toString().replaceAll('Exception: ', '');
-      String userFriendlyMessage;
-      
-      if (errorMessage.contains('SocketException') || 
-          errorMessage.contains('connection refused') ||
-          errorMessage.contains('Connection refused') ||
-          errorMessage.contains('SocketConnection') ||
-          errorMessage.contains('Failed host lookup')) {
-        // Connection error - provide user-friendly message
-        userFriendlyMessage = 'لا يمكن الاتصال بالخادم.\n\n'
-            'يرجى التحقق من:\n'
-            '• الاتصال بالإنترنت\n'
-            '• أن الخادم متاح\n'
-            '• المحاولة مرة أخرى';
-      } else if (errorMessage.contains('timeout') || errorMessage.contains('Timeout')) {
-        userFriendlyMessage = 'انتهت مهلة الاتصال. يرجى المحاولة مرة أخرى';
-      } else if (errorMessage.contains('Certificate') || errorMessage.contains('SSL') || errorMessage.contains('TLS')) {
-        userFriendlyMessage = 'خطأ في شهادة الاتصال الآمن';
-      } else {
-        // For other errors, show a generic message without technical details
-        userFriendlyMessage = 'حدث خطأ أثناء تسجيل الدخول. يرجى المحاولة مرة أخرى';
-      }
-      
-      print('❌ Error during login: $errorMessage');
+      final userFriendlyMessage = apiExceptionMessage(
+        e,
+        fallback: 'حدث خطأ أثناء تسجيل الدخول. يرجى المحاولة مرة أخرى',
+      );
+
+      print('❌ Error during login: $e');
       print('❌ User-friendly message: $userFriendlyMessage');
       _model.isLoading = false;
       emit(UpdateLoginScreenUI(_model));

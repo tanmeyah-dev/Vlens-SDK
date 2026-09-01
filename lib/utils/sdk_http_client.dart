@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
+import 'api_business_exception.dart';
 import 'session_expired_redirect.dart';
 
 /// HTTP client for SDK API calls.
@@ -79,7 +80,8 @@ class SdkHttpClient {
       }
     }
 
-    SessionExpiredRedirect.handle(response);
+    SessionExpiredRedirect.handle(response, requestUri: uri);
+    ApiBusinessResponse.ensureSuccess(response, requestUri: uri);
     return response;
   }
 

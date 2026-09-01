@@ -1,20 +1,16 @@
-/// Model for StepVerifyPhone API response
-/// Response structure may vary, but typically includes:
-/// {
-///   "phoneNumberOtpRequestId": "...",
-///   "transactionId": "...",
-///   "isPhoneNumberConfirmed": true,
-///   // OR nested in data object:
-///   "data": {
-///     "phoneNumberOtpRequestId": "...",
-///     "transactionId": "...",
-///     "isPhoneNumberConfirmed": true
-///   }
-/// }
+import '../../../utils/api_response_envelope.dart';
+
+/// Response for `POST .../digital/identity/phone/verify-otp`.
+///
+/// Success envelope:
+/// `{ "code": 0, "message": "...", "success": true, "data": { ... } }`
+///
+/// Failure envelope (wrong OTP — HTTP 417, stay on screen):
+/// `{ "code": 417, "message": "OTP code is wrong...", "success": false }`
 class StepVerifyPhoneResponse {
   final int? code;
   final String? message;
-  final bool? apiSuccess;
+  final bool? success;
   final String? phoneNumberOtpRequestId;
   final String? transactionId;
   final int? phoneOtpExpireInSeconds;
@@ -24,10 +20,10 @@ class StepVerifyPhoneResponse {
   final String? errorDescriptions;
   final Map<String, dynamic>? data;
 
-  StepVerifyPhoneResponse({
+  const StepVerifyPhoneResponse({
     this.code,
     this.message,
-    this.apiSuccess,
+    this.success,
     this.phoneNumberOtpRequestId,
     this.transactionId,
     this.phoneOtpExpireInSeconds,
@@ -38,18 +34,30 @@ class StepVerifyPhoneResponse {
     this.data,
   });
 
-  /// Computed property to determine if the request was successful
-  /// Supports local `success` flag and Vlens `data` / `error_code` shape.
-  bool get success {
-    if (apiSuccess != null) {
-      return apiSuccess == true;
+  /// Whether OTP verification succeeded and navigation may continue.
+  bool get isVerified {
+    if (success != null) return success == true;
+    if (errorCode != null && errorCode!.trim().isNotEmpty) return false;
+    return isPhoneNumberConfirmed == true;
+  }
+
+  /// Backward-compatible alias used by existing call sites.
+  bool get successComputed => isVerified;
+
+  /// User-facing error text from the API envelope.
+  String get userMessage {
+    final fromMessage = message?.trim();
+    if (fromMessage != null && fromMessage.isNotEmpty) return fromMessage;
+
+    final fromError = errorMessage?.trim();
+    if (fromError != null && fromError.isNotEmpty) return fromError;
+
+    final fromDescriptions = errorDescriptions?.trim();
+    if (fromDescriptions != null && fromDescriptions.isNotEmpty) {
+      return fromDescriptions;
     }
-    if (errorCode != null && errorCode!.trim().isNotEmpty) {
-      return false;
-    }
-    if (isPhoneNumberConfirmed == true) return true;
-    return phoneNumberOtpRequestId != null &&
-        phoneNumberOtpRequestId!.isNotEmpty;
+
+    return 'فشل في التحقق من رقم الموبايل. يرجى التحقق من الكود المدخل';
   }
 
   factory StepVerifyPhoneResponse.fromJson(Map<String, dynamic> json) {
@@ -66,7 +74,6 @@ class StepVerifyPhoneResponse {
       return null;
     }
 
-    // Extract from root level first (supports camelCase + snake_case + common variants)
     String? phoneNumberOtpRequestId = readString(json, const [
       'phoneNumberOtpRequestId',
       'phone_number_otp_request_id',
@@ -82,7 +89,6 @@ class StepVerifyPhoneResponse {
     bool? isPhoneNumberConfirmed;
     int? phoneOtpExpireInSeconds;
 
-    // Handle isPhoneNumberConfirmed - can be bool, string, or int
     if (json['isPhoneNumberConfirmed'] != null) {
       final value = json['isPhoneNumberConfirmed'];
       if (value is bool) {
@@ -94,7 +100,6 @@ class StepVerifyPhoneResponse {
       }
     }
 
-    // Extract from common nested objects if available
     final nestedCandidates = <Map<String, dynamic>>[];
     if (json['data'] is Map<String, dynamic>) {
       nestedCandidates.add(json['data'] as Map<String, dynamic>);
@@ -119,14 +124,15 @@ class StepVerifyPhoneResponse {
         'transactionID',
         'trxId',
       ]);
-      
-      // Handle isPhoneNumberConfirmed from data object
-      if (isPhoneNumberConfirmed == null && dataMap['isPhoneNumberConfirmed'] != null) {
+
+      if (isPhoneNumberConfirmed == null &&
+          dataMap['isPhoneNumberConfirmed'] != null) {
         final value = dataMap['isPhoneNumberConfirmed'];
         if (value is bool) {
           isPhoneNumberConfirmed = value;
         } else if (value is String) {
-          isPhoneNumberConfirmed = value.toLowerCase() == 'true' || value == '1';
+          isPhoneNumberConfirmed =
+              value.toLowerCase() == 'true' || value == '1';
         } else if (value is int) {
           isPhoneNumberConfirmed = value == 1;
         }
@@ -143,23 +149,10 @@ class StepVerifyPhoneResponse {
       }
     }
 
-    bool? apiSuccess;
-    if (json['success'] != null) {
-      apiSuccess = json['success'] is bool
-          ? json['success'] as bool
-          : (json['success']?.toString().toLowerCase() == 'true');
-    } else if (json['error_code'] == null &&
-        (phoneNumberOtpRequestId != null || isPhoneNumberConfirmed == true)) {
-      // Vlens style success (no explicit success flag).
-      apiSuccess = true;
-    }
-
     return StepVerifyPhoneResponse(
-      code: json['code'] is int
-          ? json['code'] as int
-          : int.tryParse('${json['code'] ?? json['error_code']}'),
-      message: json['message']?.toString() ?? json['error_message']?.toString(),
-      apiSuccess: apiSuccess,
+      code: ApiResponseEnvelope.parseCode(json),
+      message: ApiResponseEnvelope.parseMessage(json),
+      success: ApiResponseEnvelope.parseExplicitSuccess(json),
       phoneNumberOtpRequestId: phoneNumberOtpRequestId,
       transactionId: transactionId,
       phoneOtpExpireInSeconds: phoneOtpExpireInSeconds,
@@ -167,7 +160,9 @@ class StepVerifyPhoneResponse {
       errorCode: json['error_code']?.toString(),
       errorMessage: json['error_message']?.toString(),
       errorDescriptions: json['error_descriptions']?.toString(),
-      data: json['data'] is Map<String, dynamic> ? json['data'] as Map<String, dynamic> : null,
+      data: json['data'] is Map<String, dynamic>
+          ? json['data'] as Map<String, dynamic>
+          : null,
     );
   }
 
@@ -175,7 +170,7 @@ class StepVerifyPhoneResponse {
     return {
       'code': code,
       'message': message,
-      'success': apiSuccess,
+      'success': success,
       'phoneNumberOtpRequestId': phoneNumberOtpRequestId,
       'transactionId': transactionId,
       'phoneOtpExpireInSeconds': phoneOtpExpireInSeconds,

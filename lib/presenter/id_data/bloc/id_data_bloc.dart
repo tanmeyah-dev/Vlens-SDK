@@ -5,6 +5,7 @@ import 'package:core/bases/states/base/init_screen.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 
+import '../../../utils/api_exception_message.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../validate_user/constants/api_urls.dart';
 import '../event/id_data_event.dart';
@@ -67,7 +68,10 @@ class IdDataBloc extends BaseBloc {
       // ignore: avoid_print
       print('⚠️ IdDataBloc: failed to fetch VLens data from API: $e');
       _model.effectiveExtractedData = null;
-      _model.errorMessage = e.toString().replaceAll('Exception: ', '');
+      _model.errorMessage = apiExceptionMessage(
+        e,
+        fallback: 'فشل تحميل بيانات الهوية',
+      );
       emit(UpdateIdDataUI(_model));
     }
   }
@@ -93,7 +97,10 @@ class IdDataBloc extends BaseBloc {
     } catch (e) {
       // ignore: avoid_print
       print('⚠️ IdDataBloc: failed to submit VLens data: $e');
-      _model.errorMessage = e.toString().replaceAll('Exception: ', '');
+      _model.errorMessage = apiExceptionMessage(
+        e,
+        fallback: 'فشل إرسال بيانات الهوية',
+      );
       emit(UpdateIdDataUI(_model));
     }
   }
@@ -165,7 +172,10 @@ class IdDataBloc extends BaseBloc {
         _model.errorMessage = 'عذراً، المستخدم غير مؤهل حالياً';
       }
     } catch (e) {
-      _model.errorMessage = e.toString().replaceAll('Exception: ', '');
+      _model.errorMessage = apiExceptionMessage(
+        e,
+        fallback: 'فشل التحقق من الأهلية',
+      );
     } finally {
       _model.isCheckingEligibility = false;
       emit(UpdateIdDataUI(_model));

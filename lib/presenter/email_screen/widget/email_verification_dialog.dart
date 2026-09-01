@@ -12,6 +12,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import '../../../utils/api_exception_message.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../../routes/route_path.dart';
 import '../../register_screen/model/register_screen_nav_args.dart';
@@ -323,21 +324,11 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
       }
       
       // Handle network or other errors with better error messages
-      String errorMessage = e.toString().replaceAll('Exception: ', '');
-      
-      // Provide more user-friendly error messages
-      if (errorMessage.contains('SocketException') || 
-          errorMessage.contains('connection refused') ||
-          errorMessage.contains('Failed host lookup')) {
-        errorMessage = 'لا يمكن الاتصال بالخادم. يرجى التحقق من الاتصال بالإنترنت أو أن الخادم يعمل';
-      } else if (errorMessage.contains('timeout')) {
-        errorMessage = 'انتهت مهلة الاتصال. يرجى المحاولة مرة أخرى';
-      } else if (errorMessage.contains('Certificate') || errorMessage.contains('SSL')) {
-        errorMessage = 'خطأ في شهادة الاتصال الآمن';
-      } else {
-        errorMessage = 'حدث خطأ أثناء إعادة إرسال كود التحقق: $errorMessage';
-      }
-      
+      final errorMessage = apiExceptionMessage(
+        e,
+        fallback: 'حدث خطأ أثناء إعادة إرسال كود التحقق',
+      );
+
       print('❌ Resend Email OTP error: ${e.toString()}');
       print('❌ User-friendly error: $errorMessage');
       _showError(errorMessage);
@@ -650,32 +641,14 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
         print('');
         
         // Provide user-friendly error messages
-        String errorMessage = e.toString().replaceAll('Exception: ', '');
-        String userFriendlyMessage;
-        
-        if (errorMessage.contains('SocketException') || 
-            errorMessage.contains('connection refused') ||
-            errorMessage.contains('Connection refused') ||
-            errorMessage.contains('SocketConnection') ||
-            errorMessage.contains('Failed host lookup')) {
-          // Connection error - provide user-friendly message
-          userFriendlyMessage = 'لا يمكن الاتصال بالخادم.\n\n'
-              'يرجى التحقق من:\n'
-              '• الاتصال بالإنترنت\n'
-              '• أن الخادم متاح\n'
-              '• المحاولة مرة أخرى';
-        } else if (errorMessage.contains('timeout') || errorMessage.contains('Timeout')) {
-          userFriendlyMessage = 'انتهت مهلة الاتصال. يرجى المحاولة مرة أخرى';
-        } else if (errorMessage.contains('Certificate') || errorMessage.contains('SSL') || errorMessage.contains('TLS')) {
-          userFriendlyMessage = 'خطأ في شهادة الاتصال الآمن';
-        } else {
-          // For other errors, show a generic message without technical details
-          userFriendlyMessage = 'حدث خطأ أثناء التحقق. يرجى المحاولة مرة أخرى';
-        }
-        
-        print('❌ Verification error: $errorMessage');
+        final userFriendlyMessage = apiExceptionMessage(
+          e,
+          fallback: 'حدث خطأ أثناء التحقق. يرجى المحاولة مرة أخرى',
+        );
+
+        print('❌ Verification error: $e');
         print('❌ User-friendly message: $userFriendlyMessage');
-        
+
         _showError(userFriendlyMessage);
       }
     }

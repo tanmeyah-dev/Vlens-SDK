@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:http/http.dart' as http;
+import '../../../utils/api_exception_message.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../event/home_event.dart';
 import '../model/home_model.dart';
@@ -84,9 +85,12 @@ class HomeBloc extends BaseBloc {
       _model.isLoading = false;
       _model.errorMessage = 'لا يمكن الاتصال بالخادم';
       emit(InitHomeScreen(_model));
-    } catch (_) {
+    } catch (e) {
       _model.isLoading = false;
-      _model.errorMessage = 'حدث خطأ أثناء تحميل انواع الطلبات';
+      _model.errorMessage = apiExceptionMessage(
+        e,
+        fallback: 'حدث خطأ أثناء تحميل انواع الطلبات',
+      );
       emit(InitHomeScreen(_model));
     }
   }

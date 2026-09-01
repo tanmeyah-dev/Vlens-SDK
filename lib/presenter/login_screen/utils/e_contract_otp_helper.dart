@@ -5,6 +5,7 @@ import 'package:core/utils/cache/verification_cache.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:flutter/material.dart';
 
+import '../../../utils/api_exception_message.dart';
 import '../../../utils/api_error_parser.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../../../utils/sdk_navigator.dart';
@@ -144,7 +145,7 @@ class EContractOtpHelper {
       if (!context.mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', '')),
+          content: Text(apiExceptionMessage(e)),
           backgroundColor: AppColors.error,
         ),
       );
@@ -304,7 +305,7 @@ class EContractOtpHelper {
       if (!context.mounted) return null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', '')),
+          content: Text(apiExceptionMessage(e)),
           backgroundColor: AppColors.error,
         ),
       );

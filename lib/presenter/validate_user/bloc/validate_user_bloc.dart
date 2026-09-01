@@ -4,6 +4,7 @@ import 'package:core/bases/base_bloc.dart';
 import 'package:core/bases/states/base/init_screen.dart';
 import 'package:core/utils/network/http_headers_helper.dart';
 import 'package:http/http.dart' as http;
+import '../../../utils/api_exception_message.dart';
 import '../../../utils/api_error_parser.dart';
 import '../../../utils/sdk_http_client.dart';
 import '../constants/api_urls.dart';
@@ -290,19 +291,11 @@ class ValidateUserBloc extends BaseBloc {
       emit(UpdateValidateUserUI(_mobileNumberModel));
       
       // Handle network or other errors with better error messages
-      String errorMessage = e.toString().replaceAll('Exception: ', '');
-      
-      // Provide more user-friendly error messages
-      if (errorMessage.contains('SocketException') || 
-          errorMessage.contains('connection refused') ||
-          errorMessage.contains('Failed host lookup')) {
-        errorMessage = 'لا يمكن الاتصال بالخادم. يرجى التحقق من الاتصال بالإنترنت أو أن الخادم يعمل';
-      } else if (errorMessage.contains('timeout')) {
-        errorMessage = 'انتهت مهلة الاتصال. يرجى المحاولة مرة أخرى';
-      } else if (errorMessage.contains('Certificate') || errorMessage.contains('SSL')) {
-        errorMessage = 'خطأ في شهادة الاتصال الآمن';
-      }
-      
+      final errorMessage = apiExceptionMessage(
+        e,
+        fallback: 'حدث خطأ أثناء التحقق من رقم الموبايل',
+      );
+
       print('❌ Network or other error: ${e.toString()}');
       print('❌ User-friendly error: $errorMessage');
 
@@ -450,21 +443,11 @@ class ValidateUserBloc extends BaseBloc {
       }
     } catch (e) {
       // Handle network or other errors with better error messages
-      String errorMessage = e.toString().replaceAll('Exception: ', '');
-      
-      // Provide more user-friendly error messages
-      if (errorMessage.contains('SocketException') || 
-          errorMessage.contains('connection refused') ||
-          errorMessage.contains('Failed host lookup')) {
-        errorMessage = 'لا يمكن الاتصال بالخادم. يرجى التحقق من الاتصال بالإنترنت أو أن الخادم يعمل';
-      } else if (errorMessage.contains('timeout')) {
-        errorMessage = 'انتهت مهلة الاتصال. يرجى المحاولة مرة أخرى';
-      } else if (errorMessage.contains('Certificate') || errorMessage.contains('SSL')) {
-        errorMessage = 'خطأ في شهادة الاتصال الآمن';
-      } else {
-        errorMessage = 'حدث خطأ أثناء إرسال كود التحقق: $errorMessage';
-      }
-      
+      final errorMessage = apiExceptionMessage(
+        e,
+        fallback: 'حدث خطأ أثناء إرسال كود التحقق',
+      );
+
       print('❌ StepVerifyPhone API error: ${e.toString()}');
       print('❌ User-friendly error: $errorMessage');
       emit(OnValidateUserErrorState(errorMessage));
