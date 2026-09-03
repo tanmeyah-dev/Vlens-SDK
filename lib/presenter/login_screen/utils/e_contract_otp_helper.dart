@@ -35,11 +35,12 @@ class EContractOtpHelper {
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => EContractVerificationDialog(
+      builder: (dialogContext) => EContractVerificationDialog(
         lastTwoDigits: '',
         onConfirm: (otpCode) {
           enteredOtpCode = otpCode;
         },
+        onResend: () => _fireEContractCustomerStepOtp(dialogContext, requestId),
       ),
     );
 

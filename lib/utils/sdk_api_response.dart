@@ -11,8 +11,8 @@ class SdkUnauthorizedException implements Exception {
 
 /// Shared parsing for SDK API responses.
 ///
-/// HTTP **200** (and body `code` not 401/429) → callers run their navigation logic.
-/// HTTP/body **401**, **429**, or Unauthorized → [SessionExpiredRedirect] → login.
+/// HTTP **200** (and body `code` not 401/417/429) → callers run their navigation logic.
+/// HTTP/body **401**, **417**, **429**, or Unauthorized → [SessionExpiredRedirect] → login.
 /// Any other status → callers show [blockingError] and stay on the current screen.
 class SdkApiResponse {
   SdkApiResponse(this.raw);
@@ -27,12 +27,17 @@ class SdkApiResponse {
 
   bool get isHttp200 => raw.statusCode == 200;
 
-  /// HTTP/body 401 or 429, or an explicit Unauthorized signal in the response.
+  /// HTTP/body 401, 417, or 429, or an explicit Unauthorized signal in the response.
+  /// All of these force a redirect to the login screen via [SessionExpiredRedirect].
   bool get isUnauthorized {
-    if (raw.statusCode == 401 || raw.statusCode == 429) return true;
+    if (raw.statusCode == 401 ||
+        raw.statusCode == 417 ||
+        raw.statusCode == 429) {
+      return true;
+    }
 
     final code = responseCode;
-    if (code == 401 || code == 429) return true;
+    if (code == 401 || code == 417 || code == 429) return true;
 
     return _bodyIndicatesUnauthorized(decoded);
   }

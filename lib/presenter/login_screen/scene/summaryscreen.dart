@@ -186,6 +186,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
   }
 
   Widget _buildSummaryFieldRow(MapEntry<String, String> row) {
+    // Collapse embedded newlines/spaces so wrapping is driven by width only.
+    final value = row.value.replaceAll(RegExp(r'\s+'), ' ').trim();
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -195,15 +198,13 @@ class _SummaryScreenState extends State<SummaryScreen> {
       ),
       child: Row(
         textDirection: TextDirection.rtl,
-        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            flex: 3,
+          Flexible(
             child: Text(
               row.key,
-              maxLines: 2,
               softWrap: true,
-              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: AppColors.black,
                 fontSize: 16,
@@ -212,11 +213,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
               textAlign: TextAlign.right,
             ),
           ),
-          const SizedBox(width: 14),
           Flexible(
-            flex: 1,
             child: Text(
-              row.value,
+              value,
               softWrap: true,
               style: const TextStyle(
                 color: AppColors.black,
@@ -425,7 +424,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
           ),
           const TextSpan(text: '\n'),
           const TextSpan(
-            text: 'بأن هذه البيانات صحيحة وأي خطأ\nبها يعرضني المسائلة القانونية',
+            text: 'بأن هذه البيانات صحيحة وأي خطأ\nبها يعرضني للمسائله القانونية',
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
         ],

@@ -8,13 +8,19 @@ import 'package:flutter/material.dart';
 import 'package:pinput/pinput.dart';
 
 class EContractVerificationDialog extends StatefulWidget {
+  static const int initialCountdownSeconds = 59;
+
   final String lastTwoDigits;
   final ValueChanged<String> onConfirm;
+
+  /// Called when the user taps "إرسال مرة أخرى". Return `true` to restart the timer.
+  final Future<bool> Function()? onResend;
 
   const EContractVerificationDialog({
     super.key,
     required this.lastTwoDigits,
     required this.onConfirm,
+    this.onResend,
   });
 
   @override
@@ -23,8 +29,9 @@ class EContractVerificationDialog extends StatefulWidget {
 }
 
 class _EContractVerificationDialogState extends State<EContractVerificationDialog> {
-  int countdown = 30;
+  int countdown = EContractVerificationDialog.initialCountdownSeconds;
   bool canResend = false;
+  bool _isResending = false;
   Timer? countdownTimer;
   final TextEditingController pinController = TextEditingController();
   final FocusNode pinFocusNode = FocusNode();
@@ -32,19 +39,7 @@ class _EContractVerificationDialogState extends State<EContractVerificationDialo
   @override
   void initState() {
     super.initState();
-    countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) return;
-      if (countdown > 0) {
-        setState(() {
-          countdown--;
-        });
-      } else {
-        timer.cancel();
-        setState(() {
-          canResend = true;
-        });
-      }
-    });
+    _startCountdown(notify: false);
 
     pinController.addListener(() {
       if (mounted) setState(() {});
@@ -59,13 +54,17 @@ class _EContractVerificationDialogState extends State<EContractVerificationDialo
     super.dispose();
   }
 
-  void _restartCountdown() {
+  void _startCountdown({bool notify = true}) {
     countdownTimer?.cancel();
-    setState(() {
-      countdown = 30;
+    void apply() {
+      countdown = EContractVerificationDialog.initialCountdownSeconds;
       canResend = false;
-      pinController.clear();
-    });
+    }
+    if (notify && mounted) {
+      setState(apply);
+    } else {
+      apply();
+    }
     countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
       if (countdown > 0) {
@@ -79,6 +78,35 @@ class _EContractVerificationDialogState extends State<EContractVerificationDialo
         });
       }
     });
+  }
+
+  Future<void> _onResendPressed() async {
+    if (!canResend || _isResending) return;
+
+    final resend = widget.onResend;
+    if (resend == null) {
+      pinController.clear();
+      _startCountdown();
+      return;
+    }
+
+    setState(() {
+      _isResending = true;
+    });
+    try {
+      final ok = await resend();
+      if (!mounted) return;
+      if (ok) {
+        pinController.clear();
+        _startCountdown();
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isResending = false;
+        });
+      }
+    }
   }
 
   @override
@@ -193,12 +221,16 @@ class _EContractVerificationDialogState extends State<EContractVerificationDialo
                     ),
                     24.height,
                     GestureDetector(
-                      onTap: canResend ? _restartCountdown : null,
+                      onTap: (canResend && !_isResending) ? _onResendPressed : null,
                       child: AppText(
-                        canResend
-                            ? 'إرسال مرة أخرى'
-                            : 'إرسال مرة أخرى بعد $countdown ثواني',
-                        color: canResend ? AppColors.primary : AppColors.gray,
+                        _isResending
+                            ? 'جاري الإرسال...'
+                            : (canResend
+                                ? 'إرسال مرة أخرى'
+                                : 'إرسال مرة أخرى بعد $countdown ثواني'),
+                        color: (canResend && !_isResending)
+                            ? AppColors.primary
+                            : AppColors.gray,
                         fontSize: 14,
                         fontWeight: FontWeight.w400,
                       ),

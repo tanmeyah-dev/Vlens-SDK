@@ -3,7 +3,6 @@ import '../constants/security_code_constants.dart';
 import '../utils/security_code_validator.dart';
 
 class RegisterScreenModel {
-  final TextEditingController usernameController = TextEditingController();
   final TextEditingController createSecurityCodeController = TextEditingController();
   final TextEditingController confirmSecurityCodeController = TextEditingController();
   final FocusNode createSecurityCodeFocusNode = FocusNode();
@@ -12,8 +11,7 @@ class RegisterScreenModel {
   var isSaveButtonDisabled = true;
 
   bool isInputEmpty() {
-    return usernameController.text.isEmpty ||
-        createSecurityCodeController.text.isEmpty ||
+    return createSecurityCodeController.text.isEmpty ||
         confirmSecurityCodeController.text.isEmpty;
   }
 
@@ -34,14 +32,8 @@ class RegisterScreenModel {
     return SecurityCodeValidator.codesMatch(createCode, confirmCode);
   }
 
-  bool isUsernameValid() {
-    final value = usernameController.text.trim();
-    return value.isNotEmpty && !value.contains(' ');
-  }
-
   bool isFormValid() {
-    return isUsernameValid() &&
-           isSecurityCodeValid() &&
+    return isSecurityCodeValid() &&
            isConfirmSecurityCodeValid() &&
            doSecurityCodesMatch();
   }

@@ -21,10 +21,12 @@ class RequestDocumentsScene extends StatefulWidget {
 }
 
 class _RequestDocumentsSceneState extends State<RequestDocumentsScene> {
+  static const String _scrollChannelName = 'ScrollBridge';
   static final RegExp _htmlTagStart = RegExp(r'<[a-zA-Z/!]');
 
   late final List<RequestCurrentDocument> _documents;
   late final List<bool> _acceptedByIndex;
+  late final List<bool> _reachedEndByIndex;
   late final WebViewController _webViewController;
   int _currentIndex = 0;
   bool _eContractBusy = false;
@@ -58,14 +60,72 @@ class _RequestDocumentsSceneState extends State<RequestDocumentsScene> {
     super.initState();
     _documents = [...widget.documents]..sort((a, b) => a.order.compareTo(b.order));
     _acceptedByIndex = List<bool>.filled(_documents.length, false);
+    _reachedEndByIndex = List<bool>.filled(_documents.length, false);
     _webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.white);
+      ..setBackgroundColor(Colors.white)
+      ..addJavaScriptChannel(
+        _scrollChannelName,
+        onMessageReceived: (message) {
+          if (message.message != 'end' || !mounted) return;
+          if (_reachedEndByIndex[_currentIndex]) return;
+          setState(() {
+            _reachedEndByIndex[_currentIndex] = true;
+          });
+        },
+      )
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (_) {
+            _injectScrollTracking();
+          },
+        ),
+      );
     _loadCurrentDocumentHtml();
+  }
+
+  Future<void> _injectScrollTracking() async {
+    await _webViewController.runJavaScript('''
+(function() {
+  if (window.__tanScrollTrackingInstalled) {
+    checkEnd();
+    return;
+  }
+  window.__tanScrollTrackingInstalled = true;
+
+  function checkEnd() {
+    var doc = document.documentElement;
+    var body = document.body;
+    var scrollTop = window.pageYOffset || doc.scrollTop || body.scrollTop || 0;
+    var viewport = window.innerHeight || doc.clientHeight || 0;
+    var fullHeight = Math.max(
+      body.scrollHeight || 0,
+      doc.scrollHeight || 0,
+      body.offsetHeight || 0,
+      doc.offsetHeight || 0,
+      body.clientHeight || 0,
+      doc.clientHeight || 0
+    );
+    if (scrollTop + viewport >= fullHeight - 24) {
+      $_scrollChannelName.postMessage('end');
+    }
+  }
+
+  window.addEventListener('scroll', checkEnd, { passive: true });
+  window.addEventListener('resize', checkEnd);
+  document.addEventListener('touchmove', checkEnd, { passive: true });
+  setTimeout(checkEnd, 50);
+  setTimeout(checkEnd, 300);
+  setTimeout(checkEnd, 800);
+})();
+''');
   }
 
   void _loadCurrentDocumentHtml() {
     if (_documents.isEmpty) return;
+    _reachedEndByIndex[_currentIndex] = false;
+    _acceptedByIndex[_currentIndex] = false;
+
     final currentDoc = _documents[_currentIndex];
     final raw = (currentDoc.content ?? '').trim();
     final wrappedHtml = '''
@@ -86,11 +146,29 @@ class _RequestDocumentsSceneState extends State<RequestDocumentsScene> {
     _webViewController.loadHtmlString(wrappedHtml);
   }
 
-  Future<void> _onSavePressed() async {
-    if (!_acceptedByIndex[_currentIndex]) {
+  void _onCheckboxTapped() {
+    if (_eContractBusy) return;
+
+    if (!_reachedEndByIndex[_currentIndex]) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('يرجى الموافقة على الشروط أولاً'),
+          content: Text('يرجى قراءة المستند بالكامل حتى النهاية أولاً'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _acceptedByIndex[_currentIndex] = !_acceptedByIndex[_currentIndex];
+    });
+  }
+
+  Future<void> _onSavePressed() async {
+    if (!_reachedEndByIndex[_currentIndex] || !_acceptedByIndex[_currentIndex]) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('يرجى قراءة المستند والموافقة على الشروط أولاً'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -101,6 +179,8 @@ class _RequestDocumentsSceneState extends State<RequestDocumentsScene> {
     if (!isLast) {
       setState(() {
         _currentIndex += 1;
+        _reachedEndByIndex[_currentIndex] = false;
+        _acceptedByIndex[_currentIndex] = false;
       });
       _loadCurrentDocumentHtml();
       return;
@@ -145,8 +225,15 @@ class _RequestDocumentsSceneState extends State<RequestDocumentsScene> {
 
     final document = _documents[_currentIndex];
     final isAccepted = _acceptedByIndex[_currentIndex];
+    final hasReachedEnd = _reachedEndByIndex[_currentIndex];
     final isLast = _currentIndex == _documents.length - 1;
     final busyLast = _eContractBusy && isLast;
+    final checkboxColor = !hasReachedEnd
+        ? AppColors.secondary.withValues(alpha: 0.4)
+        : (isAccepted ? AppColors.primary : AppColors.secondary);
+    final labelColor = !hasReachedEnd
+        ? AppColors.secondary.withValues(alpha: 0.6)
+        : AppColors.primary;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -164,8 +251,8 @@ class _RequestDocumentsSceneState extends State<RequestDocumentsScene> {
             child: AppButton(
               title: busyLast
                   ? 'جاري التحقق...'
-                  : (isLast ? 'حفظ وإنهاء' : 'التالي'),
-              onPressed: busyLast ? null : _onSavePressed,
+                  : (isLast ? 'توقيع العقد' : 'التالي'),
+              onPressed: (!isAccepted || busyLast) ? null : _onSavePressed,
             ),
           ),
         ),
@@ -177,57 +264,71 @@ class _RequestDocumentsSceneState extends State<RequestDocumentsScene> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                Text(
-                  _titleForDisplay(document.title),
-                  style: const TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    height: 1.35,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.border1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: WebViewWidget(controller: _webViewController),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _acceptedByIndex[_currentIndex] = !isAccepted;
-                    });
-                  },
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        isAccepted ? Icons.check_circle : Icons.radio_button_unchecked,
-                        color: isAccepted ? AppColors.primary : AppColors.secondary,
-                        size: 28,
+                    Text(
+                      _titleForDisplay(document.title),
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        height: 1.35,
                       ),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'أوافق على محتوى هذا المستند والشروط الواردة فيه',
-                          style: TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.border1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: WebViewWidget(controller: _webViewController),
                         ),
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (!hasReachedEnd)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          'مرر لأسفل حتى نهاية المستند لتفعيل الموافقة',
+                          style: TextStyle(
+                            color: AppColors.secondary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    GestureDetector(
+                      onTap: busyLast ? null : _onCheckboxTapped,
+                      child: Opacity(
+                        opacity: hasReachedEnd ? 1 : 0.55,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              isAccepted
+                                  ? Icons.check_circle
+                                  : Icons.radio_button_unchecked,
+                              color: checkboxColor,
+                              size: 28,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'أوافق على محتوى هذا المستند والشروط الواردة فيه',
+                                style: TextStyle(
+                                  color: labelColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),

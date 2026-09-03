@@ -3,7 +3,6 @@ import 'package:core/bases/states/base/base_state.dart';
 import 'package:core/bases/states/base/render_data_state.dart';
 import 'package:core/components/button/app_button.dart';
 import 'package:core/components/text/app_text.dart';
-import 'package:core/components/textField/app_textfield.dart';
 import 'package:core/extensions/widget_extension.dart';
 import 'package:core/utils/ui.dart';
 import 'package:core/style/app_colors.dart';
@@ -56,14 +55,6 @@ class _RegisterScreenState
   bool _isCreateCodeVisible = false;
   bool _isConfirmCodeVisible = false;
 
-  String _extractUsernamePrefix(String? value) {
-    final raw = (value ?? '').trim();
-    if (raw.isEmpty) return '';
-    final atIndex = raw.indexOf('@');
-    if (atIndex <= 0) return raw;
-    return raw.substring(0, atIndex).trim();
-  }
-
   @override
   void initState() {
     super.initState();
@@ -80,7 +71,6 @@ class _RegisterScreenState
         ? routeEmail
         : (_cachedEmail ?? '');
     _fullEmailForRequest = displayEmail.trim();
-    _model.usernameController.text = _extractUsernamePrefix(displayEmail);
     print('📥 Loaded from cache:');
     print('📥 mobileNumber: $_cachedMobileNumber');
     print('📥 email: $_cachedEmail');
@@ -93,7 +83,6 @@ class _RegisterScreenState
     final routeEmail = widget.verifiedEmail?.trim();
     if (routeEmail != null && routeEmail.isNotEmpty) {
       _fullEmailForRequest = routeEmail;
-      _model.usernameController.text = _extractUsernamePrefix(routeEmail);
     } else if (_fullEmailForRequest.isEmpty && (_cachedEmail?.trim().isNotEmpty == true)) {
       _fullEmailForRequest = _cachedEmail!.trim();
     }
@@ -119,8 +108,6 @@ class _RegisterScreenState
                               40.height,
                               instructions(),
                               40.height,
-                              userNameField(),
-                              24.height,
                               createSecurityCodeField(),
                               24.height,
                               confirmSecurityCodeField(),
@@ -160,18 +147,6 @@ class _RegisterScreenState
           fontWeight: FontWeight.w500,
         ),
       ],
-    );
-  }
-
-  Widget userNameField() {
-    return AppTextField(
-      labelText: "اسم المستخدم",
-      hintText: "example@example.com",
-      controller: _model.usernameController,
-      keyboardType: TextInputType.emailAddress,
-      enabled: true,
-      readOnly: true,
-      enableInteractiveSelection: false,
     );
   }
 
