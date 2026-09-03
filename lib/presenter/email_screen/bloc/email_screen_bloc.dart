@@ -100,6 +100,12 @@ class EmailScreenBloc extends BaseBloc {
       }
 
       final oauthApi = SdkApiResponse.from(response);
+      if (oauthApi.isUnauthorized) {
+        _model.isLoading = false;
+        _model.isGoogleLoading = false;
+        emit(UpdateEmailScreenUI(_model));
+        return;
+      }
       final oauthBlockingError = oauthApi.blockingError(
         checkHttp: false,
         businessFallback: 'فشل التحقق من حساب Google',
@@ -309,6 +315,11 @@ class EmailScreenBloc extends BaseBloc {
 
 
       final sendEmailApi = SdkApiResponse.from(response);
+      if (sendEmailApi.isUnauthorized) {
+        _model.isLoading = false;
+        emit(UpdateEmailScreenUI(_model));
+        return;
+      }
       final sendEmailBlockingError = sendEmailApi.blockingError(
         httpFallback: 'فشل في التحقق من الإيميل',
         businessFallback: 'فشل في التحقق من الإيميل',

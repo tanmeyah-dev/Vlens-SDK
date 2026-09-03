@@ -88,6 +88,9 @@ Future<RequestCreateResult> createLoanRequest({
   }
 
   final api = SdkApiResponse.from(response);
+  if (api.isUnauthorized) {
+    throw const SdkUnauthorizedException();
+  }
   final blockingError = api.blockingError(
     httpFallback: 'فشل إنشاء الطلب',
     businessFallback: 'فشل إنشاء الطلب',

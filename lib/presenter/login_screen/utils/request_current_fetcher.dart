@@ -51,6 +51,9 @@ class RequestCurrentFetcher {
     print('');
 
     final api = SdkApiResponse.from(response);
+    if (api.isUnauthorized) {
+      throw Exception('Unauthorized');
+    }
     final blockingError = api.blockingError(
       httpFallback: 'فشل جلب الطلب الحالي',
       businessFallback: 'فشل جلب الطلب الحالي',

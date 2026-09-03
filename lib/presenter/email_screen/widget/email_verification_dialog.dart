@@ -41,13 +41,18 @@ class EmailVerificationDialog extends StatefulWidget {
 }
 
 class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
-  int countdown = 30;
+  static const int _initialCountdownSeconds = 59;
+  static const int _resendCountdownSeconds = 59;
+
+  int countdown = _initialCountdownSeconds;
   bool canResend = false;
   Timer? countdownTimer;
   final TextEditingController pinController = TextEditingController();
   final FocusNode pinFocusNode = FocusNode();
   bool _isLoading = false;
   String? _errorMessage;
+  late String? _emailOtpRequestId;
+  late String? _transactionId;
   
   String get _apiUrlVerify => ApiUrls.getVerifyEmailOtpUrl();
   String get _apiUrlSendOtp => ApiUrls.getSendEmailOtpUrl();
@@ -55,21 +60,9 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
   @override
   void initState() {
     super.initState();
-    // Start countdown timer
-    countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        if (countdown > 0) {
-          setState(() {
-            countdown--;
-          });
-        } else {
-          timer.cancel();
-          setState(() {
-            canResend = true;
-          });
-        }
-      }
-    });
+    _emailOtpRequestId = widget.emailOtpRequestId;
+    _transactionId = widget.transactionId;
+    _startCountdown(_initialCountdownSeconds);
 
     // Listen to PIN changes
     pinController.addListener(() {
@@ -103,23 +96,55 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
     return '$maskedLocal@$domain';
   }
 
+  void _startCountdown(int seconds) {
+    countdownTimer?.cancel();
+    if (!mounted) return;
+
+    setState(() {
+      countdown = seconds;
+      canResend = false;
+    });
+
+    countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (countdown <= 1) {
+        timer.cancel();
+        setState(() {
+          countdown = 0;
+          canResend = true;
+        });
+      } else {
+        setState(() {
+          countdown--;
+        });
+      }
+    });
+  }
+
+  int _countdownSecondsFrom(StepVerifyEmailResponse response) {
+    return _resendCountdownSeconds;
+  }
+
   Future<void> _resendCode() async {
+    if (!canResend || _isLoading) return;
+
     // Validate required fields
     if (widget.email.isEmpty) {
       _showError('الإيميل مطلوب');
       return;
     }
 
-    // Disable resend button and show loading
+    // Disable resend while the API call is in progress.
     setState(() {
       canResend = false;
       _isLoading = true;
-      _errorMessage = null; // Clear previous errors
-      countdown = 59; // Reset countdown to 59 seconds
+      _errorMessage = null;
     });
 
-    // Cancel existing timer
-    countdownTimer?.cancel();
+    var resendSucceeded = false;
 
     try {
       // Prepare request body - same as initial OTP request
@@ -178,6 +203,7 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
       print('');
 
       if (mounted) {
+        if (response.sdk.isUnauthorized) return;
         final blockingError = response.sdk.blockingError(
           httpFallback: 'فشل في إعادة إرسال كود التحقق',
           businessFallback: 'فشل في إعادة إرسال كود التحقق',
@@ -226,50 +252,52 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
               return;
             }
 
-            // Check if we have the required IDs
-            if (stepVerifyEmailResponse.emailOtpRequestId != null &&
-                stepVerifyEmailResponse.emailOtpRequestId!.isNotEmpty &&
-                stepVerifyEmailResponse.transactionId != null &&
-                stepVerifyEmailResponse.transactionId!.isNotEmpty) {
-              // Save updated emailOtpRequestId and transactionId to cache
-              await VerificationCache().setEmailVerificationData(
-                emailOtpRequestId: stepVerifyEmailResponse.emailOtpRequestId!,
-                transactionId: stepVerifyEmailResponse.transactionId!,
-                email: widget.email,
-              );
+            // Resend succeeds when API returns success=true; new IDs are optional
+            if (stepVerifyEmailResponse.success) {
+              final newOtpId = stepVerifyEmailResponse.emailOtpRequestId?.trim();
+              final newTxId = stepVerifyEmailResponse.transactionId?.trim();
 
-              print('💾 Updated verification data in cache:');
-              print('💾 emailOtpRequestId: ${stepVerifyEmailResponse.emailOtpRequestId}');
-              print('💾 transactionId: ${stepVerifyEmailResponse.transactionId}');
+              if (newOtpId != null && newOtpId.isNotEmpty) {
+                _emailOtpRequestId = newOtpId;
+              }
+              if (newTxId != null && newTxId.isNotEmpty) {
+                _transactionId = newTxId;
+              } else if ((_transactionId == null || _transactionId!.isEmpty) &&
+                  _emailOtpRequestId != null &&
+                  _emailOtpRequestId!.isNotEmpty) {
+                _transactionId = _emailOtpRequestId;
+              }
 
-              // Clear PIN input
+              final otpId = _emailOtpRequestId?.trim();
+              final txId = (_transactionId ?? otpId)?.trim();
+              if (otpId != null &&
+                  otpId.isNotEmpty &&
+                  txId != null &&
+                  txId.isNotEmpty) {
+                await VerificationCache().setEmailVerificationData(
+                  emailOtpRequestId: otpId,
+                  transactionId: txId,
+                  email: widget.email,
+                );
+
+                print('💾 Updated verification data in cache:');
+                print('💾 emailOtpRequestId: $otpId');
+                print('💾 transactionId: $txId');
+              }
+
               pinController.clear();
 
-              // Start countdown timer
-              countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-                if (mounted) {
-                  if (countdown > 0) {
-                    setState(() {
-                      countdown--;
-                    });
-                  } else {
-                    timer.cancel();
-                    setState(() {
-                      canResend = true;
-                    });
-                  }
-                }
-              });
-
-              setState(() {
-                _isLoading = false;
-                canResend = false; // Keep disabled until countdown finishes
-              });
+              _startCountdown(_countdownSecondsFrom(stepVerifyEmailResponse));
+              resendSucceeded = true;
 
               print('✅ Email OTP resent successfully');
             } else {
-              print('❌ Resend Email OTP API response missing required fields');
-              _showError('فشل في إعادة إرسال كود التحقق');
+              print('❌ Resend Email OTP API returned success=false');
+              _showError(
+                stepVerifyEmailResponse.message?.trim().isNotEmpty == true
+                    ? stepVerifyEmailResponse.message!.trim()
+                    : 'فشل في إعادة إرسال كود التحقق',
+              );
             }
           } catch (e, stackTrace) {
             print('');
@@ -325,13 +353,6 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
         }
       }
     } catch (e) {
-      // Reset loading state and flag
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-      
       // Handle network or other errors with better error messages
       String errorMessage = e.toString().replaceAll('Exception: ', '');
       
@@ -351,6 +372,16 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
       print('❌ Resend Email OTP error: ${e.toString()}');
       print('❌ User-friendly error: $errorMessage');
       _showError(errorMessage);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          if (!resendSucceeded) {
+            countdown = 0;
+            canResend = true;
+          }
+        });
+      }
     }
   }
 
@@ -440,6 +471,8 @@ class _EmailVerificationDialogState extends State<EmailVerificationDialog> {
         setState(() {
           _isLoading = false;
         });
+
+        if (response.sdk.isUnauthorized) return;
 
         final blockingError = response.sdk.blockingError(
           httpFallback: 'فشل في التحقق من الإيميل',

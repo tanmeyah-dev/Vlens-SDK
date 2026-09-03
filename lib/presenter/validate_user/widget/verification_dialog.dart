@@ -44,7 +44,10 @@ class PhoneVerificationDialog extends StatefulWidget {
 }
 
 class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
-  int countdown = 30;
+  static const int _initialCountdownSeconds = 59;
+  static const int _resendCountdownSeconds = 59;
+
+  int countdown = _initialCountdownSeconds;
   bool canResend = false;
   Timer? countdownTimer;
   final TextEditingController pinController = TextEditingController();
@@ -65,21 +68,7 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
     super.initState();
     _phoneNumberOtpRequestId = widget.phoneNumberOtpRequestId;
     _transactionId = widget.transactionId;
-    // Start countdown timer
-    countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        if (countdown > 0) {
-          setState(() {
-            countdown--;
-          });
-        } else {
-          timer.cancel();
-          setState(() {
-            canResend = true;
-          });
-        }
-      }
-    });
+    _startCountdown(_initialCountdownSeconds);
 
     // Listen to PIN changes
     pinController.addListener(() {
@@ -97,23 +86,55 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
     super.dispose();
   }
 
+  void _startCountdown(int seconds) {
+    countdownTimer?.cancel();
+    if (!mounted) return;
+
+    setState(() {
+      countdown = seconds;
+      canResend = false;
+    });
+
+    countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (countdown <= 1) {
+        timer.cancel();
+        setState(() {
+          countdown = 0;
+          canResend = true;
+        });
+      } else {
+        setState(() {
+          countdown--;
+        });
+      }
+    });
+  }
+
+  int _countdownSecondsFrom(StepVerifyPhoneResponse response) {
+    return _resendCountdownSeconds;
+  }
+
   Future<void> _resendCode() async {
+    if (!canResend || _isLoading) return;
+
     // Validate required fields
     if (widget.mobileNumber == null || widget.mobileNumber!.isEmpty) {
       _showError('رقم الموبايل مطلوب');
       return;
     }
 
-    // Disable resend button and show loading
+    // Disable resend while the API call is in progress.
     setState(() {
       canResend = false;
       _isLoading = true;
-      _errorMessage = null; // Clear previous errors
-      countdown = 59; // Reset countdown to 59 seconds
+      _errorMessage = null;
     });
 
-    // Cancel existing timer
-    countdownTimer?.cancel();
+    var resendSucceeded = false;
 
     try {
       // Prepare request body - same as initial OTP request
@@ -174,6 +195,7 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
       print('');
 
       if (mounted) {
+        if (response.sdk.isUnauthorized) return;
         final blockingError = response.sdk.blockingError(
           httpFallback: 'فشل في إعادة إرسال كود التحقق',
           businessFallback: 'فشل في إعادة إرسال كود التحقق',
@@ -226,56 +248,54 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
               return;
             }
 
-            // Check if we have the required IDs
-            if (stepVerifyPhoneResponse.phoneNumberOtpRequestId != null &&
-                stepVerifyPhoneResponse.phoneNumberOtpRequestId!.isNotEmpty) {
-              _phoneNumberOtpRequestId =
-                  stepVerifyPhoneResponse.phoneNumberOtpRequestId;
-              _transactionId = stepVerifyPhoneResponse.transactionId ??
-                  _transactionId ??
-                  _phoneNumberOtpRequestId;
+            // Resend succeeds when API returns success=true; new IDs are optional
+            if (stepVerifyPhoneResponse.success) {
+              final newOtpId =
+                  stepVerifyPhoneResponse.phoneNumberOtpRequestId?.trim();
+              final newTxId = stepVerifyPhoneResponse.transactionId?.trim();
 
-              // Save updated phoneNumberOtpRequestId and transactionId to cache
-              await VerificationCache().setVerificationData(
-                phoneNumberOtpRequestId: _phoneNumberOtpRequestId!,
-                transactionId: _transactionId!,
-                mobileNumber: widget.mobileNumber ?? '',
-              );
+              if (newOtpId != null && newOtpId.isNotEmpty) {
+                _phoneNumberOtpRequestId = newOtpId;
+              }
+              if (newTxId != null && newTxId.isNotEmpty) {
+                _transactionId = newTxId;
+              } else if ((_transactionId == null || _transactionId!.isEmpty) &&
+                  _phoneNumberOtpRequestId != null &&
+                  _phoneNumberOtpRequestId!.isNotEmpty) {
+                _transactionId = _phoneNumberOtpRequestId;
+              }
 
-              print('💾 Updated verification data in cache:');
-              print(
-                  '💾 phoneNumberOtpRequestId: $_phoneNumberOtpRequestId');
-              print('💾 transactionId: $_transactionId');
+              final otpId = _phoneNumberOtpRequestId?.trim();
+              final txId = (_transactionId ?? otpId)?.trim();
+              if (otpId != null &&
+                  otpId.isNotEmpty &&
+                  txId != null &&
+                  txId.isNotEmpty) {
+                await VerificationCache().setVerificationData(
+                  phoneNumberOtpRequestId: otpId,
+                  transactionId: txId,
+                  mobileNumber: widget.mobileNumber ?? '',
+                );
+
+                print('💾 Updated verification data in cache:');
+                print('💾 phoneNumberOtpRequestId: $otpId');
+                print('💾 transactionId: $txId');
+              }
 
               // Clear PIN input
               pinController.clear();
 
-              // Start countdown timer
-              countdownTimer =
-                  Timer.periodic(const Duration(seconds: 1), (timer) {
-                if (mounted) {
-                  if (countdown > 0) {
-                    setState(() {
-                      countdown--;
-                    });
-                  } else {
-                    timer.cancel();
-                    setState(() {
-                      canResend = true;
-                    });
-                  }
-                }
-              });
-
-              setState(() {
-                _isLoading = false;
-                canResend = false; // Keep disabled until countdown finishes
-              });
+              _startCountdown(_countdownSecondsFrom(stepVerifyPhoneResponse));
+              resendSucceeded = true;
 
               print('✅ OTP resent successfully');
             } else {
-              print('❌ Resend OTP API response missing required fields');
-              _showError('فشل في إعادة إرسال كود التحقق');
+              print('❌ Resend OTP API returned success=false');
+              _showError(
+                stepVerifyPhoneResponse.message?.trim().isNotEmpty == true
+                    ? stepVerifyPhoneResponse.message!.trim()
+                    : 'فشل في إعادة إرسال كود التحقق',
+              );
             }
           } catch (e, stackTrace) {
             print('');
@@ -384,6 +404,10 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
       if (mounted) {
         setState(() {
           _isLoading = false;
+          if (!resendSucceeded) {
+            countdown = 0;
+            canResend = true;
+          }
         });
       }
     }
@@ -478,6 +502,8 @@ class _PhoneVerificationDialogState extends State<PhoneVerificationDialog> {
         setState(() {
           _isLoading = false;
         });
+
+        if (response.sdk.isUnauthorized) return;
 
         final blockingError = response.sdk.blockingError(
           httpFallback: 'فشل في التحقق من رقم الموبايل',

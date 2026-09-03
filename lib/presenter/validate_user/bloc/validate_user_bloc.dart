@@ -131,6 +131,14 @@ class ValidateUserBloc extends BaseBloc {
 
       // Handle response
       final identityApi = SdkApiResponse.from(response);
+      if (identityApi.isUnauthorized) {
+        _mobileNumberModel.isLoading = false;
+        _isRequestInProgress = false;
+        _currentRequestCompleter?.complete();
+        _currentRequestCompleter = null;
+        emit(UpdateValidateUserUI(_mobileNumberModel));
+        return;
+      }
       final identityBlockingError = identityApi.blockingError(
         httpFallback: 'فشل التحقق من رقم الموبايل',
         businessFallback: 'فشل التحقق من رقم الموبايل',
@@ -375,6 +383,12 @@ class ValidateUserBloc extends BaseBloc {
       print('═══════════════════════════════════════════════════════');
       print('');
       final sendOtpApi = SdkApiResponse.from(response);
+      if (sendOtpApi.isUnauthorized) {
+        _mobileNumberModel.isLoading = false;
+        _isRequestInProgress = false;
+        emit(UpdateValidateUserUI(_mobileNumberModel));
+        return;
+      }
       final sendOtpBlockingError = sendOtpApi.blockingError(
         httpFallback: 'فشل في إرسال كود التحقق',
         businessFallback: 'فشل في إرسال كود التحقق',

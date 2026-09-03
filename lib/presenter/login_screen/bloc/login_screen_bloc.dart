@@ -139,6 +139,11 @@ class LoginScreenBloc extends BaseBloc {
 
       // Only navigate to home if status code is exactly 200
       final loginApi = SdkApiResponse.from(response);
+      if (loginApi.isUnauthorized) {
+        _model.isLoading = false;
+        emit(UpdateLoginScreenUI(_model));
+        return;
+      }
       final loginBlockingError = loginApi.blockingError(
         httpFallback: 'فشل في تسجيل الدخول',
         businessFallback: 'فشل في تسجيل الدخول',

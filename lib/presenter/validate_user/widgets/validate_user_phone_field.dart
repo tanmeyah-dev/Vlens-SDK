@@ -12,12 +12,14 @@ class ValidateUserPhoneField extends StatefulWidget {
   final TextEditingController controller;
   final Function(String) onChanged;
   final FormFieldValidator<String>? validator;
+  final bool readOnly;
 
   const ValidateUserPhoneField({
     super.key,
     required this.controller,
     required this.onChanged,
     this.validator,
+    this.readOnly = false,
   });
 
   @override
@@ -67,6 +69,9 @@ class _ValidateUserPhoneFieldState extends State<ValidateUserPhoneField> {
                 height: 86,
                 child: TextFormField(
                   controller: widget.controller,
+                  readOnly: widget.readOnly,
+                  showCursor: !widget.readOnly,
+                  enableInteractiveSelection: !widget.readOnly,
                   keyboardType: TextInputType.phone,
                   maxLength: 11,
                   textDirection: TextDirection.rtl,
@@ -86,7 +91,8 @@ class _ValidateUserPhoneFieldState extends State<ValidateUserPhoneField> {
                       fontSize: 14,
                     ),
                     filled: true,
-                    fillColor: AppColors.white,
+                    fillColor:
+                        widget.readOnly ? AppColors.border1.withOpacity(0.3) : AppColors.white,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide(

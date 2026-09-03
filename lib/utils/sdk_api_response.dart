@@ -4,10 +4,16 @@ import 'package:http/http.dart' as http;
 
 import 'api_error_parser.dart';
 
+/// Thrown when a response is unauthorized and login redirect was scheduled.
+class SdkUnauthorizedException implements Exception {
+  const SdkUnauthorizedException();
+}
+
 /// Shared parsing for SDK API responses.
 ///
-/// When the body contains `success: false`, callers should stop navigation and
-/// show [message] to the user via [blockingError].
+/// HTTP **200** (and body `code` not 401/429) → callers run their navigation logic.
+/// HTTP/body **401**, **429**, or Unauthorized → [SessionExpiredRedirect] → login.
+/// Any other status → callers show [blockingError] and stay on the current screen.
 class SdkApiResponse {
   SdkApiResponse(this.raw);
 
@@ -18,6 +24,25 @@ class SdkApiResponse {
       SdkApiResponse(response);
 
   bool get isHttpOk => raw.statusCode >= 200 && raw.statusCode < 300;
+
+  bool get isHttp200 => raw.statusCode == 200;
+
+  /// HTTP/body 401 or 429, or an explicit Unauthorized signal in the response.
+  bool get isUnauthorized {
+    if (raw.statusCode == 401 || raw.statusCode == 429) return true;
+
+    final code = responseCode;
+    if (code == 401 || code == 429) return true;
+
+    return _bodyIndicatesUnauthorized(decoded);
+  }
+
+  /// When `true`, stop processing — login redirect is handled by [SessionExpiredRedirect].
+  bool get stopsCaller => isUnauthorized;
+
+  static bool abortIfUnauthorized(http.Response response) {
+    return SdkApiResponse.from(response).isUnauthorized;
+  }
 
   Map<String, dynamic>? get decoded {
     if (_cachedDecoded != null) return _cachedDecoded;
@@ -41,6 +66,9 @@ class SdkApiResponse {
 
   bool get isBusinessFailure => success == false;
 
+  /// Parsed API `code` / `error_code` from the JSON body (root or nested).
+  int? get responseCode => _readResponseCode(decoded);
+
   String message({String fallback = 'حدث خطأ غير متوقع'}) {
     return ApiErrorParser.extractMessage(raw.body, fallbackMessage: fallback);
   }
@@ -53,19 +81,44 @@ class SdkApiResponse {
     String? httpFallback,
     String? businessFallback,
   }) {
-    if (checkBusinessSuccess && isBusinessFailure) {
-      return message(fallback: businessFallback ?? 'حدث خطأ');
-    }
-    if (checkHttp && !isHttpOk) {
+    if (isUnauthorized) return null;
+
+    if (checkHttp && !isHttp200) {
       final fallback = httpFallback ?? 'حدث خطأ';
       return message(fallback: '$fallback (${raw.statusCode})');
     }
+
+    if (checkBusinessSuccess && isBusinessFailure) {
+      return message(fallback: businessFallback ?? 'حدث خطأ');
+    }
+
     return null;
   }
 
   /// Used by session-expiry handling to keep validation errors on-screen.
   static bool hasBusinessFailure(http.Response response) {
     return SdkApiResponse.from(response).isBusinessFailure;
+  }
+
+  static bool _bodyIndicatesUnauthorized(Map<String, dynamic>? map) {
+    if (map == null) return false;
+
+    const keys = [
+      'message',
+      'error',
+      'title',
+      'error_description',
+      'errorMessage',
+      'ErrorMessage',
+    ];
+    for (final key in keys) {
+      final value = map[key]?.toString().trim().toLowerCase();
+      if (value != null &&
+          (value == 'unauthorized' || value.contains('unauthorized'))) {
+        return true;
+      }
+    }
+    return false;
   }
 
   static bool? _readSuccess(Map<String, dynamic>? map) {
@@ -94,6 +147,34 @@ class SdkApiResponse {
     if (normalized == 'true') return true;
     if (normalized == 'false') return false;
     return null;
+  }
+
+  static int? _readResponseCode(Map<String, dynamic>? map) {
+    if (map == null) return null;
+
+    for (final key in const ['code', 'error_code', 'errorCode']) {
+      final parsed = _parseInt(map[key]);
+      if (parsed != null) return parsed;
+    }
+
+    for (final nestedKey in const ['data', 'result', 'payload']) {
+      final nested = map[nestedKey];
+      if (nested is Map<String, dynamic>) {
+        final nestedCode = _readResponseCode(nested);
+        if (nestedCode != null) return nestedCode;
+      } else if (nested is Map) {
+        final nestedCode =
+            _readResponseCode(Map<String, dynamic>.from(nested));
+        if (nestedCode != null) return nestedCode;
+      }
+    }
+    return null;
+  }
+
+  static int? _parseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    return int.tryParse(value.toString().trim());
   }
 }
 

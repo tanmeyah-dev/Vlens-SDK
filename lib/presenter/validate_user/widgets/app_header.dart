@@ -6,11 +6,13 @@ import 'package:flutter/material.dart';
 class AppHeader extends StatelessWidget {
   final VoidCallback? onBackPressed;
   final bool showBackButton;
+  final bool showLogo;
 
   const AppHeader({
     super.key,
     this.onBackPressed,
     this.showBackButton = true,
+    this.showLogo = true,
   });
 
   @override
@@ -27,30 +29,39 @@ class AppHeader extends StatelessWidget {
         horizontal: horizontalPadding,
         vertical: verticalPadding,
       ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Centered logo
-          Center(
-            child: AppImage(
-              AppAssets.tanmeyah,
-              height: logoHeight,
-            ),
-          ),
-          // Arrow on the right side
-          if (showBackButton)
-            Align(
-              alignment: Alignment.centerRight,
-              child: GestureDetector(
-                onTap: onBackPressed ?? () => Navigator.of(context).pop(),
-                child: Icon(
-                  Icons.arrow_back_ios_new,
-                  size: iconSize,
-                  color: AppColors.primary,
+      child: showLogo
+          ? Stack(
+              alignment: Alignment.center,
+              children: [
+                Center(
+                  child: AppImage(
+                    AppAssets.tanmeyah,
+                    height: logoHeight,
+                  ),
                 ),
-              ),
-            ),
-        ],
+                if (showBackButton)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: _buildBackButton(context, iconSize),
+                  ),
+              ],
+            )
+          : showBackButton
+              ? Align(
+                  alignment: Alignment.centerRight,
+                  child: _buildBackButton(context, iconSize),
+                )
+              : const SizedBox.shrink(),
+    );
+  }
+
+  Widget _buildBackButton(BuildContext context, double iconSize) {
+    return GestureDetector(
+      onTap: onBackPressed ?? () => Navigator.of(context).pop(),
+      child: Icon(
+        Icons.arrow_back_ios_new,
+        size: iconSize,
+        color: AppColors.primary,
       ),
     );
   }

@@ -7,6 +7,7 @@ import 'package:core/utils/network/http_headers_helper.dart';
 
 import '../../../utils/sdk_api_response.dart';
 import '../../../utils/sdk_http_client.dart';
+import '../../../utils/vlens_debug_log.dart';
 import '../../validate_user/constants/api_urls.dart';
 import '../event/id_data_event.dart';
 import '../model/id_data_model.dart';
@@ -28,21 +29,33 @@ class IdDataBloc extends BaseBloc {
     IdDataInitializeEvent event,
     emit,
   ) async {
+    final startedAt = Stopwatch()..start();
+    VlensDebugLog.blocInitializeStart(loadFromApi: _model.loadFromApi);
+
     _model.isLoadingVlensData = true;
     _model.errorMessage = null;
     emit(UpdateIdDataUI(_model));
 
+    var outcome = 'unknown';
     try {
       if (_model.loadFromApi) {
         // Verified login: GET /vlens-data?phoneNumber=... only (no POST).
         await _loadFromApi(emit);
+        outcome = _model.errorMessage == null ? 'GET success' : 'GET failed';
       } else {
         // After VLens scan: POST extracted data and show it (no GET).
         await _submitFreshExtractedData(emit);
+        outcome = _model.errorMessage == null ? 'POST success' : 'POST failed';
       }
     } finally {
+      startedAt.stop();
       _model.isLoadingVlensData = false;
       emit(UpdateIdDataUI(_model));
+      VlensDebugLog.blocInitializeEnd(
+        loadFromApi: _model.loadFromApi,
+        outcome: outcome,
+        elapsed: startedAt.elapsed,
+      );
     }
 
     await VerificationCache().setRequestTypeId(ApiUrls.kRequestTypeId);
@@ -144,6 +157,7 @@ class IdDataBloc extends BaseBloc {
       );
 
       final api = SdkApiResponse.from(response);
+      if (api.isUnauthorized) return;
       final blockingError = api.blockingError(
         httpFallback: 'فشل التحقق من الأهلية',
         businessFallback: 'فشل التحقق من الأهلية',

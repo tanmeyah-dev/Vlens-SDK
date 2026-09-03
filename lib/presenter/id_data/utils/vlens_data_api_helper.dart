@@ -7,6 +7,7 @@ import 'package:tan_sdk/data/models/extracted_user_data.dart';
 
 import '../../../utils/sdk_api_response.dart';
 import '../../../utils/sdk_http_client.dart';
+import '../../../utils/vlens_debug_log.dart';
 import '../../login_screen/utils/device_info_helper.dart';
 import '../../validate_user/constants/api_urls.dart';
 import 'id_data_parser.dart';
@@ -89,44 +90,65 @@ Future<void> submitVlensData(
   final url = ApiUrls.getVlensDataUrl();
   final bodyJson = jsonEncode(body);
 
-  if (kDebugMode) {
-    print('');
-    print('═══════════════════════════════════════════════════════');
-    print('📤 VLENS DATA SUBMIT API CALL');
-    print('═══════════════════════════════════════════════════════');
-    print('URL: $url');
-    print('Method: POST');
-    print('phoneNumber (body from cache): $resolvedPhone');
-    print('Headers: $headers');
-    print('Body: $bodyJson');
-    print('═══════════════════════════════════════════════════════');
-    print('');
-  }
-
-  final response = await SdkHttpClient.post(
-    Uri.parse(url),
-    headers: headers,
-    body: bodyJson,
+  VlensDebugLog.apiRequestStart(
+    operation: 'SUBMIT',
+    method: 'POST',
+    url: url,
+    phoneNumber: resolvedPhone,
   );
+  final startedAt = Stopwatch()..start();
 
-  if (kDebugMode) {
-    print('');
-    print('═══════════════════════════════════════════════════════');
-    print('📥 VLENS DATA SUBMIT API RESPONSE');
-    print('═══════════════════════════════════════════════════════');
-    print('Status Code: ${response.statusCode}');
-    print('Body: ${response.body}');
-    print('═══════════════════════════════════════════════════════');
-    print('');
-  }
+  try {
+    final response = await SdkHttpClient.post(
+      Uri.parse(url),
+      headers: headers,
+      body: bodyJson,
+    );
+    startedAt.stop();
 
-  final api = SdkApiResponse.from(response);
-  final blockingError = api.blockingError(
-    httpFallback: 'فشل إرسال بيانات الهوية',
-    businessFallback: 'فشل إرسال بيانات الهوية',
-  );
-  if (blockingError != null) {
-    throw VlensDataApiException(blockingError);
+    final api = SdkApiResponse.from(response);
+    final blockingError = api.blockingError(
+      httpFallback: 'فشل إرسال بيانات الهوية',
+      businessFallback: 'فشل إرسال بيانات الهوية',
+    );
+
+    if (api.isUnauthorized) {
+      VlensDebugLog.apiRequestFailed(
+        operation: 'SUBMIT',
+        elapsed: startedAt.elapsed,
+        reason: 'Unauthorized (401) — session expired',
+        statusCode: response.statusCode,
+        bodyPreview: response.body,
+      );
+      return;
+    }
+
+    if (blockingError != null) {
+      VlensDebugLog.apiRequestFailed(
+        operation: 'SUBMIT',
+        elapsed: startedAt.elapsed,
+        reason: blockingError,
+        statusCode: response.statusCode,
+        bodyPreview: response.body,
+      );
+      throw VlensDataApiException(blockingError);
+    }
+
+    VlensDebugLog.apiRequestSuccess(
+      operation: 'SUBMIT',
+      statusCode: response.statusCode,
+      elapsed: startedAt.elapsed,
+      bodyPreview: response.body,
+    );
+  } catch (e) {
+    startedAt.stop();
+    if (e is VlensDataApiException) rethrow;
+    VlensDebugLog.apiRequestError(
+      operation: 'SUBMIT',
+      elapsed: startedAt.elapsed,
+      error: e,
+    );
+    rethrow;
   }
 }
 
@@ -147,50 +169,79 @@ Future<ExtractedUserData?> fetchVlensData({String? phoneNumber}) async {
 
   final url = ApiUrls.getVlensDataUrl(phoneNumber: resolvedPhone);
 
-  if (kDebugMode) {
-    print('');
-    print('═══════════════════════════════════════════════════════');
-    print('📥 VLENS DATA FETCH API CALL');
-    print('═══════════════════════════════════════════════════════');
-    print('URL: $url');
-    print('Method: GET');
-    print('phoneNumber: $resolvedPhone');
-    print('Headers: $headers');
-    print('═══════════════════════════════════════════════════════');
-    print('');
-  }
-
-  final response = await SdkHttpClient.get(
-    Uri.parse(url),
-    headers: headers,
+  VlensDebugLog.apiRequestStart(
+    operation: 'FETCH',
+    method: 'GET',
+    url: url,
+    phoneNumber: resolvedPhone,
   );
+  final startedAt = Stopwatch()..start();
 
-  if (kDebugMode) {
-    print('');
-    print('═══════════════════════════════════════════════════════');
-    print('📥 VLENS DATA FETCH API RESPONSE');
-    print('═══════════════════════════════════════════════════════');
-    print('Status Code: ${response.statusCode}');
-    print('Body: ${response.body}');
-    print('═══════════════════════════════════════════════════════');
-    print('');
+  try {
+    final response = await SdkHttpClient.get(
+      Uri.parse(url),
+      headers: headers,
+    );
+    startedAt.stop();
+
+    final api = SdkApiResponse.from(response);
+    final blockingError = api.blockingError(
+      httpFallback: 'فشل تحميل بيانات الهوية',
+      businessFallback: 'فشل تحميل بيانات الهوية',
+    );
+
+    if (api.isUnauthorized) {
+      VlensDebugLog.apiRequestFailed(
+        operation: 'FETCH',
+        elapsed: startedAt.elapsed,
+        reason: 'Unauthorized (401) — session expired',
+        statusCode: response.statusCode,
+        bodyPreview: response.body,
+      );
+      return null;
+    }
+
+    if (blockingError != null) {
+      VlensDebugLog.apiRequestFailed(
+        operation: 'FETCH',
+        elapsed: startedAt.elapsed,
+        reason: blockingError,
+        statusCode: response.statusCode,
+        bodyPreview: response.body,
+      );
+      throw VlensDataApiException(blockingError);
+    }
+
+    final payload = _extractPayloadMap(response.body);
+    if (payload == null) {
+      VlensDebugLog.apiRequestFailed(
+        operation: 'FETCH',
+        elapsed: startedAt.elapsed,
+        reason: 'Invalid response payload',
+        statusCode: response.statusCode,
+        bodyPreview: response.body,
+      );
+      throw VlensDataApiException('استجابة بيانات الهوية غير صالحة');
+    }
+
+    VlensDebugLog.apiRequestSuccess(
+      operation: 'FETCH',
+      statusCode: response.statusCode,
+      elapsed: startedAt.elapsed,
+      bodyPreview: response.body,
+    );
+
+    return parseExtractedUserData(payload);
+  } catch (e) {
+    startedAt.stop();
+    if (e is VlensDataApiException) rethrow;
+    VlensDebugLog.apiRequestError(
+      operation: 'FETCH',
+      elapsed: startedAt.elapsed,
+      error: e,
+    );
+    rethrow;
   }
-
-  final api = SdkApiResponse.from(response);
-  final blockingError = api.blockingError(
-    httpFallback: 'فشل تحميل بيانات الهوية',
-    businessFallback: 'فشل تحميل بيانات الهوية',
-  );
-  if (blockingError != null) {
-    throw VlensDataApiException(blockingError);
-  }
-
-  final payload = _extractPayloadMap(response.body);
-  if (payload == null) {
-    throw VlensDataApiException('استجابة بيانات الهوية غير صالحة');
-  }
-
-  return parseExtractedUserData(payload);
 }
 
 /// Resolves phone for `/vlens-data?phoneNumber=...` from cached user data.

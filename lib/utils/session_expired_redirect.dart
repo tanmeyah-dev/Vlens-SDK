@@ -1,83 +1,127 @@
 import 'dart:async';
 
+import 'package:core/style/app_colors.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import '../presenter/login_screen/model/login_screen_nav_args.dart';
 import '../routes/route_path.dart';
 import 'sdk_api_response.dart';
 import 'sdk_navigator.dart';
 
-/// Forces the SDK flow back to login when an API returns HTTP 417 for session
-/// expiry. Responses with `success: false` are business validation errors and
-/// must stay on the current screen so the caller can show the API message.
+/// Redirects to [LoginScreenScene] when an API response is HTTP 401, HTTP 429,
+/// body code 401/429, or Unauthorized. Shows the API message first, then navigates.
 class SessionExpiredRedirect {
   static bool _isHandling = false;
 
-  static const _otpPathSegments = <String>[
-    'verify-otp',
-    'send-otp',
-    'send-email-otp',
-  ];
+  static const Duration _messageDisplayDuration = Duration(seconds: 3);
 
   static void handle(http.Response response, {Uri? requestUri}) {
-    if (response.statusCode != 417) return;
-    if (_shouldStayOnCurrentScreen(response, requestUri)) return;
+    final api = SdkApiResponse.from(response);
+    if (!api.isUnauthorized) return;
     if (_isHandling) return;
     _isHandling = true;
-    unawaited(_redirectToLogin());
+    unawaited(_redirectToLogin(response));
   }
 
-  static bool _shouldStayOnCurrentScreen(
-    http.Response response,
-    Uri? requestUri,
-  ) {
-    if (SdkApiResponse.hasBusinessFailure(response)) return true;
-
-    final path = (requestUri?.path ?? '').toLowerCase();
-    for (final segment in _otpPathSegments) {
-      if (path.contains(segment)) return true;
+  static String _resolveMessage(http.Response response) {
+    final api = SdkApiResponse.from(response);
+    if (response.statusCode == 429 || api.responseCode == 429) {
+      return api.message(
+        fallback: 'تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة مرة أخرى لاحقاً',
+      );
     }
-    return false;
+    return api.message(
+      fallback: 'انتهت الجلسة، يرجى تسجيل الدخول مرة أخرى',
+    );
   }
 
-  static Future<void> _redirectToLogin() async {
+  static Future<void> _redirectToLogin(http.Response response) async {
     try {
+      final message = _resolveMessage(response);
       final cache = VerificationCache();
       final mobile = await cache.getMobileNumber();
       await cache.clearLoginSession();
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        try {
-          final nav = SdkNavigator.key.currentState;
-          if (nav == null || !nav.mounted) {
-            _isHandling = false;
-            return;
-          }
-
-          Route<dynamic>? topRoute;
-          nav.popUntil((route) {
-            topRoute = route;
-            return true;
-          });
-          if (topRoute?.settings.name == RoutePath.loginScreen) {
-            _isHandling = false;
-            return;
-          }
-
-          nav.pushNamedAndRemoveUntil(
-            RoutePath.loginScreen,
-            (route) => false,
-            arguments: (mobile != null && mobile.trim().isNotEmpty)
-                ? mobile.trim()
-                : null,
-          );
-        } finally {
-          _isHandling = false;
-        }
+        unawaited(_showMessageThenNavigate(
+          message: message,
+          mobile: mobile,
+        ));
       });
     } catch (_) {
       _isHandling = false;
     }
+  }
+
+  static Future<void> _showMessageThenNavigate({
+    required String message,
+    required String? mobile,
+  }) async {
+    try {
+      final nav = SdkNavigator.key.currentState;
+      if (nav == null || !nav.mounted) {
+        _isHandling = false;
+        return;
+      }
+
+      final messageShown = await _showMessage(nav.context, message);
+
+      if (!nav.mounted) {
+        _isHandling = false;
+        return;
+      }
+
+      Route<dynamic>? topRoute;
+      nav.popUntil((route) {
+        topRoute = route;
+        return true;
+      });
+
+      final phoneArg = (mobile != null && mobile.trim().isNotEmpty)
+          ? mobile.trim()
+          : null;
+
+      if (topRoute?.settings.name == RoutePath.loginScreen) {
+        _isHandling = false;
+        return;
+      }
+
+      final trimmedMessage = message.trim();
+      nav.pushNamedAndRemoveUntil(
+        RoutePath.loginScreen,
+        (route) => false,
+        arguments: LoginScreenNavArgs(
+          phoneNumber: phoneArg,
+          sessionMessage: !messageShown && trimmedMessage.isNotEmpty
+              ? trimmedMessage
+              : null,
+        ),
+      );
+    } finally {
+      _isHandling = false;
+    }
+  }
+
+  static Future<bool> _showMessage(BuildContext context, String message) async {
+    if (message.trim().isEmpty) return false;
+
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) {
+      await Future<void>.delayed(_messageDisplayDuration);
+      return false;
+    }
+
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message.trim()),
+        backgroundColor: AppColors.error,
+        duration: _messageDisplayDuration,
+      ),
+    );
+    await Future<void>.delayed(_messageDisplayDuration);
+    return true;
   }
 }

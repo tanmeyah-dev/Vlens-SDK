@@ -23,7 +23,11 @@ class WaitingApprovalScreen extends StatefulWidget {
 
 class _WaitingApprovalScreenState extends State<WaitingApprovalScreen> {
   void _onContinuePressed() {
-    SdkNavigator.returnToHostApp(context);
+    if (!context.mounted) return;
+    Navigator.of(context, rootNavigator: true).pushNamedAndRemoveUntil(
+      SdkNavigator.hostMainRouteName,
+      (route) => false,
+    );
   }
 
   @override

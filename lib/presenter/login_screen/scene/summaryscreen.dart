@@ -338,6 +338,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
       if (!mounted) return;
 
       final api = SdkApiResponse.from(response);
+      if (api.isUnauthorized) return;
       final blockingError = api.blockingError(
         httpFallback: 'فشل إرسال طلب القرض',
         businessFallback: 'فشل إرسال طلب القرض',
@@ -364,6 +365,8 @@ class _SummaryScreenState extends State<SummaryScreen> {
           backgroundColor: AppColors.error,
         ),
       );
+    } on SdkUnauthorizedException catch (_) {
+      return;
     } on OneClickApplyBuildException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

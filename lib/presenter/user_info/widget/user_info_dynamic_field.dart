@@ -26,13 +26,33 @@ class UserInfoDynamicField extends StatelessWidget {
     FocusManager.instance.primaryFocus?.unfocus();
   }
 
+  String? _fieldError() {
+    if (!model.showValidationErrors) return null;
+    return model.validationErrors[field.key];
+  }
+
+  Widget _errorText(String? message) {
+    if (message == null || message.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, right: 12),
+      child: Text(
+        message,
+        style: const TextStyle(
+          color: AppColors.error,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final title =
         field.displayText.trim().isNotEmpty ? field.displayText : field.key;
     final type = field.type.toLowerCase();
     final isLockedFromId = isIdExtractedLockedField(field);
-    final isOptional = isOptionalUserInfoField(field);
 
     if (type == 'text') {
       final isNumberOfChildren = field.key == 'numberOfChildren';
@@ -56,20 +76,7 @@ class UserInfoDynamicField extends StatelessWidget {
           textAlign: TextAlign.right,
           onEditingComplete: () => _dismissKeyboard(context),
           onTapOutside: (_) => _dismissKeyboard(context),
-          validator: (value) {
-            final text = (value ?? '').trim();
-            if (text.isEmpty) {
-              return isOptional ? null : 'هذا الحقل مطلوب';
-            }
-            if (isNumberOfChildren) {
-              if (text.length != 1) {
-                return 'يجب إدخال رقم واحد فقط';
-              }
-              return null;
-            }
-            if (text.length < 4) return 'الحد الأدنى 4 أحرف';
-            return null;
-          },
+          validator: (_) => model.validateField(field),
         ),
       );
     }
@@ -91,17 +98,7 @@ class UserInfoDynamicField extends StatelessWidget {
           textAlign: TextAlign.right,
           onEditingComplete: () => _dismissKeyboard(context),
           onTapOutside: (_) => _dismissKeyboard(context),
-          validator: (value) {
-            final text = (value ?? '').trim();
-            if (text.isEmpty) {
-              return isOptional ? null : 'هذا الحقل مطلوب';
-            }
-            final normalized = text.replaceAll(',', '').replaceAll(' ', '');
-            if (normalized.isEmpty || num.tryParse(normalized) == null) {
-              return 'برجاء إدخال رقم صالح';
-            }
-            return null;
-          },
+          validator: (_) => model.validateField(field),
         ),
       );
     }
@@ -124,12 +121,7 @@ class UserInfoDynamicField extends StatelessWidget {
           key: ValueKey<String>(
               'rg_${field.key}_${model.selectedValues[field.key] ?? ''}'),
           initialValue: selected,
-          validator: (value) {
-            if ((value ?? '').trim().isEmpty) {
-              return 'برجاء الاختيار';
-            }
-            return null;
-          },
+          validator: (_) => model.validateField(field),
           builder: (formState) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -171,16 +163,8 @@ class UserInfoDynamicField extends StatelessWidget {
                   ),
                 ),
                 if (formState.hasError)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4, right: 12),
-                    child: Text(
-                      formState.errorText ?? '',
-                      style: const TextStyle(
-                        color: AppColors.error,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
+                  _errorText(formState.errorText),
+                _errorText(_fieldError()),
               ],
             );
           },
@@ -192,24 +176,40 @@ class UserInfoDynamicField extends StatelessWidget {
       final checked = model.checkboxValues[field.key] ?? false;
       return Padding(
         padding: const EdgeInsets.only(bottom: 18),
-        child: CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          value: checked,
-          activeColor: AppColors.primary,
-          title: Text(
-            title,
-            textAlign: TextAlign.right,
-            style: const TextStyle(
-              color: AppColors.black,
-              fontSize: 16,
-              fontWeight: FontWeight.w400,
-            ),
-          ),
-          controlAffinity: ListTileControlAffinity.leading,
-          onChanged: (value) {
-            _dismissKeyboard(context);
-            model.checkboxValues[field.key] = value ?? false;
-            onFormChanged();
+        child: FormField<bool>(
+          key: ValueKey<String>('cb_${field.key}_$checked'),
+          initialValue: checked,
+          validator: (_) => model.validateField(field),
+          builder: (formState) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: formState.value ?? false,
+                  activeColor: AppColors.primary,
+                  title: Text(
+                    title,
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                      color: AppColors.black,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  onChanged: (value) {
+                    _dismissKeyboard(context);
+                    final next = value ?? false;
+                    formState.didChange(next);
+                    model.checkboxValues[field.key] = next;
+                    onFormChanged();
+                  },
+                ),
+                if (formState.hasError) _errorText(formState.errorText),
+                _errorText(_fieldError()),
+              ],
+            );
           },
         ),
       );
@@ -224,7 +224,7 @@ class UserInfoDynamicField extends StatelessWidget {
           key: ValueKey<String>(
               'dt_${field.key}_${model.dateValues[field.key]?.millisecondsSinceEpoch ?? 0}'),
           initialValue: current,
-          validator: (value) => value == null ? 'برجاء اختيار التاريخ' : null,
+          validator: (_) => model.validateField(field),
           builder: (formState) {
             final display = formState.value != null
                 ? formatDateDdMmYyyy(formState.value!)
@@ -305,16 +305,8 @@ class UserInfoDynamicField extends StatelessWidget {
                   ),
                 ),
                 if (formState.hasError)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4, right: 12),
-                    child: Text(
-                      formState.errorText ?? '',
-                      style: const TextStyle(
-                        color: AppColors.error,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
+                  _errorText(formState.errorText),
+                _errorText(_fieldError()),
               ],
             );
           },
@@ -333,12 +325,7 @@ class UserInfoDynamicField extends StatelessWidget {
           key: ValueKey<String>(
               'ms_${field.key}_${(model.multiSelectValues[field.key] ?? {}).join('|')}'),
           initialValue: selectedSet,
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'اختر خياراً واحداً على الأقل';
-            }
-            return null;
-          },
+          validator: (_) => model.validateField(field),
           builder: (formState) {
             final active = Set<String>.from(formState.value ?? {});
 
@@ -380,17 +367,8 @@ class UserInfoDynamicField extends StatelessWidget {
                     );
                   }).toList(),
                 ),
-                if (formState.hasError)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6, right: 12),
-                    child: Text(
-                      formState.errorText ?? '',
-                      style: const TextStyle(
-                        color: AppColors.error,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
+                if (formState.hasError) _errorText(formState.errorText),
+                _errorText(_fieldError()),
               ],
             );
           },
@@ -553,20 +531,7 @@ class UserInfoDynamicField extends StatelessWidget {
                       }
                       onFormChanged();
                     },
-              validator: (value) {
-                if (usesLocations && optionItems.isEmpty) {
-                  if (locationRole == LocationFieldRole.city) {
-                    return 'برجاء اختيار المحافظة أولاً';
-                  }
-                  if (locationRole == LocationFieldRole.village) {
-                    return 'برجاء اختيار المدينة أولاً';
-                  }
-                }
-                if ((value ?? '').trim().isEmpty) {
-                  return isOptional ? null : 'برجاء الاختيار';
-                }
-                return null;
-              },
+              validator: (_) => model.validateField(field),
             ),
           ],
         ),

@@ -4,6 +4,13 @@ import 'package:flutter/material.dart';
 class SdkNavigator {
   static final GlobalKey<NavigatorState> key = GlobalKey<NavigatorState>();
 
+  static NavigatorState? get state => key.currentState;
+
+  /// Handles system back within the SDK navigator without exiting to the host app.
+  static void handleBack() {
+    state?.maybePop();
+  }
+
   /// Host-app route to land on when the SDK flow finishes.
   static const String hostMainRouteName = '/mainScreen';
 

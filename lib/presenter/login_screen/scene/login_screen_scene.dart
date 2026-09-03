@@ -30,15 +30,19 @@ import '../utils/vlens_sdk_launcher.dart';
 import '../../register_screen/widgets/pin_input_field.dart';
 import '../model/login_screen_nav_args.dart';
 import '../utils/request_documents_navigator.dart';
+import '../../validate_user/widgets/app_header.dart';
+import '../../../routes/route_path.dart';
 
 class LoginScreenScene extends StatefulWidget {
   final String? initialPhoneNumber;
   final String? vlenseStatus;
+  final String? initialSessionMessage;
 
   const LoginScreenScene({
     super.key,
     this.initialPhoneNumber,
     this.vlenseStatus,
+    this.initialSessionMessage,
   });
 
   @override
@@ -55,13 +59,35 @@ class _LoginScreenSceneState
   bool _loginLoadingActive = false;
   bool _isOpeningVlens = false;
   BuildContext? _loginLoadingDialogContext;
+  bool _didShowSessionMessage = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       DeviceInfoHelper.prefetchAuthPayload();
+      _showInitialSessionMessageIfNeeded();
     });
+  }
+
+  void _showInitialSessionMessageIfNeeded() {
+    if (_didShowSessionMessage || !mounted) return;
+
+    String? message = widget.initialSessionMessage?.trim();
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if ((message == null || message.isEmpty) && args is LoginScreenNavArgs) {
+      message = args.sessionMessage?.trim();
+    }
+    if (message == null || message.isEmpty) return;
+
+    _didShowSessionMessage = true;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.error,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   void _dismissLoginLoadingOverlay() {
@@ -100,7 +126,13 @@ class _LoginScreenSceneState
         }
       });
     }
-    return Directionality(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _onBackPressed();
+      },
+      child: Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: AppColors.white,
@@ -112,13 +144,17 @@ class _LoginScreenSceneState
                 key: _model.formKey,
                 child: Column(
                   children: [
+                    AppHeader(
+                      onBackPressed: _onBackPressed,
+                      showLogo: false,
+                    ),
                     Expanded(
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            160.height,
+                            40.height,
                             // Logo
                             _buildLogo(),
                             120.height,
@@ -161,6 +197,26 @@ class _LoginScreenSceneState
           ),
         ),
       ),
+    ),
+    );
+  }
+
+  void _onBackPressed() {
+    FocusScope.of(context).unfocus();
+
+    final phone = _model.mobileNumberController.text.trim();
+    final fallbackPhone = widget.initialPhoneNumber?.trim();
+    final routePhone =
+        phone.isNotEmpty ? phone : ((fallbackPhone?.isNotEmpty ?? false) ? fallbackPhone : null);
+
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+      return;
+    }
+
+    Navigator.of(context).pushReplacementNamed(
+      RoutePath.validateUser,
+      arguments: routePhone,
     );
   }
 
@@ -573,6 +629,7 @@ class _LoginScreenSceneState
     final launched = VlensSdkLauncher.launch(
       context: context,
       loginResponseData: loginResponseData,
+      source: 'login_screen',
       onSuccess: (data) {
         if (!mounted || !context.mounted) return;
         if (_isOpeningVlens) setState(() => _isOpeningVlens = false);
@@ -580,7 +637,7 @@ class _LoginScreenSceneState
         logExtractedDataAfterLogin(userData, context: 'after login');
         // Cache in background — navigate immediately.
         unawaited(_cacheVlensSuccessPayload(userData));
-        Navigator.of(context, rootNavigator: true).pushReplacement(
+        Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => IdDataScreen(extractedData: userData),
           ),
@@ -692,7 +749,7 @@ class _LoginScreenSceneState
   Future<void> _openIdDataScreenAfterLogin(BuildContext context) async {
     try {
       if (!mounted || !context.mounted) return;
-      Navigator.of(context, rootNavigator: true).pushReplacement(
+      Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => const IdDataScreen(loadFromApi: true),
         ),

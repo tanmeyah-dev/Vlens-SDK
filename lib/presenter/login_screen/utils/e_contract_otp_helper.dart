@@ -147,7 +147,9 @@ class EContractOtpHelper {
         throw Exception(errorMessage);
       }
 
-      final blockingError = SdkApiResponse.from(jsonResponse).blockingError(
+      final jsonApi = SdkApiResponse.from(jsonResponse);
+      if (jsonApi.isUnauthorized) return false;
+      final blockingError = jsonApi.blockingError(
         checkHttp: false,
         businessFallback: 'فشل تفعيل خطوة OTP للعقد الإلكتروني',
       );
@@ -286,6 +288,7 @@ class EContractOtpHelper {
       print('');
 
       final api = SdkApiResponse.from(response);
+      if (api.isUnauthorized) return null;
       final blockingError = api.blockingError(
         httpFallback: 'فشل التحقق من OTP',
         businessFallback: 'فشل التحقق من OTP',
@@ -365,6 +368,7 @@ class EContractOtpHelper {
       print('');
 
       final api = SdkApiResponse.from(response);
+      if (api.isUnauthorized) return false;
       final blockingError = api.blockingError(
         httpFallback: 'فشل تجهيز القرض للصرف',
         businessFallback: 'فشل تجهيز القرض للصرف',

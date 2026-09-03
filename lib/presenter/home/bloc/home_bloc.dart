@@ -44,6 +44,11 @@ class HomeBloc extends BaseBloc {
       );
 
       final api = SdkApiResponse.from(response);
+      if (api.isUnauthorized) {
+        _model.isLoading = false;
+        emit(InitHomeScreen(_model));
+        return;
+      }
       final blockingError = api.blockingError(
         httpFallback: 'فشل في تحميل انواع الطلبات',
         businessFallback: 'فشل في تحميل انواع الطلبات',

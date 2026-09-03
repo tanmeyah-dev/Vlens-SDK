@@ -6,8 +6,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:vlens/vlens.dart';
 
+import '../../../utils/vlens_debug_log.dart';
 import '../model/login_response.dart';
 import 'vlens_sdk_credentials.dart';
+
+/// If VLens SDK never calls back, log after this duration (debug only).
+const Duration _kVlensCallbackWatchdog = Duration(minutes: 5);
 
 /// Fast path to open VLens: resolve credentials → init immediately → cache in background.
 class VlensSdkLauncher {
@@ -39,9 +43,14 @@ class VlensSdkLauncher {
     required void Function(dynamic extractedData) onSuccess,
     required void Function(String errorCode, String errorMsg) onFailure,
     String? missingMessageOut,
+    String source = 'unknown',
   }) {
     final credentials = VlensSdkCredentials.tryResolve(loginResponseData);
     if (credentials == null || !credentials.isReadyForVlensInit) {
+      VlensDebugLog.sdkLaunchBlocked(
+        source: source,
+        reason: VlensSdkCredentials.missingFieldsMessage(loginResponseData),
+      );
       return false;
     }
 
@@ -58,8 +67,29 @@ class VlensSdkLauncher {
       ),
     );
 
+    VlensDebugLog.sdkLaunchStart(
+      source: source,
+      transactionId: credentials.transactionId,
+      apiBaseUrl: credentials.apiBaseUrl,
+      tenancyName: credentials.tenancyName,
+    );
+
+    var callbackReceived = false;
+    Timer? watchdog;
     if (kDebugMode) {
-      print('🚀 VLens init tx=${credentials.transactionId}');
+      watchdog = Timer(_kVlensCallbackWatchdog, () {
+        if (!callbackReceived) {
+          VlensDebugLog.sdkNoCallback(
+            source: source,
+            elapsed: _kVlensCallbackWatchdog,
+          );
+        }
+      });
+    }
+
+    void finishWatchdog() {
+      callbackReceived = true;
+      watchdog?.cancel();
     }
 
     final sdkConfig = SdkConfig(
@@ -83,14 +113,36 @@ class VlensSdkLauncher {
           errorMessageAr: 'خطأ في الشبكة',
         ),
       ],
-      onSuccess: onSuccess,
-      onFailure: onFailure,
+      onSuccess: (data) {
+        finishWatchdog();
+        VlensDebugLog.sdkSuccess(source: source);
+        // VLensManager calls config.onSuccess, then Navigator.pop() on its route.
+        // Pushing a screen inside onSuccess gets undone by that pop — user stays on
+        // VLens loading UI. Run app logic on the next frame after the pop.
+        VlensDebugLog.sdkNavigationDeferred(source: source);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          VlensDebugLog.sdkRoutePopped(source: source);
+          onSuccess(data);
+        });
+      },
+      onFailure: (errorCode, errorMsg) {
+        finishWatchdog();
+        VlensDebugLog.sdkFailure(
+          source: source,
+          errorCode: errorCode,
+          errorMsg: errorMsg,
+        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          onFailure(errorCode, errorMsg);
+        });
+      },
       getExtractedData: true,
       // Slightly snappier capture UX; SDK still retries.
       detectionRetryCounter: 3,
       enableSounds: false,
     );
 
+    VlensDebugLog.sdkInitCalled();
     VLensManager().init(context, sdkConfig);
     return true;
   }

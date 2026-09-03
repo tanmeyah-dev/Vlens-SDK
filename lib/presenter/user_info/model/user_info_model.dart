@@ -43,6 +43,12 @@ class UserInfoModel {
   final Map<String, DateTime?> dateValues = {};
   final Map<String, Set<String>> multiSelectValues = {};
 
+  /// Set after the user taps save; drives inline error display.
+  bool showValidationErrors = false;
+
+  /// Latest validation errors keyed by field key.
+  Map<String, String> validationErrors = {};
+
   /// All visible form fields: request/fields + lookup dropdowns.
   List<RequestFieldItem> get allFormFields => [
         ...requestFields,
@@ -201,7 +207,9 @@ class UserInfoModel {
   }
 
   List<SummaryAnswerItem> buildSummaryAnswers() {
-    final items = allFormFields.map((field) {
+    final items = allFormFields
+        .where((field) => !isHiddenUserInfoField(field))
+        .map((field) {
       final type = field.type.toLowerCase();
       final title =
           field.displayText.trim().isNotEmpty ? field.displayText : field.key;
@@ -244,5 +252,95 @@ class UserInfoModel {
     }).toList();
 
     return items;
+  }
+
+  /// Validates one visible field; returns an Arabic error message or null.
+  String? validateField(RequestFieldItem field) {
+    if (isHiddenUserInfoField(field)) return null;
+
+    final isOptional = isOptionalUserInfoField(field);
+    final type = field.type.toLowerCase();
+
+    if (type == 'text') {
+      final text = textControllers[field.key]?.text.trim() ?? '';
+      if (text.isEmpty) {
+        return isOptional ? null : 'هذا الحقل مطلوب';
+      }
+      if (field.key == 'numberOfChildren') {
+        if (text.length != 1) return 'يجب إدخال رقم واحد فقط';
+      } else if (text.length < 4) {
+        return 'الحد الأدنى 4 أحرف';
+      }
+      return null;
+    }
+
+    if (type == 'number') {
+      final text = textControllers[field.key]?.text.trim() ?? '';
+      if (text.isEmpty) {
+        return isOptional ? null : 'هذا الحقل مطلوب';
+      }
+      final normalized = text.replaceAll(',', '').replaceAll(' ', '');
+      if (normalized.isEmpty || num.tryParse(normalized) == null) {
+        return 'برجاء إدخال رقم صالح';
+      }
+      return null;
+    }
+
+    if (type == 'radiogroup' || type == 'select') {
+      final locationRole = detectLocationFieldRole(field);
+      final usesLocations = locationRole != null && locations.isNotEmpty;
+      final optionItems = usesLocations
+          ? selectOptionsForField(field)
+          : lookupItemsForField(field);
+
+      if (usesLocations && optionItems.isEmpty) {
+        if (locationRole == LocationFieldRole.city) {
+          return 'برجاء اختيار المحافظة أولاً';
+        }
+        if (locationRole == LocationFieldRole.village) {
+          return 'برجاء اختيار المدينة أولاً';
+        }
+      }
+
+      final value = (selectedValues[field.key] ?? '').trim();
+      if (value.isEmpty) {
+        return isOptional ? null : 'برجاء الاختيار';
+      }
+      return null;
+    }
+
+    if (type == 'date') {
+      if (dateValues[field.key] == null) {
+        return isOptional ? null : 'برجاء اختيار التاريخ';
+      }
+      return null;
+    }
+
+    if (type == 'multiselect') {
+      if ((multiSelectValues[field.key] ?? {}).isEmpty) {
+        return isOptional ? null : 'اختر خياراً واحداً على الأقل';
+      }
+      return null;
+    }
+
+    if (type == 'checkbox') {
+      if (!(checkboxValues[field.key] ?? false)) {
+        return isOptional ? null : 'هذا الحقل مطلوب';
+      }
+      return null;
+    }
+
+    return null;
+  }
+
+  /// Validates every visible field on the form.
+  Map<String, String> validateAllVisibleFields() {
+    final errors = <String, String>{};
+    for (final field in allFormFields) {
+      if (isHiddenUserInfoField(field)) continue;
+      final error = validateField(field);
+      if (error != null) errors[field.key] = error;
+    }
+    return errors;
   }
 }

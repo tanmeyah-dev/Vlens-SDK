@@ -82,7 +82,7 @@ class _IdDataScreenState extends BaseState<IdDataScreen, IdDataBloc, IdDataModel
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'تم انشاء هاويتك الرقميه بنجاح و هذه هي البيانات الخاصه بك',
+                    'تم انشاء هويتك الرقميه بنجاح و هذه هي البيانات الخاصه بك',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,

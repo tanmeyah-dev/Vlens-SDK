@@ -18,6 +18,7 @@ import '../utils/verification_dialog_helper.dart';
 import '../widgets/app_header.dart';
 import '../widgets/validate_user_phone_field.dart';
 import '../../../routes/route_path.dart';
+import '../../../utils/sdk_navigator.dart';
 import 'package:core/utils/cache/verification_cache.dart';
 
 class ValidateUser extends StatefulWidget {
@@ -51,7 +52,13 @@ class _ValidateUserState
         : (screenHeight * 0.05)
             .round(); // 5% of screen height on smaller screens
 
-    return Directionality(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        SdkNavigator.returnToHostApp(context);
+      },
+      child: Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: AppColors.white,
@@ -108,11 +115,15 @@ class _ValidateUserState
           ),
         ),
       ),
+    ),
     );
   }
 
   Widget header() {
-    return const AppHeader(showBackButton: false);
+    return AppHeader(
+      showBackButton: true,
+      onBackPressed: () => SdkNavigator.returnToHostApp(context),
+    );
   }
 
   Widget instructions() {
@@ -141,9 +152,15 @@ class _ValidateUserState
     );
   }
 
+  bool get _isPhoneFromHostApp {
+    final phone = widget.initialPhoneNumber?.trim();
+    return phone != null && phone.isNotEmpty;
+  }
+
   Widget mobileNumberFields() {
     return ValidateUserPhoneField(
       controller: _mobileNumberModel.mobileNumberController,
+      readOnly: _isPhoneFromHostApp,
       onChanged: (value) {
         emit(EnableSaveButtonEvent(!_mobileNumberModel.isInputEmpty()));
       },
@@ -154,10 +171,9 @@ class _ValidateUserState
     // Responsive button sizing
     final buttonHeight = screenWidth > 600 ? 72.0 : 64.0;
     final fontSize = screenWidth > 600 ? 18.0 : 16.0;
-    
-    // Disable button if loading or if input is empty
-    final isButtonDisabled = _mobileNumberModel.isSaveButtonDisabled || 
-                            _mobileNumberModel.isLoading;
+
+    // Only disable while a save request is in progress
+    final isButtonDisabled = _mobileNumberModel.isLoading;
 
     return AppButton(
       title: ValidateUserConstants.saveButtonText,
@@ -247,9 +263,8 @@ class _ValidateUserState
       // Phone number exists - navigate to login screen
       print('📱 OnPhoneNumberExistsState received - Navigating to login screen');
       final mobileNumber = _mobileNumberModel.mobileNumberController.text.trim();
-      Navigator.of(context).pushNamedAndRemoveUntil(
+      Navigator.of(context).pushNamed(
         RoutePath.loginScreen,
-        (route) => false,
         arguments: mobileNumber,
       );
     } else if (state is OnValidateUserSavedState) {
@@ -331,11 +346,7 @@ class _ValidateUserState
     print('🔵🔵🔵 Validation called 🔵🔵🔵');
     if (_mobileNumberModel.formKey.currentState!.validate()) {
       print('✅ Form validation passed');
-      
-      // Disable button immediately to prevent double-tap
-      _mobileNumberModel.isSaveButtonDisabled = true;
-      emit(EnableSaveButtonEvent(false));
-      
+
       // Hide keyboard
       hideKeyboard();
 

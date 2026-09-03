@@ -136,6 +136,9 @@ class UserInfoBloc extends BaseBloc {
       }
 
       final fieldsApi = SdkApiResponse.from(fieldsResponse);
+      if (fieldsApi.isUnauthorized) {
+        throw Exception('Unauthorized');
+      }
       final fieldsBlockingError = fieldsApi.blockingError(
         httpFallback: 'فشل تحميل الحقول',
         businessFallback: 'فشل تحميل الحقول',
@@ -229,6 +232,9 @@ class UserInfoBloc extends BaseBloc {
 
   LookupsData _parseLookupsResponse(dynamic response) {
     final api = SdkApiResponse.from(response);
+    if (api.isUnauthorized) {
+      throw Exception('Unauthorized');
+    }
     final blockingError = api.blockingError(
       httpFallback: 'فشل تحميل البيانات المرجعية',
       businessFallback: 'فشل تحميل البيانات المرجعية',

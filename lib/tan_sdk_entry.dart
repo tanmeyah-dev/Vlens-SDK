@@ -137,7 +137,13 @@ class _TanSdkEntryState extends State<TanSdkEntry> with WidgetsBindingObserver {
   }
 
   Widget _buildSdkNavigator(MediaQueryData? mediaQuery) {
-    final navigator = Navigator(
+    final navigator = PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        SdkNavigator.key.currentState?.maybePop();
+      },
+      child: Navigator(
       key: SdkNavigator.key,
       initialRoute: RoutePath.splash,
       onGenerateRoute: (settings) {
@@ -176,11 +182,16 @@ class _TanSdkEntryState extends State<TanSdkEntry> with WidgetsBindingObserver {
             } else if (args is String && args.trim().isNotEmpty) {
               phoneFromArgs = args.trim();
             }
+            String? sessionMessage;
+            if (args is LoginScreenNavArgs) {
+              sessionMessage = args.sessionMessage;
+            }
             return MaterialPageRoute<void>(
               settings: settings,
               builder: (_) => LoginScreenScene(
                 initialPhoneNumber: phoneFromArgs ?? widget.phoneNumber,
                 vlenseStatus: vlenseStatus,
+                initialSessionMessage: sessionMessage,
               ),
             );
           case RoutePath.emailScreen:
@@ -231,6 +242,7 @@ class _TanSdkEntryState extends State<TanSdkEntry> with WidgetsBindingObserver {
             );
         }
       },
+    ),
     );
 
     if (mediaQuery == null) {

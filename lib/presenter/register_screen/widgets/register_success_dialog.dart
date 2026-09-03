@@ -37,9 +37,8 @@ class _RegisterSuccessDialogState extends State<RegisterSuccessDialog> {
         final navContext = widget.navigationContext ?? context;
         if (!navContext.mounted) return;
         final phone = widget.phoneNumber?.trim();
-        Navigator.of(navContext).pushNamedAndRemoveUntil(
+        Navigator.of(navContext).pushReplacementNamed(
           RoutePath.loginScreen,
-          (route) => false,
           arguments: LoginScreenNavArgs(
             phoneNumber: (phone != null && phone.isNotEmpty) ? phone : null,
           ),

@@ -44,6 +44,9 @@ class RequestEligibilityHelper {
       headers: headers,
     );
     final api = SdkApiResponse.from(response);
+    if (api.isUnauthorized) {
+      throw const SdkUnauthorizedException();
+    }
     final blockingError = api.blockingError(
       httpFallback: 'فشل التحقق من الأهلية',
       businessFallback: 'فشل التحقق من الأهلية',
@@ -68,7 +71,7 @@ class RequestEligibilityHelper {
   static Future<void> openUserInfoScreen(BuildContext context) async {
     final eligibility = await fetchEligibilityResponse();
     if (!context.mounted) return;
-    Navigator.of(context).pushReplacement(
+    Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => UserInfoScreen(eligibilityResponse: eligibility),
       ),

@@ -337,14 +337,34 @@ bool isIdExtractedLockedField(RequestFieldItem field) {
       label == normalizeArabicLabel('الجنسيه');
 }
 
-/// License type and commercial facility name are optional on KYC form.
-bool isOptionalUserInfoField(RequestFieldItem field) {
+/// License type dropdown is hidden on the KYC form.
+bool isHiddenUserInfoField(RequestFieldItem field) {
   final key = normalizeLookupKey(field.key);
   if (key == 'CIFLICENSETYPE' ||
       key == 'LICENSETYPE' ||
       key == 'LICENSE' ||
-      key.contains('LICENSETYPE') ||
-      key.contains('TRADENAME') ||
+      key.contains('LICENSETYPE')) {
+    return true;
+  }
+
+  final label = normalizeArabicLabel(
+    [
+      field.displayText,
+      field.displayArText ?? '',
+    ].join(' '),
+  );
+  if (label.isEmpty) return false;
+
+  final licenseLabel = normalizeArabicLabel('نوع الرخصة');
+  return label == licenseLabel ||
+      label == normalizeArabicLabel('نوع الرخصه') ||
+      label.contains(licenseLabel);
+}
+
+/// Only «الاسم التجاري للمنشأة» is optional on the KYC form.
+bool isOptionalUserInfoField(RequestFieldItem field) {
+  final key = normalizeLookupKey(field.key);
+  if (key.contains('TRADENAME') ||
       key.contains('COMMERCIALNAME') ||
       key.contains('BUSINESSNAME') ||
       key.contains('FACILITYNAME') ||
@@ -360,11 +380,8 @@ bool isOptionalUserInfoField(RequestFieldItem field) {
   );
   if (label.isEmpty) return false;
 
-  final licenseLabel = normalizeArabicLabel('نوع الرخصة');
   final tradeLabel = normalizeArabicLabel('الاسم التجاري للمنشأة');
-  return label == licenseLabel ||
-      label.contains(licenseLabel) ||
-      label == tradeLabel ||
+  return label == tradeLabel ||
       label.contains(normalizeArabicLabel('الاسم التجاري')) ||
       (label.contains(normalizeArabicLabel('تجاري')) &&
           label.contains(normalizeArabicLabel('منش')));

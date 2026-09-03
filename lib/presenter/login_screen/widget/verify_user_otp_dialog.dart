@@ -211,6 +211,7 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
       print('');
 
       if (mounted) {
+        if (response.sdk.isUnauthorized) return;
         final blockingError = response.sdk.blockingError(
           httpFallback: 'فشل في تسجيل الدخول',
           businessFallback: 'فشل في تسجيل الدخول',
@@ -428,12 +429,13 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
     final launched = VlensSdkLauncher.launch(
       context: context,
       loginResponseData: loginResponseData,
+      source: 'verify_user_otp_dialog',
       onSuccess: (extractedData) {
         logExtractedDataAfterLogin(extractedData, context: 'after login');
         final navigationContext = widget.parentContext ?? context;
         if (!navigationContext.mounted) return;
         unawaited(_cacheVlensSuccessPayload(extractedData));
-        Navigator.of(navigationContext, rootNavigator: true).pushReplacement(
+        Navigator.of(navigationContext).push(
           MaterialPageRoute(
             builder: (_) => IdDataScreen(extractedData: extractedData),
           ),
@@ -496,7 +498,7 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
     // Avoid !_debugLocked when the previous route transition is still active.
     await WidgetsBinding.instance.endOfFrame;
     if (!navigationContext.mounted) return;
-    Navigator.of(navigationContext, rootNavigator: true).pushReplacement(
+    Navigator.of(navigationContext).push(
       MaterialPageRoute<void>(
         builder: (_) => const IdDataScreen(loadFromApi: true),
       ),

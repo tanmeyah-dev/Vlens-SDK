@@ -61,7 +61,7 @@ class RequestDocumentsNavigator {
 
       final documents =
           currentResponse.data?.documents ?? <RequestCurrentDocument>[];
-      await Navigator.of(context).pushReplacement(
+      await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => RequestDocumentsScene(
             requestId: currentResponse.data?.id,

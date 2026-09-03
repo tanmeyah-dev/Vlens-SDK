@@ -76,6 +76,7 @@ class AppTextField extends StatelessWidget {
           maxLength: maxLength,
           enabled: enabled,
           readOnly: readOnly,
+          showCursor: !readOnly,
           enableInteractiveSelection: enableInteractiveSelection,
           textDirection: textDirection,
           textAlign: textAlign ?? TextAlign.start,
@@ -91,7 +92,9 @@ class AppTextField extends StatelessWidget {
               fontSize: 14,
             ),
             filled: true,
-            fillColor: AppColors.white,
+            fillColor: (!enabled || readOnly)
+                ? AppColors.border1.withOpacity(0.3)
+                : AppColors.white,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: const BorderSide(

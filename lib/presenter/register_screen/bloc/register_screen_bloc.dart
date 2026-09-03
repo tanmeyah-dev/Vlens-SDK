@@ -210,6 +210,7 @@ class RegisterScreenBloc extends BaseBloc {
       print('');
 
       final createUserApi = SdkApiResponse.from(response);
+      if (createUserApi.isUnauthorized) return;
       final createUserBlockingError = createUserApi.blockingError(
         httpFallback: 'فشل إنشاء المستخدم',
         businessFallback: 'فشل إنشاء المستخدم',

@@ -12,6 +12,7 @@ import '../bloc/user_info_bloc.dart';
 import '../event/user_info_event.dart';
 import '../model/user_info_model.dart';
 import '../state/user_info_state.dart';
+import '../utils/user_info_lookup_helpers.dart';
 import '../widget/user_info_dynamic_field.dart';
 
 class UserInfoScreen extends StatefulWidget {
@@ -124,35 +125,30 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
                           ),
                           const Divider(color: AppColors.border1, height: 28),
                           Expanded(
-                            child: ListView(
+                            child: SingleChildScrollView(
                               keyboardDismissBehavior:
                                   ScrollViewKeyboardDismissBehavior.onDrag,
-                              children: [
-                                if (model.isLoadingFields || !model.areFieldsReady)
-                                  const Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 24),
-                                    child: Center(child: CircularProgressIndicator()),
-                                  )
-                                else if (model.fieldsError != null)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                    child: Text(
-                                      model.fieldsError!,
-                                      style: const TextStyle(color: AppColors.error),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  )
-                                else ...[
-                                  ...model.requestFields.map(
-                                    (f) => UserInfoDynamicField(
-                                      field: f,
-                                      model: model,
-                                      onFormChanged: () =>
-                                          emit(UserInfoFormChangedEvent()),
-                                    ),
-                                  ),
-                                  if (model.lookupFields.isNotEmpty) ...[
-                                    ...model.lookupFields.map(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (model.isLoadingFields || !model.areFieldsReady)
+                                    const Padding(
+                                      padding: EdgeInsets.symmetric(vertical: 24),
+                                      child: Center(child: CircularProgressIndicator()),
+                                    )
+                                  else if (model.fieldsError != null)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      child: Text(
+                                        model.fieldsError!,
+                                        style: const TextStyle(color: AppColors.error),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    )
+                                  else ...[
+                                    ...model.requestFields
+                                        .where((f) => !isHiddenUserInfoField(f))
+                                        .map(
                                       (f) => UserInfoDynamicField(
                                         field: f,
                                         model: model,
@@ -160,9 +156,21 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
                                             emit(UserInfoFormChangedEvent()),
                                       ),
                                     ),
+                                    if (model.lookupFields.isNotEmpty) ...[
+                                      ...model.lookupFields
+                                          .where((f) => !isHiddenUserInfoField(f))
+                                          .map(
+                                        (f) => UserInfoDynamicField(
+                                          field: f,
+                                          model: model,
+                                          onFormChanged: () =>
+                                              emit(UserInfoFormChangedEvent()),
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ],
-                              ],
+                              ),
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -198,8 +206,17 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
   }
 
   Future<void> _onSavePressed(UserInfoModel model) async {
-    final isValid = model.formKey.currentState?.validate() ?? false;
-    if (!isValid) return;
+    FocusScope.of(context).unfocus();
+
+    model.showValidationErrors = true;
+    final formValid = model.formKey.currentState?.validate() ?? false;
+    final fieldErrors = model.validateAllVisibleFields();
+    model.validationErrors = fieldErrors;
+
+    if (!formValid || fieldErrors.isNotEmpty) {
+      emit(UserInfoFormChangedEvent());
+      return;
+    }
 
     setState(() => _isSubmitting = true);
 
