@@ -14,6 +14,7 @@ import '../model/user_info_model.dart';
 import '../state/user_info_state.dart';
 import '../utils/user_info_lookup_helpers.dart';
 import '../widget/user_info_dynamic_field.dart';
+import '../widget/user_info_image_picker_field.dart';
 
 class UserInfoScreen extends StatefulWidget {
   final Map<String, dynamic> eligibilityResponse;
@@ -168,6 +169,15 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
                                         ),
                                       ),
                                     ],
+                                    ...UserInfoModel.documentImageFields.map(
+                                      (doc) => UserInfoImagePickerField(
+                                        fieldKey: doc.key,
+                                        title: doc.value,
+                                        model: model,
+                                        onChanged: () =>
+                                            emit(UserInfoFormChangedEvent()),
+                                      ),
+                                    ),
                                   ],
                                 ],
                               ),

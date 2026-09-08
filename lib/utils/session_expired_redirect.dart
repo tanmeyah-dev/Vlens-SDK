@@ -10,10 +10,10 @@ import '../routes/route_path.dart';
 import 'sdk_api_response.dart';
 import 'sdk_navigator.dart';
 
-/// Redirects to [LoginScreenScene] when an API response is HTTP 401, 417, or 429,
-/// body code 401/417/429, or Unauthorized. Shows the API message first, then navigates.
+/// Redirects to [LoginScreenScene] when an API response has HTTP status **401**.
+/// Shows the API message first, then navigates.
 ///
-/// Wired from [SdkHttpClient] so every SDK API call is covered.
+/// Wired from [SdkHttpClient] so every SDK API call is covered SDK-wide.
 class SessionExpiredRedirect {
   static bool _isHandling = false;
 
@@ -29,16 +29,6 @@ class SessionExpiredRedirect {
 
   static String _resolveMessage(http.Response response) {
     final api = SdkApiResponse.from(response);
-    if (response.statusCode == 429 || api.responseCode == 429) {
-      return api.message(
-        fallback: 'تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة مرة أخرى لاحقاً',
-      );
-    }
-    if (response.statusCode == 417 || api.responseCode == 417) {
-      return api.message(
-        fallback: 'يرجى التحقق من بيانات الدخول والمحاولة مرة أخرى',
-      );
-    }
     return api.message(
       fallback: 'انتهت الجلسة، يرجى تسجيل الدخول مرة أخرى',
     );

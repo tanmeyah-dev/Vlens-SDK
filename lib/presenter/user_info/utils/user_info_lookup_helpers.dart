@@ -361,6 +361,57 @@ bool isHiddenUserInfoField(RequestFieldItem field) {
       label.contains(licenseLabel);
 }
 
+/// Max allowed value for «اجمالي الدخل الشهري».
+const num kMaxMonthlyIncome = 83000;
+
+/// Detects «اجمالي الدخل الشهري» from field key or Arabic label.
+bool isMonthlyIncomeField(RequestFieldItem field) {
+  final key = normalizeLookupKey(field.key);
+  if (key.contains('MONTHLYINCOME') ||
+      key.contains('TOTALMONTHLYINCOME') ||
+      key.contains('TOTALINCOME')) {
+    return true;
+  }
+
+  final label = normalizeArabicLabel(
+    [
+      field.displayText,
+      field.displayArText ?? '',
+    ].join(' '),
+  );
+  if (label.isEmpty) return false;
+
+  return label.contains(normalizeArabicLabel('اجمالي الدخل الشهري')) ||
+      (label.contains(normalizeArabicLabel('الدخل الشهري')) &&
+          !label.contains(normalizeArabicLabel('مصروف')));
+}
+
+/// Detects «اجمالي المصروفات الشهريه» from field key or Arabic label.
+bool isMonthlyExpenseField(RequestFieldItem field) {
+  final key = normalizeLookupKey(field.key);
+  if (key.contains('MONTHLYEXPENSE') ||
+      key.contains('MONTHLYEXPENSES') ||
+      key.contains('TOTALMONTHLYEXPENSE') ||
+      key.contains('TOTALMONTHLYEXPENSES') ||
+      key.contains('TOTALEXPENSE') ||
+      key.contains('TOTALEXPENSES')) {
+    return true;
+  }
+
+  final label = normalizeArabicLabel(
+    [
+      field.displayText,
+      field.displayArText ?? '',
+    ].join(' '),
+  );
+  if (label.isEmpty) return false;
+
+  return label.contains(normalizeArabicLabel('اجمالي المصروفات الشهريه')) ||
+      label.contains(normalizeArabicLabel('اجمالي المصروفات الشهرية')) ||
+      (label.contains(normalizeArabicLabel('المصروفات')) &&
+          label.contains(normalizeArabicLabel('الشهري')));
+}
+
 /// Only «الاسم التجاري للمنشأة» is optional on the KYC form.
 bool isOptionalUserInfoField(RequestFieldItem field) {
   final key = normalizeLookupKey(field.key);

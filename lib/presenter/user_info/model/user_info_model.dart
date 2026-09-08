@@ -11,6 +11,17 @@ import '../utils/user_info_lookup_helpers.dart';
 class UserInfoModel {
   UserInfoModel({required this.eligibilityResponse});
 
+  static const String leaseContractImageKey = 'leaseContract';
+  static const String utilityReceiptImageKey = 'utilityReceipt';
+
+  static const String leaseContractImageLabel = 'عقد الإيجار';
+  static const String utilityReceiptImageLabel = 'إيصال مرافق';
+
+  static const List<MapEntry<String, String>> documentImageFields = [
+    MapEntry(leaseContractImageKey, leaseContractImageLabel),
+    MapEntry(utilityReceiptImageKey, utilityReceiptImageLabel),
+  ];
+
   final Map<String, dynamic> eligibilityResponse;
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
 
@@ -43,6 +54,12 @@ class UserInfoModel {
   final Map<String, DateTime?> dateValues = {};
   final Map<String, Set<String>> multiSelectValues = {};
 
+  /// Local gallery image paths for document uploads (one image per key).
+  final Map<String, String?> documentImagePaths = {
+    leaseContractImageKey: null,
+    utilityReceiptImageKey: null,
+  };
+
   /// Set after the user taps save; drives inline error display.
   bool showValidationErrors = false;
 
@@ -70,6 +87,20 @@ class UserInfoModel {
     checkboxValues.clear();
     dateValues.clear();
     multiSelectValues.clear();
+  }
+
+  void setDocumentImage(String key, String path) {
+    documentImagePaths[key] = path;
+  }
+
+  void clearDocumentImage(String key) {
+    documentImagePaths[key] = null;
+  }
+
+  String? validateDocumentImage(String key) {
+    final path = documentImagePaths[key]?.trim() ?? '';
+    if (path.isEmpty) return 'برجاء اختيار صورة';
+    return null;
   }
 
   List<LookupItem> lookupItemsForField(RequestFieldItem field) {
@@ -251,6 +282,20 @@ class UserInfoModel {
       );
     }).toList();
 
+    for (final doc in documentImageFields) {
+      final path = documentImagePaths[doc.key]?.trim() ?? '';
+      if (path.isEmpty) continue;
+      final fileName = path.split(RegExp(r'[/\\]')).last;
+      items.add(
+        SummaryAnswerItem(
+          key: doc.key,
+          label: doc.value,
+          value: path,
+          displayValue: fileName,
+        ),
+      );
+    }
+
     return items;
   }
 
@@ -280,9 +325,20 @@ class UserInfoModel {
         return isOptional ? null : 'هذا الحقل مطلوب';
       }
       final normalized = text.replaceAll(',', '').replaceAll(' ', '');
-      if (normalized.isEmpty || num.tryParse(normalized) == null) {
+      final amount = num.tryParse(normalized);
+      if (normalized.isEmpty || amount == null) {
         return 'برجاء إدخال رقم صالح';
       }
+
+      if (isMonthlyIncomeField(field) && amount > kMaxMonthlyIncome) {
+        return 'الحد الاقصي للدخل الشهري يجب الا يزيد عن 83000';
+      }
+
+      if (isMonthlyExpenseField(field)) {
+        final incomeError = _validateExpensesAgainstIncome(amount);
+        if (incomeError != null) return incomeError;
+      }
+
       return null;
     }
 
@@ -341,6 +397,34 @@ class UserInfoModel {
       final error = validateField(field);
       if (error != null) errors[field.key] = error;
     }
+    for (final doc in documentImageFields) {
+      final error = validateDocumentImage(doc.key);
+      if (error != null) errors[doc.key] = error;
+    }
     return errors;
+  }
+
+  /// Expenses must be strictly less than monthly income when income is set.
+  String? _validateExpensesAgainstIncome(num expenseAmount) {
+    RequestFieldItem? incomeField;
+    for (final candidate in allFormFields) {
+      if (isMonthlyIncomeField(candidate)) {
+        incomeField = candidate;
+        break;
+      }
+    }
+    if (incomeField == null) return null;
+
+    final incomeText =
+        textControllers[incomeField.key]?.text.trim() ?? '';
+    final incomeNormalized =
+        incomeText.replaceAll(',', '').replaceAll(' ', '');
+    final incomeAmount = num.tryParse(incomeNormalized);
+    if (incomeAmount == null) return null;
+
+    if (expenseAmount >= incomeAmount) {
+      return 'يجب ان يكون  اجمالي المصروفات الشهريه اقل من اجمالي الدخل الشهري';
+    }
+    return null;
   }
 }

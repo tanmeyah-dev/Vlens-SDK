@@ -11,9 +11,10 @@ class SdkUnauthorizedException implements Exception {
 
 /// Shared parsing for SDK API responses.
 ///
-/// HTTP **200** (and body `code` not 401/417/429) → callers run their navigation logic.
-/// HTTP/body **401**, **417**, **429**, or Unauthorized → [SessionExpiredRedirect] → login.
-/// Any other status → callers show [blockingError] and stay on the current screen.
+/// HTTP **200** → callers run their navigation logic.
+/// HTTP status **401** only → [SessionExpiredRedirect] → login.
+/// Any other status (including 417/429) → callers show [blockingError] and stay
+/// on the current screen.
 class SdkApiResponse {
   SdkApiResponse(this.raw);
 
@@ -27,20 +28,10 @@ class SdkApiResponse {
 
   bool get isHttp200 => raw.statusCode == 200;
 
-  /// HTTP/body 401, 417, or 429, or an explicit Unauthorized signal in the response.
-  /// All of these force a redirect to the login screen via [SessionExpiredRedirect].
-  bool get isUnauthorized {
-    if (raw.statusCode == 401 ||
-        raw.statusCode == 417 ||
-        raw.statusCode == 429) {
-      return true;
-    }
-
-    final code = responseCode;
-    if (code == 401 || code == 417 || code == 429) return true;
-
-    return _bodyIndicatesUnauthorized(decoded);
-  }
+  /// HTTP status **401** only.
+  /// Forces a redirect to the login screen via [SessionExpiredRedirect].
+  /// Used by every SDK API call through [SdkHttpClient].
+  bool get isUnauthorized => raw.statusCode == 401;
 
   /// When `true`, stop processing — login redirect is handled by [SessionExpiredRedirect].
   bool get stopsCaller => isUnauthorized;
@@ -103,27 +94,6 @@ class SdkApiResponse {
   /// Used by session-expiry handling to keep validation errors on-screen.
   static bool hasBusinessFailure(http.Response response) {
     return SdkApiResponse.from(response).isBusinessFailure;
-  }
-
-  static bool _bodyIndicatesUnauthorized(Map<String, dynamic>? map) {
-    if (map == null) return false;
-
-    const keys = [
-      'message',
-      'error',
-      'title',
-      'error_description',
-      'errorMessage',
-      'ErrorMessage',
-    ];
-    for (final key in keys) {
-      final value = map[key]?.toString().trim().toLowerCase();
-      if (value != null &&
-          (value == 'unauthorized' || value.contains('unauthorized'))) {
-        return true;
-      }
-    }
-    return false;
   }
 
   static bool? _readSuccess(Map<String, dynamic>? map) {

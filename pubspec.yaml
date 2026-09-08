@@ -25,6 +25,8 @@ dependencies:
   vlens: ^0.1.9
   webview_flutter: ^4.13.1
   google_sign_in: ^7.2.0
+  image_picker: ^1.2.3
+  permission_handler: ^11.4.0
 
 dev_dependencies:
   flutter_test:
