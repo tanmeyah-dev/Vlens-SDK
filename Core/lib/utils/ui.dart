@@ -17,4 +17,8 @@ class AppAssets {
   static const String waittingImg = 'assets/images/waitting_img.png';
   /// Google sign-in logo (host apps resolve via `package: tan_sdk`).
   static const String googleLogo = 'assets/images/google_logo.png';
+  /// Document delete (trash) icon.
+  static const String delete = 'packages/tan_sdk/assets/images/delete.png';
+  /// PDF file type icon shown after a document is selected.
+  static const String pdf = 'packages/tan_sdk/assets/images/pdf.png';
 }

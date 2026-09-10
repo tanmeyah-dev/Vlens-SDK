@@ -1,15 +1,26 @@
 import 'dart:io';
 
+import 'package:core/components/image/app_image.dart';
 import 'package:core/style/app_colors.dart';
+import 'package:core/utils/ui.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:iconsax_flutter/iconsax_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../model/user_info_model.dart';
 
 /// Single-image gallery picker used for KYC document uploads.
-class UserInfoImagePickerField extends StatelessWidget {
+///
+/// **iOS:** Uses `requestFullMetadata: true` so `image_picker` triggers the
+/// system Photos permission alert (Full Access / Limited / Don't Allow).
+/// After returning from Settings, uses `requestFullMetadata: false` (PHPicker)
+/// to avoid the known crash when Full Access was just granted.
+///
+/// **Android:** Requests runtime gallery permission, then opens the picker.
+class UserInfoImagePickerField extends StatefulWidget {
   const UserInfoImagePickerField({
     super.key,
     required this.fieldKey,
@@ -23,204 +34,307 @@ class UserInfoImagePickerField extends StatelessWidget {
   final UserInfoModel model;
   final VoidCallback onChanged;
 
-  Future<Permission> _galleryPermission() async {
-    if (Platform.isIOS) return Permission.photos;
+  @override
+  State<UserInfoImagePickerField> createState() =>
+      _UserInfoImagePickerFieldState();
+}
 
-    if (Platform.isAndroid) {
-      final sdkInt = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
-      // Android 13+ (API 33) uses READ_MEDIA_IMAGES via Permission.photos.
-      if (sdkInt >= 33) return Permission.photos;
-      return Permission.storage;
-    }
+class _UserInfoImagePickerFieldState extends State<UserInfoImagePickerField>
+    with WidgetsBindingObserver {
+  static final ImagePicker _picker = ImagePicker();
 
-    return Permission.photos;
+  bool _picking = false;
+  /// After Settings → Full Access, avoid PhotoKit full-metadata path.
+  bool _useSafePickerAfterSettings = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
   }
 
-  Future<bool> _ensureGalleryPermission(BuildContext context) async {
-    final permission = await _galleryPermission();
-    var status = await permission.status;
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
-    if (status.isGranted || status.isLimited) return true;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Kept for resume timing after Settings; flag is consumed in _pickImage.
+  }
 
-    if (status.isDenied) {
-      status = await permission.request();
+  Future<bool> _ensureAndroidGalleryPermission() async {
+    if (!Platform.isAndroid) return true;
+
+    final sdkInt = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
+    final permission =
+        sdkInt >= 33 ? Permission.photos : Permission.storage;
+
+    try {
+      var status = await permission.status;
       if (status.isGranted || status.isLimited) return true;
+
+      status = await permission.request();
+      if (!mounted) return false;
+      if (status.isGranted || status.isLimited) return true;
+
+      _showError(
+        status.isPermanentlyDenied || status.isRestricted
+            ? 'برجاء السماح بالوصول إلى معرض الصور من إعدادات التطبيق'
+            : 'يجب السماح بالوصول إلى معرض الصور لاختيار الصورة',
+        offerSettings: status.isPermanentlyDenied || status.isRestricted,
+      );
+      return false;
+    } catch (_) {
+      return true;
     }
+  }
 
-    if (!context.mounted) return false;
+  void _showError(String message, {bool offerSettings = false}) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
 
-    final openSettings = status.isPermanentlyDenied || status.isRestricted;
-    ScaffoldMessenger.of(context).showSnackBar(
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
       SnackBar(
-        content: Text(
-          openSettings
-              ? 'برجاء السماح بالوصول إلى معرض الصور من إعدادات التطبيق'
-              : 'يجب السماح بالوصول إلى معرض الصور لاختيار الصورة',
-        ),
+        content: Text(message),
         backgroundColor: AppColors.error,
-        action: openSettings
+        action: offerSettings
             ? SnackBarAction(
                 label: 'الإعدادات',
                 textColor: Colors.white,
-                onPressed: openAppSettings,
+                onPressed: () {
+                  _useSafePickerAfterSettings = true;
+                  openAppSettings();
+                },
               )
             : null,
       ),
     );
-    return false;
   }
 
-  Future<void> _pickImage(BuildContext context) async {
+  Future<void> _pickImage() async {
+    if (_picking) return;
+    _picking = true;
     try {
-      final allowed = await _ensureGalleryPermission(context);
-      if (!allowed) return;
+      if (Platform.isAndroid) {
+        final allowed = await _ensureAndroidGalleryPermission();
+        if (!allowed || !mounted) return;
+      }
 
-      final picker = ImagePicker();
-      final file = await picker.pickImage(
+      // iOS: true → Apple shows Photos permission alert via PhotoKit.
+      // After Settings grant, false → PHPicker only (avoids crash).
+      final requestFullMetadata =
+          Platform.isIOS && !_useSafePickerAfterSettings;
+
+      if (_useSafePickerAfterSettings) {
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted) return;
+        _useSafePickerAfterSettings = false;
+      }
+
+      final file = await _picker.pickImage(
         source: ImageSource.gallery,
         imageQuality: 85,
+        requestFullMetadata: requestFullMetadata,
       );
-      if (file == null) return;
-      model.setDocumentImage(fieldKey, file.path);
-      onChanged();
+      if (!mounted || file == null) return;
+
+      widget.model.setDocumentImage(widget.fieldKey, file.path);
+      widget.onChanged();
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      final code = e.code.toLowerCase();
+      final message = (e.message ?? '').toLowerCase();
+      final permissionRelated = code.contains('photo') ||
+          code.contains('permission') ||
+          message.contains('photo') ||
+          message.contains('permission') ||
+          message.contains('access') ||
+          message.contains('denied');
+      if (permissionRelated) {
+        _showError(
+          'برجاء السماح بالوصول إلى معرض الصور من إعدادات التطبيق',
+          offerSettings: true,
+        );
+      } else {
+        _showError('تعذر اختيار الصورة: ${e.message ?? e.code}');
+      }
     } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('تعذر اختيار الصورة: $e'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      if (!mounted) return;
+      _showError('تعذر اختيار الصورة: $e');
+    } finally {
+      _picking = false;
     }
+  }
+
+  void _removeFile() {
+    widget.model.clearDocumentImage(widget.fieldKey);
+    widget.onChanged();
+  }
+
+  String _fileDisplayName(String path) {
+    final fileName = path.split(RegExp(r'[/\\]')).last;
+    final dot = fileName.lastIndexOf('.');
+    if (dot <= 0) return fileName;
+    return fileName.substring(0, dot);
+  }
+
+  String get _emptyPrompt {
+    if (widget.fieldKey == UserInfoModel.utilityReceiptImageKey) {
+      return 'برجاء قم بتحميل ايصال مرافق (كهرباء، مياه، او غاز)';
+    }
+    if (widget.fieldKey == UserInfoModel.leaseContractImageKey) {
+      return 'برجاء قم بتحميل عقد ايجار';
+    }
+    return 'برجاء قم بتحميل ${widget.title}';
   }
 
   @override
   Widget build(BuildContext context) {
-    final path = model.documentImagePaths[fieldKey];
-    final error = model.showValidationErrors
-        ? model.validationErrors[fieldKey]
+    final path = widget.model.documentImagePaths[widget.fieldKey];
+    final error = widget.model.showValidationErrors
+        ? widget.model.validationErrors[widget.fieldKey]
         : null;
+    final isEmpty = path == null || path.isEmpty;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.only(bottom: 22),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            title,
+            widget.title,
             style: const TextStyle(
-              color: AppColors.secondary,
-              fontSize: 14,
-              fontWeight: FontWeight.w400,
+              color: AppColors.navy,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
             ),
             textAlign: TextAlign.right,
           ),
-          const SizedBox(height: 8),
-          InkWell(
-            onTap: () => _pickImage(context),
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              width: double.infinity,
-              constraints: const BoxConstraints(minHeight: 120),
-              decoration: BoxDecoration(
-                color: AppColors.backgroundLight,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: error != null ? AppColors.error : AppColors.border1,
+          const SizedBox(height: 10),
+          if (isEmpty)
+            InkWell(
+              onTap: _pickImage,
+              borderRadius: BorderRadius.circular(14),
+              child: CustomPaint(
+                painter: _DashedRRectPainter(
+                  color: error != null
+                      ? AppColors.error
+                      : const Color(0xFFD0D5DD),
+                  radius: 14,
+                ),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 28,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF9FAFB),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Iconsax.document_upload,
+                        color: AppColors.navy,
+                        size: 32,
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        _emptyPrompt,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: AppColors.black,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'يجب أن يكون الملف المرفق بصيغة JPEG, PNG, او PDF.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: AppColors.hintGray,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      const Text(
+                        'تحميل',
+                        style: TextStyle(
+                          color: AppColors.navy,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          decoration: TextDecoration.underline,
+                          decorationColor: AppColors.navy,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              clipBehavior: Clip.antiAlias,
-              child: path == null || path.isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 28),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.add_photo_alternate_outlined,
-                            color: AppColors.secondary,
-                            size: 32,
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'اختر صورة من المعرض',
-                            style: TextStyle(
-                              color: AppColors.secondary,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
+            )
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(14),
+                border: error != null
+                    ? Border.all(color: AppColors.error)
+                    : null,
+              ),
+              child: Row(
+                children: [
+                  const AppImage(
+                    AppAssets.pdf,
+                    width: 32,
+                    height: 32,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _fileDisplayName(path!),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        color: AppColors.black,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
                       ),
-                    )
-                  : Stack(
-                      children: [
-                        SizedBox(
-                          width: double.infinity,
-                          height: 160,
-                          child: Image.file(
-                            File(path),
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const Center(
-                              child: Icon(
-                                Icons.broken_image_outlined,
-                                color: AppColors.secondary,
-                                size: 32,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          top: 8,
-                          left: 8,
-                          child: Material(
-                            color: Colors.black54,
-                            shape: const CircleBorder(),
-                            child: InkWell(
-                              customBorder: const CircleBorder(),
-                              onTap: () {
-                                model.clearDocumentImage(fieldKey);
-                                onChanged();
-                              },
-                              child: const Padding(
-                                padding: EdgeInsets.all(6),
-                                child: Icon(
-                                  Icons.close,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          bottom: 8,
-                          right: 8,
-                          child: Material(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(16),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(16),
-                              onTap: () => _pickImage(context),
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 6,
-                                ),
-                                child: Text(
-                                  'تغيير',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
+                  ),
+                  const SizedBox(width: 12),
+                  IconButton(
+                    onPressed: _removeFile,
+                    tooltip: 'حذف',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 40,
+                      minHeight: 40,
+                    ),
+                    icon: const AppImage(
+                      AppAssets.delete,
+                      width: 24,
+                      height: 24,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
           if (error != null && error.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4, right: 12),
@@ -235,5 +349,64 @@ class UserInfoImagePickerField extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _DashedRRectPainter extends CustomPainter {
+  const _DashedRRectPainter({
+    required this.color,
+    required this.radius,
+    this.strokeWidth = 1.2,
+    this.dashWidth = 6,
+    this.dashGap = 4,
+  });
+
+  final Color color;
+  final double radius;
+  final double strokeWidth;
+  final double dashWidth;
+  final double dashGap;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+    final inset = strokeWidth / 2;
+    final rrect = RRect.fromLTRBR(
+      inset,
+      inset,
+      size.width - inset,
+      size.height - inset,
+      Radius.circular(radius),
+    );
+    final path = Path()..addRRect(rrect);
+    canvas.drawPath(_dashPath(path), paint);
+  }
+
+  Path _dashPath(Path source) {
+    final dashed = Path();
+    for (final metric in source.computeMetrics()) {
+      var distance = 0.0;
+      var draw = true;
+      while (distance < metric.length) {
+        final length = draw ? dashWidth : dashGap;
+        final next = (distance + length).clamp(0, metric.length).toDouble();
+        if (draw) {
+          dashed.addPath(metric.extractPath(distance, next), Offset.zero);
+        }
+        distance = next;
+        draw = !draw;
+      }
+    }
+    return dashed;
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedRRectPainter oldDelegate) {
+    return oldDelegate.color != color ||
+        oldDelegate.radius != radius ||
+        oldDelegate.strokeWidth != strokeWidth;
   }
 }

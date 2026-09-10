@@ -412,31 +412,8 @@ bool isMonthlyExpenseField(RequestFieldItem field) {
           label.contains(normalizeArabicLabel('الشهري')));
 }
 
-/// Only «الاسم التجاري للمنشأة» is optional on the KYC form.
-bool isOptionalUserInfoField(RequestFieldItem field) {
-  final key = normalizeLookupKey(field.key);
-  if (key.contains('TRADENAME') ||
-      key.contains('COMMERCIALNAME') ||
-      key.contains('BUSINESSNAME') ||
-      key.contains('FACILITYNAME') ||
-      key.contains('SHOPNAME')) {
-    return true;
-  }
-
-  final label = normalizeArabicLabel(
-    [
-      field.displayText,
-      field.displayArText ?? '',
-    ].join(' '),
-  );
-  if (label.isEmpty) return false;
-
-  final tradeLabel = normalizeArabicLabel('الاسم التجاري للمنشأة');
-  return label == tradeLabel ||
-      label.contains(normalizeArabicLabel('الاسم التجاري')) ||
-      (label.contains(normalizeArabicLabel('تجاري')) &&
-          label.contains(normalizeArabicLabel('منش')));
-}
+/// All KYC form fields are mandatory.
+bool isOptionalUserInfoField(RequestFieldItem field) => false;
 
 /// Picks the Egyptian nationality option id from lookups (`مصري` / Egypt).
 String? findEgyptianNationalityId(List<LookupItem> items) {

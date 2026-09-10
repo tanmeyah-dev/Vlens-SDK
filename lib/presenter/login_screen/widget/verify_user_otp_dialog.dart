@@ -47,34 +47,24 @@ class VerifyUserOTPDialog extends StatefulWidget {
 }
 
 class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
-  int countdown = 30;
+  static const int _countdownSeconds = 59;
+
+  int countdown = _countdownSeconds;
   bool canResend = false;
+  bool _isResending = false;
   Timer? countdownTimer;
   final TextEditingController pinController = TextEditingController();
   final FocusNode pinFocusNode = FocusNode();
   bool _isLoading = false;
   String? _errorMessage;
 
+  String get _apiUrlLogin => ApiUrls.getLoginUrl();
   String get _apiUrlLoginVerifyOtp => ApiUrls.getLoginVerifyOtpUrl();
 
   @override
   void initState() {
     super.initState();
-    // Start countdown timer
-    countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        if (countdown > 0) {
-          setState(() {
-            countdown--;
-          });
-        } else {
-          timer.cancel();
-          setState(() {
-            canResend = true;
-          });
-        }
-      }
-    });
+    _startCountdown(notify: false);
 
     // Listen to PIN changes
     pinController.addListener(() {
@@ -90,6 +80,203 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
     pinController.dispose();
     pinFocusNode.dispose();
     super.dispose();
+  }
+
+  void _startCountdown({bool notify = true}) {
+    countdownTimer?.cancel();
+    void apply() {
+      countdown = _countdownSeconds;
+      canResend = false;
+    }
+
+    if (notify && mounted) {
+      setState(apply);
+    } else {
+      apply();
+    }
+
+    countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      if (countdown > 0) {
+        setState(() {
+          countdown--;
+        });
+      } else {
+        timer.cancel();
+        setState(() {
+          canResend = true;
+        });
+      }
+    });
+  }
+
+  Future<void> _onResendPressed() async {
+    if (!canResend || _isResending || _isLoading) return;
+
+    setState(() {
+      _isResending = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final ok = await _resendOtpViaLoginApi();
+      if (!mounted) return;
+      if (ok) {
+        pinController.clear();
+        _startCountdown();
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isResending = false;
+        });
+      }
+    }
+  }
+
+  /// Re-calls the same login API that originally triggered the OTP SMS.
+  Future<bool> _resendOtpViaLoginApi() async {
+    String? phoneNumber = widget.phoneNumber;
+    String? password = widget.password;
+
+    if (phoneNumber == null || phoneNumber.isEmpty) {
+      phoneNumber = await VerificationCache().getMobileNumber();
+    }
+
+    if (phoneNumber == null || phoneNumber.isEmpty) {
+      _showError('رقم الموبايل مطلوب');
+      return false;
+    }
+
+    if (password == null || password.isEmpty) {
+      _showError('كلمة المرور مطلوبة');
+      return false;
+    }
+
+    try {
+      final locationResult =
+          await DeviceInfoHelper.obtainRequiredLocationForAuth();
+      if (!locationResult.hasCoordinates) {
+        _showError(locationResult.errorMessage);
+        return false;
+      }
+
+      final deviceId = await DeviceInfoHelper.getDeviceId();
+      final requestBody = jsonEncode({
+        'phoneNumber': phoneNumber,
+        'password': password,
+        'geoLocation': {
+          'latitude': locationResult.latitude,
+          'longitude': locationResult.longitude,
+        },
+        'imei': deviceId,
+      });
+
+      final headers = HttpHeadersHelper.getDefaultHeaders();
+
+      print('');
+      print('═══════════════════════════════════════════════════════');
+      print('📤 LOGIN API REQUEST (RESEND OTP)');
+      print('═══════════════════════════════════════════════════════');
+      print('URL: $_apiUrlLogin');
+      print('Method: POST');
+      print('Headers: $headers');
+      print('Body: $requestBody');
+      print('═══════════════════════════════════════════════════════');
+      print('');
+
+      final response = await SdkHttpClient
+          .post(
+        Uri.parse(_apiUrlLogin),
+        headers: headers,
+        body: requestBody,
+      )
+          .timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception(
+              'Request timeout - Server may not be running or not accessible');
+        },
+      );
+
+      print('');
+      print('═══════════════════════════════════════════════════════');
+      print('📥 LOGIN API RESPONSE (RESEND OTP)');
+      print('═══════════════════════════════════════════════════════');
+      print('Status Code: ${response.statusCode}');
+      print('Body: ${response.body}');
+      print('═══════════════════════════════════════════════════════');
+      print('');
+
+      if (!mounted) return false;
+      if (response.sdk.isUnauthorized) return false;
+
+      final blockingError = response.sdk.blockingError(
+        httpFallback: 'فشل إعادة إرسال الكود',
+        businessFallback: 'فشل إعادة إرسال الكود',
+      );
+      if (blockingError != null) {
+        _showError(blockingError);
+        return false;
+      }
+
+      if (response.statusCode != 200) {
+        final errorMessage = ApiErrorParser.extractMessage(
+          response.body,
+          fallbackMessage: 'فشل إعادة إرسال الكود',
+        );
+        _showError(errorMessage);
+        return false;
+      }
+
+      if (response.body.isEmpty) {
+        _showError('استجابة فارغة من الخادم');
+        return false;
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) {
+        _showError('استجابة غير صالحة من الخادم');
+        return false;
+      }
+
+      final loginResponse =
+          LoginResponse.fromJson(Map<String, dynamic>.from(decoded));
+      if (!loginResponse.isSuccess) {
+        final errorMessage = loginResponse.message ??
+            loginResponse.errorMessage ??
+            'فشل إعادة إرسال الكود';
+        _showError(errorMessage);
+        return false;
+      }
+
+      final data = loginResponse.data;
+      final otpReqId = data?.phoneNumberOtpRequestId;
+      final txId = data?.transactionId;
+      if (otpReqId != null &&
+          otpReqId.isNotEmpty &&
+          txId != null &&
+          txId.isNotEmpty) {
+        await VerificationCache().setVerificationData(
+          phoneNumberOtpRequestId: otpReqId,
+          transactionId: txId,
+          mobileNumber: phoneNumber,
+        );
+      }
+
+      return true;
+    } on SocketException {
+      _showError('لا يمكن الاتصال بالخادم. يرجى التحقق من الاتصال بالإنترنت');
+      return false;
+    } catch (e) {
+      final errorMessage = e.toString().replaceAll('Exception: ', '');
+      if (errorMessage.contains('timeout')) {
+        _showError('انتهت مهلة الاتصال. يرجى المحاولة مرة أخرى');
+      } else {
+        _showError('حدث خطأ أثناء إعادة إرسال الكود. يرجى المحاولة مرة أخرى');
+      }
+      return false;
+    }
   }
 
   Future<void> _verifyOTP() async {
@@ -681,15 +868,18 @@ class _VerifyUserOTPDialogState extends State<VerifyUserOTPDialog> {
                     ),
                     24.height,
                     GestureDetector(
-                      onTap: canResend ? () {
-                        // TODO: Implement resend logic if needed
-                        _showError('سيتم إضافة ميزة إعادة الإرسال قريباً');
-                      } : null,
+                      onTap: (canResend && !_isResending && !_isLoading)
+                          ? _onResendPressed
+                          : null,
                       child: AppText(
-                        canResend
-                            ? "إرسال مرة أخرى"
-                            : "إرسال مرة أخرى بعد $countdown ثواني",
-                        color: canResend ? AppColors.primary : AppColors.gray,
+                        _isResending
+                            ? 'جاري الإرسال...'
+                            : (canResend
+                                ? 'إرسال مرة أخرى'
+                                : 'إرسال مرة أخرى بعد $countdown ثواني'),
+                        color: (canResend && !_isResending && !_isLoading)
+                            ? AppColors.primary
+                            : AppColors.gray,
                         fontSize: 14,
                         fontWeight: FontWeight.w400,
                       ),

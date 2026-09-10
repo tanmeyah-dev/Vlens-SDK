@@ -56,6 +56,7 @@ class UserInfoDynamicField extends StatelessWidget {
 
     if (type == 'text') {
       final isNumberOfChildren = field.key == 'numberOfChildren';
+      final isBuildingNo = isBuildingNoField(field);
       final controller = model.textControllers[field.key] ??
           TextEditingController(text: field.value ?? '');
       model.textControllers[field.key] = controller;
@@ -65,14 +66,20 @@ class UserInfoDynamicField extends StatelessWidget {
           labelText: title,
           hintText: title,
           controller: controller,
-          keyboardType:
-              isNumberOfChildren ? TextInputType.number : TextInputType.text,
+          keyboardType: (isNumberOfChildren || isBuildingNo)
+              ? TextInputType.number
+              : TextInputType.text,
           inputFormatters: isNumberOfChildren
               ? [
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(1),
                 ]
-              : null,
+              : isBuildingNo
+                  ? [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(4),
+                    ]
+                  : null,
           textAlign: TextAlign.right,
           onEditingComplete: () => _dismissKeyboard(context),
           onTapOutside: (_) => _dismissKeyboard(context),
@@ -82,6 +89,7 @@ class UserInfoDynamicField extends StatelessWidget {
     }
 
     if (type == 'number') {
+      final isBuildingNo = isBuildingNoField(field);
       final controller = model.textControllers[field.key] ??
           TextEditingController(text: field.value ?? '');
       model.textControllers[field.key] = controller;
@@ -91,10 +99,17 @@ class UserInfoDynamicField extends StatelessWidget {
           labelText: title,
           hintText: title,
           controller: controller,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-          ],
+          keyboardType: isBuildingNo
+              ? TextInputType.number
+              : const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: isBuildingNo
+              ? [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(4),
+                ]
+              : [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                ],
           textAlign: TextAlign.right,
           onEditingComplete: () => _dismissKeyboard(context),
           onTapOutside: (_) => _dismissKeyboard(context),

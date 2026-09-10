@@ -169,15 +169,34 @@ class _UserInfoScreenState extends BaseState<UserInfoScreen, UserInfoBloc, UserI
                                         ),
                                       ),
                                     ],
-                                    ...UserInfoModel.documentImageFields.map(
-                                      (doc) => UserInfoImagePickerField(
-                                        fieldKey: doc.key,
-                                        title: doc.value,
-                                        model: model,
-                                        onChanged: () =>
-                                            emit(UserInfoFormChangedEvent()),
+                                    if (UserInfoModel.documentImageFields
+                                        .isNotEmpty) ...[
+                                      const Align(
+                                        alignment: Alignment.centerRight,
+                                        child: Text(
+                                          'المستندات',
+                                          style: TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w400,
+                                            fontStyle: FontStyle.normal,
+                                            color: AppColors.black,
+                                          ),
+                                        ),
                                       ),
-                                    ),
+                                      const Divider(
+                                        color: AppColors.border1,
+                                        height: 28,
+                                      ),
+                                      ...UserInfoModel.documentImageFields.map(
+                                        (doc) => UserInfoImagePickerField(
+                                          fieldKey: doc.key,
+                                          title: doc.value,
+                                          model: model,
+                                          onChanged: () =>
+                                              emit(UserInfoFormChangedEvent()),
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ],
                               ),

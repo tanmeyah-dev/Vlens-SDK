@@ -18,8 +18,8 @@ class UserInfoModel {
   static const String utilityReceiptImageLabel = 'إيصال مرافق';
 
   static const List<MapEntry<String, String>> documentImageFields = [
-    MapEntry(leaseContractImageKey, leaseContractImageLabel),
     MapEntry(utilityReceiptImageKey, utilityReceiptImageLabel),
+    MapEntry(leaseContractImageKey, leaseContractImageLabel),
   ];
 
   final Map<String, dynamic> eligibilityResponse;
@@ -313,6 +313,10 @@ class UserInfoModel {
       }
       if (field.key == 'numberOfChildren') {
         if (text.length != 1) return 'يجب إدخال رقم واحد فقط';
+      } else if (isBuildingNoField(field)) {
+        if (!RegExp(r'^\d{1,4}$').hasMatch(text)) {
+          return 'يجب إدخال 4 أرقام كحد أقصى';
+        }
       } else if (text.length < 4) {
         return 'الحد الأدنى 4 أحرف';
       }
@@ -328,6 +332,10 @@ class UserInfoModel {
       final amount = num.tryParse(normalized);
       if (normalized.isEmpty || amount == null) {
         return 'برجاء إدخال رقم صالح';
+      }
+
+      if (isBuildingNoField(field) && !RegExp(r'^\d{1,4}$').hasMatch(text)) {
+        return 'يجب إدخال 4 أرقام كحد أقصى';
       }
 
       if (isMonthlyIncomeField(field) && amount > kMaxMonthlyIncome) {
