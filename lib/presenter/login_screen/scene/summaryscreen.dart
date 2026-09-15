@@ -16,6 +16,7 @@ import '../../user_info/model/summary_answer_item.dart';
 import '../../user_info/model/user_info_model.dart';
 import '../../user_info/utils/request_create_helper.dart';
 import '../../user_info/utils/user_info_one_click_apply_builder.dart';
+import '../../user_info/widget/user_info_image_picker_field.dart';
 import 'waiting_approval_screen.dart';
 import '../../validate_user/constants/api_urls.dart';
 
@@ -52,7 +53,6 @@ class _SummaryScreenState extends State<SummaryScreen> {
   ExtractedUserData? _identityData;
   String _cardNumber = '';
   bool _isPermissionAccepted = false;
-  dynamic _createdRequestId;
 
   @override
   void initState() {
@@ -103,7 +103,8 @@ class _SummaryScreenState extends State<SummaryScreen> {
     return null;
   }
 
-  List<MapEntry<String, String>> _buildRowsFromExtractedData(ExtractedUserData? data) {
+  List<MapEntry<String, String>> _buildRowsFromExtractedData(
+      ExtractedUserData? data) {
     final normalized = data?.toJson();
     final rows = <MapEntry<String, String>>[];
     _flattenToRows(normalized, rows);
@@ -159,14 +160,19 @@ class _SummaryScreenState extends State<SummaryScreen> {
   List<MapEntry<String, String>> _buildPrimaryIdentityFields() {
     final data = _identityData;
     final rows = <MapEntry<String, String>>[
-      MapEntry('الاسم', data?.idFrontData?.name?.trim().isNotEmpty == true
-          ? data!.idFrontData!.name!.trim()
-          : data?.user?.fullName?.trim() ?? ''),
-      MapEntry('العنوان', data?.idFrontData?.address?.trim().isNotEmpty == true
-          ? data!.idFrontData!.address!.trim()
-          : data?.user?.address?.trim() ?? ''),
+      MapEntry(
+          'الاسم',
+          data?.idFrontData?.name?.trim().isNotEmpty == true
+              ? data!.idFrontData!.name!.trim()
+              : data?.user?.fullName?.trim() ?? ''),
+      MapEntry(
+          'العنوان',
+          data?.idFrontData?.address?.trim().isNotEmpty == true
+              ? data!.idFrontData!.address!.trim()
+              : data?.user?.address?.trim() ?? ''),
       MapEntry('تاريخ الميلاد', _formatDate(data?.idFrontData?.dateOfBirth)),
-      MapEntry('الحالة الاجتماعية', data?.idBackData?.maritalStatus?.trim() ?? ''),
+      MapEntry(
+          'الحالة الاجتماعية', data?.idBackData?.maritalStatus?.trim() ?? ''),
       MapEntry(
         'النوع',
         data?.idFrontData?.gender?.trim().isNotEmpty == true
@@ -280,71 +286,13 @@ class _SummaryScreenState extends State<SummaryScreen> {
     });
 
     try {
-      final created = _createdRequestId != null
-          ? RequestCreateResult(_createdRequestId)
-          : await createLoanRequest(answers: widget.answeredFields);
-      _createdRequestId = created.requestId;
-
-      final cache = VerificationCache();
-      final cachedEmail = await cache.getEmail();
-      final cachedPhone = await cache.getMobileNumber();
-
-      final built = buildOneClickApplyBody(
-        model: widget.userInfoModel,
-        answers: widget.answeredFields,
-        cachedEmail: cachedEmail,
-        cachedPhone: cachedPhone,
-      );
-
-      final accessToken = await cache.getAccessToken();
-      final encryptedToken = await cache.getEncryptedAccessToken();
-      final token = (accessToken != null && accessToken.trim().isNotEmpty)
-          ? accessToken.trim()
-          : (encryptedToken ?? '').trim();
-      final headers = token.isNotEmpty
-          ? HttpHeadersHelper.getHeadersWithAuth(token)
-          : HttpHeadersHelper.getDefaultHeaders();
-
-      final url = ApiUrls.getOneClickApplyUrl();
-      final bodyJson = jsonEncode(built.body);
-
-      print('');
-      print('═══════════════════════════════════════════════════════');
-      print('📤 ONE-CLICK APPLY API CALL (SUMMARY)');
-      print('═══════════════════════════════════════════════════════');
-      print('URL: $url');
-      print('Method: POST');
-      print('Headers: $headers');
-      print('Body: $bodyJson');
-      print('═══════════════════════════════════════════════════════');
-      print('');
-
-      final response = await SdkHttpClient.post(
-        Uri.parse(url),
-        headers: headers,
-        body: bodyJson,
-      );
-
-      print('');
-      print('═══════════════════════════════════════════════════════');
-      print('📥 ONE-CLICK APPLY API RESPONSE (SUMMARY)');
-      print('═══════════════════════════════════════════════════════');
-      print('Status Code: ${response.statusCode}');
-      print('Body: ${response.body}');
-      print('═══════════════════════════════════════════════════════');
-      print('');
-
+      final loanId = await _submitOneClickApply();
       if (!mounted) return;
 
-      final api = SdkApiResponse.from(response);
-      if (api.isUnauthorized) return;
-      final blockingError = api.blockingError(
-        httpFallback: 'فشل إرسال طلب القرض',
-        businessFallback: 'فشل إرسال طلب القرض',
+      final created = await createLoanRequest(
+        answers: widget.answeredFields,
+        loanId: loanId,
       );
-      if (blockingError != null) {
-        throw Exception(blockingError);
-      }
 
       setState(() {
         _isSubmitting = false;
@@ -352,8 +300,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) =>
-              WaitingApprovalScreen(requestId: created.requestId),
+          builder: (_) => WaitingApprovalScreen(requestId: created.requestId),
         ),
       );
     } on RequestCreateException catch (e) {
@@ -392,6 +339,123 @@ class _SummaryScreenState extends State<SummaryScreen> {
     }
   }
 
+  /// Calls one-click-apply and returns its `loanId`.
+  /// Throws (and does not call create) unless HTTP 200, not a business failure,
+  /// and a `loanId` is present in the response.
+  Future<dynamic> _submitOneClickApply() async {
+    final cache = VerificationCache();
+    final cachedEmail = await cache.getEmail();
+    final cachedPhone = await cache.getMobileNumber();
+
+    final built = await buildOneClickApplyBody(
+      model: widget.userInfoModel,
+      answers: widget.answeredFields,
+      cachedEmail: cachedEmail,
+      cachedPhone: cachedPhone,
+    );
+
+    final accessToken = await cache.getAccessToken();
+    final encryptedToken = await cache.getEncryptedAccessToken();
+    final token = (accessToken != null && accessToken.trim().isNotEmpty)
+        ? accessToken.trim()
+        : (encryptedToken ?? '').trim();
+    final headers = token.isNotEmpty
+        ? HttpHeadersHelper.getHeadersWithAuth(token)
+        : HttpHeadersHelper.getDefaultHeaders();
+
+    final url = ApiUrls.getOneClickApplyUrl();
+    final bodyJson = jsonEncode(built.body);
+
+    print('');
+    print('═══════════════════════════════════════════════════════');
+    print('📤 ONE-CLICK APPLY API CALL (SUMMARY)');
+    print('═══════════════════════════════════════════════════════');
+    print('URL: $url');
+    print('Method: POST');
+    print('Headers: $headers');
+    print('Body compact JSON length: ${bodyJson.length}');
+    print(
+      'Do not paste pretty-printed logs into a Base64 validator. '
+      'fileContent is compact single-line base64 with no spaces.',
+    );
+    for (final document in (built.body['documents'] as List)) {
+      final code = document['documentCode'];
+      final name = document['fileName'];
+      final type = document['fileContentType'];
+      final content = document['fileContent'] as String;
+      print(
+        '📎 $code $name $type ${content.length} chars, '
+        'start=${content.substring(0, 40)}, '
+        'end=${content.substring(content.length - 8)}',
+      );
+    }
+    print('═══════════════════════════════════════════════════════');
+    print('');
+
+    final response = await SdkHttpClient.post(
+      Uri.parse(url),
+      headers: headers,
+      body: bodyJson,
+    );
+
+    print('');
+    print('═══════════════════════════════════════════════════════');
+    print('📥 ONE-CLICK APPLY API RESPONSE (SUMMARY)');
+    print('═══════════════════════════════════════════════════════');
+    print('Status Code: ${response.statusCode}');
+    print('Body: ${response.body}');
+    print('═══════════════════════════════════════════════════════');
+    print('');
+
+    final api = SdkApiResponse.from(response);
+    if (api.isUnauthorized) {
+      throw const SdkUnauthorizedException();
+    }
+    final blockingError = api.blockingError(
+      httpFallback: 'فشل إرسال طلب القرض',
+      businessFallback: 'فشل إرسال طلب القرض',
+    );
+    if (blockingError != null) {
+      throw Exception(blockingError);
+    }
+    if (!api.isHttp200 || api.isBusinessFailure) {
+      throw Exception('فشل إرسال طلب القرض');
+    }
+
+    final decoded = api.decoded ?? _tryDecodeMap(response.body);
+    final loanId = _extractLoanId(decoded);
+    if (loanId == null) {
+      throw Exception('رقم القرض غير متوفر');
+    }
+
+    print('📌 one-click-apply loanId: $loanId');
+    return loanId;
+  }
+
+  dynamic _extractLoanId(dynamic node) {
+    if (node is Map) {
+      final map = Map<String, dynamic>.from(node);
+      for (final entry in map.entries) {
+        final key = entry.key.toLowerCase().replaceAll('_', '');
+        if (key != 'loanid') continue;
+        final value = entry.value;
+        if (value != null && value.toString().trim().isNotEmpty) {
+          return value;
+        }
+      }
+      for (final value in map.values) {
+        final nested = _extractLoanId(value);
+        if (nested != null) return nested;
+      }
+    } else if (node is List) {
+      for (final item in node) {
+        final nested = _extractLoanId(item);
+        if (nested != null) return nested;
+      }
+    }
+    return null;
+  }
+
   Map<String, dynamic>? _tryDecodeMap(String rawBody) {
     if (rawBody.trim().isEmpty) return null;
     try {
@@ -424,7 +488,8 @@ class _SummaryScreenState extends State<SummaryScreen> {
           ),
           const TextSpan(text: '\n'),
           const TextSpan(
-            text: 'بأن هذه البيانات صحيحة وأي خطأ\nبها يعرضني للمسائله القانونية',
+            text:
+                'بأن هذه البيانات صحيحة وأي خطأ\nبها يعرضني للمسائله القانونية',
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
         ],
@@ -434,10 +499,19 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final documentKeys = {
+      for (final doc in UserInfoModel.documentImageFields) doc.key,
+    };
     final answersRows = widget.answeredFields
         .where((item) => item.displayValue.trim().isNotEmpty)
+        .where((item) => !documentKeys.contains(item.key))
         .map((item) => MapEntry(item.label, item.displayValue))
         .toList();
+    final documentFields = UserInfoModel.documentImageFields.where((doc) {
+      final path =
+          widget.userInfoModel.documentImagePaths[doc.key]?.trim() ?? '';
+      return path.isNotEmpty;
+    }).toList();
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -502,17 +576,48 @@ class _SummaryScreenState extends State<SummaryScreen> {
                                       .toList(),
                                 ),
                         ),
-                        const SizedBox(height: 18),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: AppColors.border1),
-                            borderRadius: BorderRadius.circular(10),
+                        if (answersRows.isNotEmpty) ...[
+                          const SizedBox(height: 18),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: AppColors.border1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Column(
+                              children: answersRows
+                                  .map(_buildAnswerFieldRow)
+                                  .toList(),
+                            ),
                           ),
-                          child: Column(
-                            children: answersRows.map(_buildAnswerFieldRow).toList(),
+                        ],
+                        if (documentFields.isNotEmpty) ...[
+                          const SizedBox(height: 18),
+                          const Align(
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              'المستندات',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w400,
+                                color: AppColors.black,
+                              ),
+                            ),
                           ),
-                        ),
+                          const Divider(
+                            color: AppColors.border1,
+                            height: 28,
+                          ),
+                          ...documentFields.map(
+                            (doc) => UserInfoImagePickerField(
+                              fieldKey: doc.key,
+                              title: doc.value,
+                              model: widget.userInfoModel,
+                              readOnly: true,
+                              onChanged: () {},
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 20),
                         GestureDetector(
                           onTap: () {

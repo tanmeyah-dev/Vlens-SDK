@@ -3,6 +3,7 @@ import 'package:tan_sdk/data/models/extracted_user_data.dart';
 import '../model/lookups_response.dart';
 import '../model/summary_answer_item.dart';
 import '../model/user_info_model.dart';
+import 'user_info_document_pdf_encoder.dart';
 import 'user_info_field_helpers.dart';
 import 'user_info_lookup_helpers.dart';
 
@@ -23,12 +24,12 @@ class OneClickApplyBuildException implements Exception {
   String toString() => message;
 }
 
-OneClickApplyBuildResult buildOneClickApplyBody({
+Future<OneClickApplyBuildResult> buildOneClickApplyBody({
   required UserInfoModel model,
   required List<SummaryAnswerItem> answers,
   String? cachedEmail,
   String? cachedPhone,
-}) {
+}) async {
   // Index by English-normalized keys and Arabic-normalized keys/labels so
   // fields like «قيمه التمويل» / «مده التمويل» resolve correctly.
   final byKey = <String, String>{};
@@ -53,7 +54,8 @@ OneClickApplyBuildResult buildOneClickApplyBody({
   final user = extracted?.user;
 
   final nationalId = _firstNonEmpty([
-    answer(const ['nationalId', 'nationalID', 'idNumber', 'id_number', 'CIF_ID']),
+    answer(
+        const ['nationalId', 'nationalID', 'idNumber', 'id_number', 'CIF_ID']),
     front?.idNumber,
     back?.idNumber,
     user?.idNumber,
@@ -73,7 +75,11 @@ OneClickApplyBuildResult buildOneClickApplyBody({
     [
       front?.firstNameEnglish,
       front?.lastNamesEnglish,
-    ].whereType<String>().map((e) => e.trim()).where((e) => e.isNotEmpty).join(' '),
+    ]
+        .whereType<String>()
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .join(' '),
   ]);
 
   final birthdate = _formatApiDate(
@@ -220,13 +226,8 @@ OneClickApplyBuildResult buildOneClickApplyBody({
   }
   if (formBuildingNo != null && formBuildingNo.isNotEmpty) {
     address['buildingNo'] = formBuildingNo;
-  }
-  // address.buildingNo / floorNo / flatNo must all match the entered building number.
-  final addressBuildingValue = address['buildingNo']?.toString().trim();
-  if (addressBuildingValue != null && addressBuildingValue.isNotEmpty) {
-    address['buildingNo'] = addressBuildingValue;
-    address['floorNo'] = addressBuildingValue;
-    address['flatNo'] = addressBuildingValue;
+    address['floorNo'] = _asInt(formBuildingNo);
+    address['flatNo'] = _asInt(formBuildingNo);
   }
   if ((address['addMark']?.toString().trim().isEmpty ?? true)) {
     throw OneClickApplyBuildException(
@@ -254,21 +255,17 @@ OneClickApplyBuildResult buildOneClickApplyBody({
   addressInIdCard['cityCode'] = address['cityCode'];
   addressInIdCard['villageCode'] = address['villageCode'];
 
-  // addressInIdCard.street / buildingNo come from form «الشارع» / «رقم المبني».
-  if (formStreet != null && formStreet.isNotEmpty) {
-    addressInIdCard['street'] = formStreet;
-  }
-  if (formBuildingNo != null && formBuildingNo.isNotEmpty) {
-    addressInIdCard['buildingNo'] = formBuildingNo;
-  }
-  if (addressBuildingValue != null && addressBuildingValue.isNotEmpty) {
-    addressInIdCard['buildingNo'] = addressBuildingValue;
-    addressInIdCard['floorNo'] = addressBuildingValue;
-    addressInIdCard['flatNo'] = addressBuildingValue;
-  }
-  // addressInIdCard.addMark = full address from cached extracted ID data.
+  // Working payload: addressInIdCard.street / addMark = ID-card address,
+  // and buildingNo / floorNo / flatNo = digits parsed from that address.
   if (idCardAddressText != null && idCardAddressText.isNotEmpty) {
+    addressInIdCard['street'] = idCardAddressText;
     addressInIdCard['addMark'] = idCardAddressText;
+    final idCardBuildingNo = _firstAddressNumber(idCardAddressText);
+    if (idCardBuildingNo != null && idCardBuildingNo.isNotEmpty) {
+      addressInIdCard['buildingNo'] = idCardBuildingNo;
+      addressInIdCard['floorNo'] = _asInt(idCardBuildingNo);
+      addressInIdCard['flatNo'] = _asInt(idCardBuildingNo);
+    }
   }
   _normalizeAddressInIdCardDigits(addressInIdCard);
 
@@ -277,41 +274,131 @@ OneClickApplyBuildResult buildOneClickApplyBody({
     eligibilityResponse: model.eligibilityResponse,
   );
 
-  final body = <String, dynamic>{
-    'nationalId': nationalId,
-    'customerDetails': {
-      'info': {
-        'stName': _nameAt(arabicNames, 0),
-        'ndName': _nameAt(arabicNames, 1),
-        'rdName': _nameAt(arabicNames, 2),
-        'thName': _nameAt(arabicNames, 3),
-        'rstName': _nameAt(arabicNames, 4),
-        'fullNameEN': englishFull ?? '',
-        'nickname': nickname,
-        'birthdate': birthdate,
-        'email': email,
-        'phoneNo1': phoneNo1,
-        'phoneNo2': phoneNo2,
-        'idIssueDate': idIssueDate,
-        'idExpDate': idExpDate,
-      },
-      'indv': {
-        'religion': religion,
-        'nationCode': nationCode,
-        'gender': gender,
-        'socialStatus': socialStatus,
-        'noOfChildren': noOfChildren,
-        'qualificationId': qualificationId,
-        'healthStatus': healthStatus,
-        'jobCode': jobCode,
-      },
-      'address': address,
-      'addressInIdCard': addressInIdCard,
+  final documents = await _buildDocuments(model);
+  final customerDetails = <String, dynamic>{
+    'info': {
+      'stName': _nameAt(arabicNames, 0),
+      'ndName': _nameAt(arabicNames, 1),
+      'rdName': _nameAt(arabicNames, 2),
+      'thName': _nameAt(arabicNames, 3),
+      'rstName': _nameAt(arabicNames, 4),
+      'fullNameEN': englishFull ?? '',
+      'nickname': nickname,
+      'birthdate': birthdate,
+      'email': email,
+      'phoneNo1': phoneNo1,
+      'phoneNo2': phoneNo2,
+      'idIssueDate': idIssueDate,
+      'idExpDate': idExpDate,
     },
-    'loanDetails': loanDetails,
+    'indv': {
+      'religion': religion,
+      'nationCode': nationCode,
+      'gender': gender,
+      'socialStatus': socialStatus,
+      'noOfChildren': noOfChildren,
+      'qualificationId': qualificationId,
+      'healthStatus': healthStatus,
+      'jobCode': jobCode,
+    },
+    'address': address,
+    'addressInIdCard': addressInIdCard,
   };
 
+  final body = <String, dynamic>{
+    'nationalId': nationalId,
+    'customerDetails': customerDetails,
+    'loanDetails': loanDetails,
+    'documents': documents,
+  };
+
+  print(
+      '📎 one-click-apply documents: ${documents.map((d) => d['documentCode']).toList()}');
+
   return OneClickApplyBuildResult(body);
+}
+
+const String _documentFileContentType = 'application/pdf';
+
+String _documentFileName(String documentCode) {
+  switch (documentCode) {
+    case UserInfoModel.utilityBillDocumentCode:
+      return 'utility_bill_2026.pdf';
+    case UserInfoModel.rentContractDocumentCode:
+      return 'rent_agreement.pdf';
+    case UserInfoModel.otherDocumentCode:
+      return 'other_document.pdf';
+    default:
+      return '$documentCode.pdf';
+  }
+}
+
+Future<List<Map<String, String>>> _buildDocuments(UserInfoModel model) async {
+  final documents = <Map<String, String>>[];
+
+  for (final field in UserInfoModel.documentImageFields) {
+    final path = model.documentImagePaths[field.key]?.trim() ?? '';
+    final documentCode = UserInfoModel.documentApiCodes[field.key];
+    if (documentCode == null || documentCode.isEmpty) continue;
+
+    // Working Postman payload only sends UTILITY_BILL + RENT_CONTRACT.
+    // OTHER is UI-optional and the API treats an extra/unlisted code as
+    // "required documents were not uploaded" (417).
+    if (field.key == UserInfoModel.otherDocumentImageKey) {
+      continue;
+    }
+
+    if (path.isEmpty) {
+      if (!UserInfoModel.requiredDocumentImageKeys.contains(field.key)) {
+        continue;
+      }
+      throw OneClickApplyBuildException(
+        'برجاء تحميل ${field.value}',
+      );
+    }
+
+    try {
+      final fileContent = await encodeLocalFileAsPdfBase64(path);
+      if (!fileContent.startsWith('JVBERi0')) {
+        throw const FormatException('PDF base64 must start with JVBERi0');
+      }
+      final fileName = _documentFileName(documentCode);
+      documents.add({
+        'documentCode': documentCode,
+        'fileContent': fileContent,
+        'fileName': fileName,
+        'fileContentType': _documentFileContentType,
+      });
+      print(
+        '📎 $documentCode → $fileName, $_documentFileContentType, '
+        '${fileContent.length} chars, '
+        'prefix=${fileContent.substring(0, 40)}',
+      );
+      if (fileContent.length > 1200000) {
+        throw const FormatException(
+          'PDF base64 is too large; re-pick a smaller photo.',
+        );
+      }
+    } catch (e) {
+      print('❌ Failed to encode ${field.key} ($documentCode): $e');
+      throw OneClickApplyBuildException(
+        'تعذر قراءة صورة ${field.value}',
+      );
+    }
+  }
+
+  final requiredCodes = UserInfoModel.requiredDocumentImageKeys
+      .map((key) => UserInfoModel.documentApiCodes[key])
+      .whereType<String>()
+      .toSet();
+  final sentCodes = documents.map((d) => d['documentCode']).toSet();
+  if (!requiredCodes.every(sentCodes.contains)) {
+    throw OneClickApplyBuildException(
+      'برجاء تحميل كل المستندات المطلوبة',
+    );
+  }
+
+  return documents;
 }
 
 Map<String, dynamic> _buildLoanDetails({
@@ -457,8 +544,7 @@ Map<String, dynamic> _buildAddress({
         ]),
       ]) ??
       '';
-  final countryCode =
-      _asInt(scoped(const ['countryCode', 'country'])) ?? 1;
+  final countryCode = _asInt(scoped(const ['countryCode', 'country'])) ?? 1;
 
   final built = <String, dynamic>{
     'countryCode': countryCode,
@@ -750,9 +836,13 @@ List<String> _normalizedAliasCandidates(String raw) {
 
 int? _asInt(String? raw) {
   if (raw == null) return null;
-  final t = raw.trim();
+  final t = _toWesternDigits(raw.trim());
   if (t.isEmpty) return null;
   return int.tryParse(t) ?? double.tryParse(t)?.round();
+}
+
+String? _firstAddressNumber(String raw) {
+  return RegExp(r'\d+').firstMatch(_toWesternDigits(raw))?.group(0);
 }
 
 double? _asDouble(String? raw) {

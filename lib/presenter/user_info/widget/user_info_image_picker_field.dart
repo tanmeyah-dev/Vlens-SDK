@@ -27,12 +27,17 @@ class UserInfoImagePickerField extends StatefulWidget {
     required this.title,
     required this.model,
     required this.onChanged,
+    this.readOnly = false,
   });
 
   final String fieldKey;
   final String title;
   final UserInfoModel model;
   final VoidCallback onChanged;
+
+  /// When true, shows the selected file with the same card as the form,
+  /// without pick or delete actions.
+  final bool readOnly;
 
   @override
   State<UserInfoImagePickerField> createState() =>
@@ -44,6 +49,7 @@ class _UserInfoImagePickerFieldState extends State<UserInfoImagePickerField>
   static final ImagePicker _picker = ImagePicker();
 
   bool _picking = false;
+
   /// After Settings → Full Access, avoid PhotoKit full-metadata path.
   bool _useSafePickerAfterSettings = false;
 
@@ -68,8 +74,7 @@ class _UserInfoImagePickerFieldState extends State<UserInfoImagePickerField>
     if (!Platform.isAndroid) return true;
 
     final sdkInt = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
-    final permission =
-        sdkInt >= 33 ? Permission.photos : Permission.storage;
+    final permission = sdkInt >= 33 ? Permission.photos : Permission.storage;
 
     try {
       var status = await permission.status;
@@ -116,7 +121,7 @@ class _UserInfoImagePickerFieldState extends State<UserInfoImagePickerField>
   }
 
   Future<void> _pickImage() async {
-    if (_picking) return;
+    if (widget.readOnly || _picking) return;
     _picking = true;
     try {
       if (Platform.isAndroid) {
@@ -138,10 +143,17 @@ class _UserInfoImagePickerFieldState extends State<UserInfoImagePickerField>
 
       final file = await _picker.pickImage(
         source: ImageSource.gallery,
+        maxWidth: 2000,
+        maxHeight: 2000,
         imageQuality: 85,
         requestFullMetadata: requestFullMetadata,
       );
       if (!mounted || file == null) return;
+
+      if (!_isAllowedPhoto(file)) {
+        _showError('يجب اختيار صورة بصيغة JPEG او PNG فقط');
+        return;
+      }
 
       widget.model.setDocumentImage(widget.fieldKey, file.path);
       widget.onChanged();
@@ -171,7 +183,28 @@ class _UserInfoImagePickerFieldState extends State<UserInfoImagePickerField>
     }
   }
 
+  bool _isAllowedPhoto(XFile file) {
+    final mime = (file.mimeType ?? '').toLowerCase();
+    final name = file.name.toLowerCase();
+    final path = file.path.toLowerCase();
+    bool hasExt(String ext) => name.endsWith(ext) || path.endsWith(ext);
+
+    if (mime.contains('pdf') || hasExt('.pdf')) return false;
+    if (mime.startsWith('image/')) return true;
+    if (hasExt('.jpg') ||
+        hasExt('.jpeg') ||
+        hasExt('.png') ||
+        hasExt('.heic') ||
+        hasExt('.heif') ||
+        hasExt('.webp')) {
+      return true;
+    }
+    // ImagePicker.pickImage already returns a photo when type metadata is missing.
+    return mime.isEmpty;
+  }
+
   void _removeFile() {
+    if (widget.readOnly) return;
     widget.model.clearDocumentImage(widget.fieldKey);
     widget.onChanged();
   }
@@ -189,6 +222,9 @@ class _UserInfoImagePickerFieldState extends State<UserInfoImagePickerField>
     }
     if (widget.fieldKey == UserInfoModel.leaseContractImageKey) {
       return 'برجاء قم بتحميل عقد ايجار';
+    }
+    if (widget.fieldKey == UserInfoModel.otherDocumentImageKey) {
+      return 'يمكنك تحميل ملف اخر (اختياري)';
     }
     return 'برجاء قم بتحميل ${widget.title}';
   }
@@ -218,13 +254,12 @@ class _UserInfoImagePickerFieldState extends State<UserInfoImagePickerField>
           const SizedBox(height: 10),
           if (isEmpty)
             InkWell(
-              onTap: _pickImage,
+              onTap: widget.readOnly ? null : _pickImage,
               borderRadius: BorderRadius.circular(14),
               child: CustomPaint(
                 painter: _DashedRRectPainter(
-                  color: error != null
-                      ? AppColors.error
-                      : const Color(0xFFD0D5DD),
+                  color:
+                      error != null ? AppColors.error : const Color(0xFFD0D5DD),
                   radius: 14,
                 ),
                 child: Container(
@@ -258,7 +293,7 @@ class _UserInfoImagePickerFieldState extends State<UserInfoImagePickerField>
                       ),
                       const SizedBox(height: 6),
                       const Text(
-                        'يجب أن يكون الملف المرفق بصيغة JPEG, PNG, او PDF.',
+                        'يجب أن يكون الملف المرفق بصيغة JPEG او PNG.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: AppColors.hintGray,
@@ -292,9 +327,8 @@ class _UserInfoImagePickerFieldState extends State<UserInfoImagePickerField>
               decoration: BoxDecoration(
                 color: const Color(0xFFF9FAFB),
                 borderRadius: BorderRadius.circular(14),
-                border: error != null
-                    ? Border.all(color: AppColors.error)
-                    : null,
+                border:
+                    error != null ? Border.all(color: AppColors.error) : null,
               ),
               child: Row(
                 children: [
@@ -317,21 +351,23 @@ class _UserInfoImagePickerFieldState extends State<UserInfoImagePickerField>
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  IconButton(
-                    onPressed: _removeFile,
-                    tooltip: 'حذف',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 40,
-                      minHeight: 40,
+                  if (!widget.readOnly) ...[
+                    const SizedBox(width: 12),
+                    IconButton(
+                      onPressed: _removeFile,
+                      tooltip: 'حذف',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 40,
+                        minHeight: 40,
+                      ),
+                      icon: const AppImage(
+                        AppAssets.delete,
+                        width: 24,
+                        height: 24,
+                      ),
                     ),
-                    icon: const AppImage(
-                      AppAssets.delete,
-                      width: 24,
-                      height: 24,
-                    ),
-                  ),
+                  ],
                 ],
               ),
             ),

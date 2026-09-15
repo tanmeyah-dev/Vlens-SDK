@@ -13,14 +13,33 @@ class UserInfoModel {
 
   static const String leaseContractImageKey = 'leaseContract';
   static const String utilityReceiptImageKey = 'utilityReceipt';
+  static const String otherDocumentImageKey = 'otherDocument';
 
   static const String leaseContractImageLabel = 'عقد الإيجار';
   static const String utilityReceiptImageLabel = 'إيصال مرافق';
+  static const String otherDocumentImageLabel = 'اخرى (اختياري)';
+
+  static const String utilityBillDocumentCode = 'UTILITY_BILL';
+  static const String rentContractDocumentCode = 'RENT_CONTRACT';
+  static const String otherDocumentCode = 'OTHER';
 
   static const List<MapEntry<String, String>> documentImageFields = [
     MapEntry(utilityReceiptImageKey, utilityReceiptImageLabel),
     MapEntry(leaseContractImageKey, leaseContractImageLabel),
+    MapEntry(otherDocumentImageKey, otherDocumentImageLabel),
   ];
+
+  static const Set<String> requiredDocumentImageKeys = {
+    utilityReceiptImageKey,
+    leaseContractImageKey,
+  };
+
+  /// one-click-apply `documents[].documentCode` for each local upload key.
+  static const Map<String, String> documentApiCodes = {
+    utilityReceiptImageKey: utilityBillDocumentCode,
+    leaseContractImageKey: rentContractDocumentCode,
+    otherDocumentImageKey: otherDocumentCode,
+  };
 
   final Map<String, dynamic> eligibilityResponse;
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
@@ -58,6 +77,7 @@ class UserInfoModel {
   final Map<String, String?> documentImagePaths = {
     leaseContractImageKey: null,
     utilityReceiptImageKey: null,
+    otherDocumentImageKey: null,
   };
 
   /// Set after the user taps save; drives inline error display.
@@ -98,6 +118,7 @@ class UserInfoModel {
   }
 
   String? validateDocumentImage(String key) {
+    if (!requiredDocumentImageKeys.contains(key)) return null;
     final path = documentImagePaths[key]?.trim() ?? '';
     if (path.isEmpty) return 'برجاء اختيار صورة';
     return null;
@@ -160,16 +181,14 @@ class UserInfoModel {
         String? initial = field.value;
         final preferNationalId = shouldPrefillFromNationalId(field.key);
         final locationRole = detectLocationFieldRole(field);
-        final usesLocations =
-            locationRole != null && locations.isNotEmpty;
+        final usesLocations = locationRole != null && locations.isNotEmpty;
 
         // Location selects come from lookups hierarchy — do not keep FIELDS
         // availableValues / default names that are not location ids.
         if (usesLocations) {
           final optionItems = selectOptionsForField(field);
           if (initial != null && optionItems.isNotEmpty) {
-            initial =
-                findLookupItemByIdOrName(optionItems, initial)?.id;
+            initial = findLookupItemByIdOrName(optionItems, initial)?.id;
           } else {
             initial = null;
           }
@@ -423,10 +442,8 @@ class UserInfoModel {
     }
     if (incomeField == null) return null;
 
-    final incomeText =
-        textControllers[incomeField.key]?.text.trim() ?? '';
-    final incomeNormalized =
-        incomeText.replaceAll(',', '').replaceAll(' ', '');
+    final incomeText = textControllers[incomeField.key]?.text.trim() ?? '';
+    final incomeNormalized = incomeText.replaceAll(',', '').replaceAll(' ', '');
     final incomeAmount = num.tryParse(incomeNormalized);
     if (incomeAmount == null) return null;
 

@@ -9,6 +9,7 @@ import '../../../utils/sdk_http_client.dart';
 import '../../login_screen/utils/device_info_helper.dart';
 import '../../validate_user/constants/api_urls.dart';
 import '../model/summary_answer_item.dart';
+import '../model/user_info_model.dart';
 
 class RequestCreateException implements Exception {
   final String message;
@@ -26,8 +27,10 @@ class RequestCreateResult {
 }
 
 /// Creates a request via `/vlens/api/v1/request/create`.
+/// [loanId] comes from a successful one-click-apply response.
 Future<RequestCreateResult> createLoanRequest({
   required List<SummaryAnswerItem> answers,
+  required dynamic loanId,
 }) async {
   final cache = VerificationCache();
   final requestTypeId = ApiUrls.kRequestTypeId;
@@ -42,8 +45,14 @@ Future<RequestCreateResult> createLoanRequest({
       ? HttpHeadersHelper.getHeadersWithAuth(token)
       : HttpHeadersHelper.getDefaultHeaders();
 
+  final excludedFieldKeys = {
+    for (final doc in UserInfoModel.documentImageFields) doc.key,
+    'loanId',
+  };
+
   final requestFieldsValues = <String, dynamic>{};
   for (final item in answers) {
+    if (excludedFieldKeys.contains(item.key)) continue;
     requestFieldsValues[item.key] = item.value.trim();
   }
 
@@ -52,6 +61,7 @@ Future<RequestCreateResult> createLoanRequest({
     'geoLocation': await DeviceInfoHelper.getCurrentLocation(),
     'userDeviceUtcTime': DateTime.now().toUtc().toIso8601String(),
     'requestFieldsValues': requestFieldsValues,
+    'loanId': loanId,
   };
 
   final url = ApiUrls.getRequestCreateUrl();
