@@ -39,9 +39,13 @@ class UserInfoDynamicField extends StatelessWidget {
       padding: const EdgeInsets.only(top: 4, right: 12),
       child: Text(
         message,
+        softWrap: true,
+        maxLines: 3,
+        overflow: TextOverflow.visible,
         style: const TextStyle(
           color: AppColors.error,
           fontSize: 12,
+          height: 1.35,
         ),
       ),
     );
@@ -49,14 +53,13 @@ class UserInfoDynamicField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title =
-        field.displayText.trim().isNotEmpty ? field.displayText : field.key;
+    final title = displayLabelForUserInfoField(field);
     final type = field.type.toLowerCase();
     final isLockedFromId = isIdExtractedLockedField(field);
 
     if (type == 'text') {
       final isNumberOfChildren = field.key == 'numberOfChildren';
-      final isBuildingNo = isBuildingNoField(field);
+      final isAddressNumber = isAddressNumberField(field);
       final controller = model.textControllers[field.key] ??
           TextEditingController(text: field.value ?? '');
       model.textControllers[field.key] = controller;
@@ -66,15 +69,16 @@ class UserInfoDynamicField extends StatelessWidget {
           labelText: title,
           hintText: title,
           controller: controller,
-          keyboardType: (isNumberOfChildren || isBuildingNo)
+          keyboardType: (isNumberOfChildren || isAddressNumber)
               ? TextInputType.number
               : TextInputType.text,
+          maxLength: isAddressNumber ? 4 : (isNumberOfChildren ? 1 : null),
           inputFormatters: isNumberOfChildren
               ? [
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(1),
                 ]
-              : isBuildingNo
+              : isAddressNumber
                   ? [
                       FilteringTextInputFormatter.digitsOnly,
                       LengthLimitingTextInputFormatter(4),
@@ -89,7 +93,8 @@ class UserInfoDynamicField extends StatelessWidget {
     }
 
     if (type == 'number') {
-      final isBuildingNo = isBuildingNoField(field);
+      final isAddressNumber = isAddressNumberField(field);
+      final isFinancingDuration = isFinancingDurationField(field);
       final controller = model.textControllers[field.key] ??
           TextEditingController(text: field.value ?? '');
       model.textControllers[field.key] = controller;
@@ -99,17 +104,23 @@ class UserInfoDynamicField extends StatelessWidget {
           labelText: title,
           hintText: title,
           controller: controller,
-          keyboardType: isBuildingNo
+          keyboardType: (isAddressNumber || isFinancingDuration)
               ? TextInputType.number
               : const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: isBuildingNo
+          maxLength: isAddressNumber ? 4 : (isFinancingDuration ? 2 : null),
+          inputFormatters: isAddressNumber
               ? [
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(4),
                 ]
-              : [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                ],
+              : isFinancingDuration
+                  ? [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(2),
+                    ]
+                  : [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                    ],
           textAlign: TextAlign.right,
           onEditingComplete: () => _dismissKeyboard(context),
           onTapOutside: (_) => _dismissKeyboard(context),

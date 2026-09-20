@@ -9,28 +9,28 @@ class ApiUrls {
   // Base IP address for local development server
   static const String _localServerIp = '192.168.51.187';
   static const String _localServerPort = '8088';
-  
+
   // Set to true if you're using a physical device (not emulator/simulator)
   // Set to false if you're using Android emulator or iOS simulator
   static bool usePhysicalDeviceIp = true;
-  
+
   // Set to false if your server uses HTTP instead of HTTPS
   // Set to true if your server uses HTTPS (default)
   static bool useHttps = true;
-  
+
   /// Get the protocol (http or https)
   static String get _protocol => useHttps ? 'https' : 'http';
-  
+
   /// Get the base URL for local development server
   /// Automatically adjusts based on platform
   static String getLocalBaseUrl() {
     final protocol = _protocol;
-    
+
     if (kIsWeb) {
       // Web platform - use localhost
       return '$protocol://localhost:$_localServerPort';
     }
-    
+
     if (Platform.isAndroid) {
       if (usePhysicalDeviceIp) {
         // Physical Android device - use actual IP (must be on same network)
@@ -48,16 +48,16 @@ class ApiUrls {
         return '$protocol://localhost:$_localServerPort';
       }
     }
-    
+
     // Default fallback
     return '$protocol://$_localServerIp:$_localServerPort';
   }
-  
+
   /// Get the full URL for verify phone API
   static String getVerifyPhoneUrl() {
     return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/verify/phone';
   }
-  
+
   /// Create user (vlens); same host as other fixed local endpoints in the SDK.
   static String getCreateUserUrl() {
     return '${getLocalBaseUrl()}/vlens/api/v1/digital/identity/create-user';
@@ -116,6 +116,11 @@ class ApiUrls {
   /// Request eligibility.
   static String getRequestEligibilityUrl() {
     return '${getLocalBaseUrl()}/vlens/api/v1/request/eligibility';
+  }
+
+  /// CMA check that scanned national ID matches the logged-in account.
+  static String getCheckUserUrl() {
+    return '${getLocalBaseUrl()}/vlens/api/v1/cma/check-user';
   }
 
   /// Request fields by request type id.
@@ -182,7 +187,7 @@ class ApiUrls {
     }
     return false;
   }
-  
+
   /// Get URL for physical device (use actual IP)
   static String getPhysicalDeviceUrl() {
     return '$_protocol://$_localServerIp:$_localServerPort';

@@ -310,6 +310,8 @@ class _LoginScreenSceneState
           keyboardType: TextInputType.phone,
           maxLength: 11,
           textAlign: TextAlign.right,
+          readOnly: true,
+          enableInteractiveSelection: false,
           inputFormatters: [
             FilteringTextInputFormatter.digitsOnly,
           ],

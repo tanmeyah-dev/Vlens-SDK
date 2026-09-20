@@ -13,6 +13,7 @@ import '../event/id_data_event.dart';
 import '../model/id_data_model.dart';
 import '../state/id_data_state.dart';
 import '../utils/id_data_display_rows.dart';
+import '../widget/check_user_failed_dialog.dart';
 
 class IdDataScreen extends StatefulWidget {
   /// Fresh VLens scan payload when coming from SDK success → POST `/vlens-data`.
@@ -31,13 +32,29 @@ class IdDataScreen extends StatefulWidget {
   State<IdDataScreen> createState() => _IdDataScreenState();
 }
 
-class _IdDataScreenState extends BaseState<IdDataScreen, IdDataBloc, IdDataModel> {
+class _IdDataScreenState
+    extends BaseState<IdDataScreen, IdDataBloc, IdDataModel> {
   @override
   void listenToState(BuildContext context, BaseStates state) {
     if (state is IdDataNavigateToUserInfoState) {
       Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => UserInfoScreen(eligibilityResponse: state.eligibilityResponse),
+          builder: (_) =>
+              UserInfoScreen(eligibilityResponse: state.eligibilityResponse),
+        ),
+      );
+      return;
+    }
+
+    if (state is IdDataCheckUserFailedState) {
+      final navContext = context;
+      showDialog<void>(
+        context: context,
+        useRootNavigator: false,
+        barrierDismissible: false,
+        builder: (_) => CheckUserFailedDialog(
+          message: state.message,
+          navigationContext: navContext,
         ),
       );
     }
@@ -99,51 +116,54 @@ class _IdDataScreenState extends BaseState<IdDataScreen, IdDataBloc, IdDataModel
                             ),
                           )
                         : SingleChildScrollView(
-                      child: Table(
-                        border: TableBorder.all(color: AppColors.border1),
-                        columnWidths: const {
-                          0: FlexColumnWidth(2),
-                          1: FlexColumnWidth(3),
-                        },
-                        children: [
-                          const TableRow(
-                            decoration: BoxDecoration(color: AppColors.white),
-                            children: [
-                              Padding(
-                                padding: EdgeInsets.all(10),
-                                child: Text(
-                                  'الحقل',
-                                  style: TextStyle(fontWeight: FontWeight.w700),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                              Padding(
-                                padding: EdgeInsets.all(10),
-                                child: Text(
-                                  'القيمة',
-                                  style: TextStyle(fontWeight: FontWeight.w700),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            ],
-                          ),
-                          ...rows.map(
-                            (entry) => TableRow(
+                            child: Table(
+                              border: TableBorder.all(color: AppColors.border1),
+                              columnWidths: const {
+                                0: FlexColumnWidth(2),
+                                1: FlexColumnWidth(3),
+                              },
                               children: [
-                                Padding(
-                                  padding: const EdgeInsets.all(10),
-                                  child: Text(entry.key),
+                                const TableRow(
+                                  decoration:
+                                      BoxDecoration(color: AppColors.white),
+                                  children: [
+                                    Padding(
+                                      padding: EdgeInsets.all(10),
+                                      child: Text(
+                                        'الحقل',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.w700),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: EdgeInsets.all(10),
+                                      child: Text(
+                                        'القيمة',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.w700),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                Padding(
-                                  padding: const EdgeInsets.all(10),
-                                  child: Text(entry.value),
+                                ...rows.map(
+                                  (entry) => TableRow(
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.all(10),
+                                        child: Text(entry.key),
+                                      ),
+                                      Padding(
+                                        padding: const EdgeInsets.all(10),
+                                        child: Text(entry.value),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
                   ),
                   if (model.errorMessage != null) ...[
                     const SizedBox(height: 8),
@@ -158,9 +178,10 @@ class _IdDataScreenState extends BaseState<IdDataScreen, IdDataBloc, IdDataModel
                     title: model.isCheckingEligibility
                         ? 'جاري التحقق...'
                         : 'اضغط هنا لاستكمال البيانات',
-                    onPressed: model.isCheckingEligibility || model.isLoadingVlensData
-                        ? null
-                        : () => emit(IdDataContinueEvent()),
+                    onPressed:
+                        model.isCheckingEligibility || model.isLoadingVlensData
+                            ? null
+                            : () => emit(IdDataContinueEvent()),
                   ),
                 ],
               ),
@@ -181,4 +202,3 @@ class _IdDataScreenState extends BaseState<IdDataScreen, IdDataBloc, IdDataModel
     );
   }
 }
-

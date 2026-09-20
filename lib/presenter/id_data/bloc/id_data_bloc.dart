@@ -12,12 +12,12 @@ import '../../validate_user/constants/api_urls.dart';
 import '../event/id_data_event.dart';
 import '../model/id_data_model.dart';
 import '../state/id_data_state.dart';
+import '../utils/check_user_helper.dart';
 import '../utils/id_data_parser.dart';
 import '../utils/vlens_data_api_helper.dart';
 
 class IdDataBloc extends BaseBloc {
-  IdDataBloc(this._model)
-      : super(initialState: InitScreen(_model)) {
+  IdDataBloc(this._model) : super(initialState: InitScreen(_model)) {
     on<IdDataInitializeEvent>(_onInitialize);
     on<IdDataContinueEvent>(_onContinue);
     Future<void>.microtask(() => add(IdDataInitializeEvent()));
@@ -114,8 +114,8 @@ class IdDataBloc extends BaseBloc {
 
   Future<void> _overwriteCachedExtractedData(dynamic data) async {
     try {
-      final normalized = parseExtractedUserData(data)?.toJson() ??
-          normalizeDynamicData(data);
+      final normalized =
+          parseExtractedUserData(data)?.toJson() ?? normalizeDynamicData(data);
       if (normalized == null) return;
       final cache = VerificationCache();
       await cache.setVlensExtractedData(normalized);
@@ -146,6 +146,17 @@ class IdDataBloc extends BaseBloc {
 
       await VerificationCache().setRequestTypeId(ApiUrls.kRequestTypeId);
 
+      final checkUser = await CheckUserHelper.check(
+        extractedData: latest ?? _model.effectiveExtractedData,
+      );
+      if (!checkUser.success) {
+        emit(IdDataCheckUserFailedState(
+          checkUser.message ??
+              'برجاء التأكد من تطابق رقم البطاقة المستخدمة مع رقم البطاقة عند إنشاء حساب على التطبيق.',
+        ));
+        return;
+      }
+
       final token = await _resolveToken();
       final headers = token != null && token.isNotEmpty
           ? HttpHeadersHelper.getHeadersWithAuth(token)
@@ -172,12 +183,15 @@ class IdDataBloc extends BaseBloc {
       }
 
       final data = decoded['data'];
-      final isEligible = data is Map<String, dynamic> && data['isEligible'] == true;
+      final isEligible =
+          data is Map<String, dynamic> && data['isEligible'] == true;
       if (isEligible) {
         emit(IdDataNavigateToUserInfoState(decoded));
       } else {
         _model.errorMessage = 'عذراً، المستخدم غير مؤهل حالياً';
       }
+    } on SdkUnauthorizedException {
+      return;
     } catch (e) {
       _model.errorMessage = e.toString().replaceAll('Exception: ', '');
     } finally {

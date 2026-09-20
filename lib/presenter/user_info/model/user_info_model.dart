@@ -261,8 +261,7 @@ class UserInfoModel {
         .where((field) => !isHiddenUserInfoField(field))
         .map((field) {
       final type = field.type.toLowerCase();
-      final title =
-          field.displayText.trim().isNotEmpty ? field.displayText : field.key;
+      final title = displayLabelForUserInfoField(field);
       String value = '';
       String? displayValue;
 
@@ -332,11 +331,11 @@ class UserInfoModel {
       }
       if (field.key == 'numberOfChildren') {
         if (text.length != 1) return 'يجب إدخال رقم واحد فقط';
-      } else if (isBuildingNoField(field)) {
+      } else if (isAddressNumberField(field)) {
         if (!RegExp(r'^\d{1,4}$').hasMatch(text)) {
           return 'يجب إدخال 4 أرقام كحد أقصى';
         }
-      } else if (text.length < 4) {
+      } else if (!isAddMarkField(field) && text.length < 4) {
         return 'الحد الأدنى 4 أحرف';
       }
       return null;
@@ -353,8 +352,14 @@ class UserInfoModel {
         return 'برجاء إدخال رقم صالح';
       }
 
-      if (isBuildingNoField(field) && !RegExp(r'^\d{1,4}$').hasMatch(text)) {
+      if (isAddressNumberField(field) && !RegExp(r'^\d{1,4}$').hasMatch(text)) {
         return 'يجب إدخال 4 أرقام كحد أقصى';
+      }
+
+      if (isFinancingDurationField(field)) {
+        if (!RegExp(r'^\d{1,2}$').hasMatch(normalized)) {
+          return 'برجاء إدخال عدد صحيح من رقمين كحد أقصى';
+        }
       }
 
       if (isMonthlyIncomeField(field) && amount > kMaxMonthlyIncome) {
@@ -448,7 +453,7 @@ class UserInfoModel {
     if (incomeAmount == null) return null;
 
     if (expenseAmount >= incomeAmount) {
-      return 'يجب ان يكون  اجمالي المصروفات الشهريه اقل من اجمالي الدخل الشهري';
+      return 'يجب أن تكون المصروفات أقل من الدخل الشهري';
     }
     return null;
   }

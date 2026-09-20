@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../model/user_info_model.dart';
+import '../utils/user_info_image_preview_helper.dart';
 
 /// Single-image gallery picker used for KYC document uploads.
 ///
@@ -209,6 +210,15 @@ class _UserInfoImagePickerFieldState extends State<UserInfoImagePickerField>
     widget.onChanged();
   }
 
+  void _previewImage(String path) {
+    if (!mounted) return;
+    showUserInfoImagePreview(
+      context,
+      imagePath: path,
+      title: widget.title,
+    );
+  }
+
   String _fileDisplayName(String path) {
     final fileName = path.split(RegExp(r'[/\\]')).last;
     final dot = fileName.lastIndexOf('.');
@@ -218,15 +228,15 @@ class _UserInfoImagePickerFieldState extends State<UserInfoImagePickerField>
 
   String get _emptyPrompt {
     if (widget.fieldKey == UserInfoModel.utilityReceiptImageKey) {
-      return 'برجاء قم بتحميل ايصال مرافق (كهرباء، مياه، او غاز)';
+      return ' قم بتحميل ايصال مرافق (كهرباء، مياه، او غاز)';
     }
     if (widget.fieldKey == UserInfoModel.leaseContractImageKey) {
-      return 'برجاء قم بتحميل عقد ايجار';
+      return ' قم بتحميل عقد ايجار';
     }
     if (widget.fieldKey == UserInfoModel.otherDocumentImageKey) {
       return 'يمكنك تحميل ملف اخر (اختياري)';
     }
-    return 'برجاء قم بتحميل ${widget.title}';
+    return ' قم بتحميل ${widget.title}';
   }
 
   @override
@@ -236,6 +246,7 @@ class _UserInfoImagePickerFieldState extends State<UserInfoImagePickerField>
         ? widget.model.validationErrors[widget.fieldKey]
         : null;
     final isEmpty = path == null || path.isEmpty;
+    final thumbnailSize = widget.readOnly ? 72.0 : 48.0;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 22),
@@ -302,14 +313,23 @@ class _UserInfoImagePickerFieldState extends State<UserInfoImagePickerField>
                         ),
                       ),
                       const SizedBox(height: 14),
-                      const Text(
-                        'تحميل',
-                        style: TextStyle(
-                          color: AppColors.navy,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          decoration: TextDecoration.underline,
-                          decorationColor: AppColors.navy,
+                      Container(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: AppColors.navy,
+                              width: 1,
+                            ),
+                          ),
+                        ),
+                        child: const Text(
+                          'تحميل',
+                          style: TextStyle(
+                            color: AppColors.navy,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ],
@@ -321,8 +341,8 @@ class _UserInfoImagePickerFieldState extends State<UserInfoImagePickerField>
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 12,
+                horizontal: 12,
+                vertical: 10,
               ),
               decoration: BoxDecoration(
                 color: const Color(0xFFF9FAFB),
@@ -332,27 +352,79 @@ class _UserInfoImagePickerFieldState extends State<UserInfoImagePickerField>
               ),
               child: Row(
                 children: [
-                  const AppImage(
-                    AppAssets.pdf,
-                    width: 32,
-                    height: 32,
-                  ),
-                  const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      _fileDisplayName(path!),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.right,
-                      style: const TextStyle(
-                        color: AppColors.black,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => _previewImage(path!),
+                        borderRadius: BorderRadius.circular(10),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 2,
+                          ),
+                          child: Row(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.file(
+                                  File(path!),
+                                  width: thumbnailSize,
+                                  height: thumbnailSize,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      const AppImage(
+                                    AppAssets.pdf,
+                                    width: 32,
+                                    height: 32,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    Text(
+                                      _fileDisplayName(path),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.right,
+                                      style: const TextStyle(
+                                        color: AppColors.black,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    if (widget.readOnly) ...[
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        'اضغط لمعاينة الصورة',
+                                        textAlign: TextAlign.right,
+                                        style: TextStyle(
+                                          color: AppColors.hintGray,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w400,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Icon(
+                                Icons.visibility_outlined,
+                                color: AppColors.navy,
+                                size: 22,
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
                   if (!widget.readOnly) ...[
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 4),
                     IconButton(
                       onPressed: _removeFile,
                       tooltip: 'حذف',

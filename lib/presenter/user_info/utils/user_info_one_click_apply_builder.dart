@@ -189,26 +189,63 @@ Future<OneClickApplyBuildResult> buildOneClickApplyBody({
     'الشارع',
     'شارع',
   ]);
-  final formBuildingNo = _findFormAnswerByArabicLabel(answers, const [
-    'رقم المبني',
-    'رقم المبنى',
-    'رقم البناء',
-  ]);
-  final idCardAddressText = _firstNonEmpty([
-    front?.address,
-    front?.address1,
-    user?.address,
-  ]);
-  // address.addMark uses the same value as street («الشارع»).
-  final addressAddMark = formStreet;
+  final formBuildingNo = _findFormAnswerByArabicLabel(
+    answers,
+    const [
+      'رقم المبني',
+      'رقم المبنى',
+      'رقم البناء',
+    ],
+    englishAliases: const ['buildingNo', 'buildingNumber', 'building'],
+  );
+  final formFloorNo = _findFormAnswerByArabicLabel(
+    answers,
+    const [
+      'رقم الدور',
+      'رقم الطابق',
+    ],
+    englishAliases: const ['floorNo', 'floor', 'floorNumber'],
+  );
+  final formFlatNo = _findFormAnswerByArabicLabel(
+    answers,
+    const [
+      'رقم الشقة',
+      'رقم الشقه',
+    ],
+    englishAliases: const [
+      'flatNo',
+      'flatno',
+      'apartment',
+      'apartmentNo',
+      'unitNo',
+    ],
+  );
+  final formAddMark = _findFormAnswerByArabicLabel(
+    answers,
+    const [
+      'علامة مميزة',
+      'علامة مميزه',
+      'علامه مميزة',
+      'علامه مميزه',
+      'علامة العنوان',
+    ],
+    englishAliases: const [
+      'addMark',
+      'addressMark',
+      'landmark',
+      'nearBy',
+    ],
+  );
 
   final address = _buildAddress(
     model: model,
     byKey: byKey,
-    // address.street / buildingNo / addMark come from form fields.
+    // address.street / buildingNo / floorNo / flatNo / addMark from form.
     streetFallback: formStreet,
     buildingNoFallback: formBuildingNo,
-    addMarkFallback: addressAddMark,
+    floorNoFallback: formFloorNo,
+    flatNoFallback: formFlatNo,
+    addMarkFallback: formAddMark,
     // state/city/village must come only from locations lookups cascade.
     locationCodesFromLookupsOnly: true,
   );
@@ -219,20 +256,20 @@ Future<OneClickApplyBuildResult> buildOneClickApplyBody({
   if (formStreet != null && formStreet.isNotEmpty) {
     address['street'] = formStreet;
   }
-  // address.addMark must match street.
-  final addressStreet = address['street']?.toString().trim();
-  if (addressStreet != null && addressStreet.isNotEmpty) {
-    address['addMark'] = addressStreet;
-  }
   if (formBuildingNo != null && formBuildingNo.isNotEmpty) {
     address['buildingNo'] = formBuildingNo;
-    address['floorNo'] = _asInt(formBuildingNo);
-    address['flatNo'] = _asInt(formBuildingNo);
   }
-  if ((address['addMark']?.toString().trim().isEmpty ?? true)) {
-    throw OneClickApplyBuildException(
-      'برجاء إدخال الشارع',
-    );
+  if (formFloorNo != null && formFloorNo.isNotEmpty) {
+    address['floorNo'] = _asInt(formFloorNo) ?? formFloorNo;
+  }
+  if (formFlatNo != null && formFlatNo.isNotEmpty) {
+    address['flatNo'] = _asInt(formFlatNo) ?? formFlatNo;
+  }
+  // addMark is optional — only set when the user provided a value.
+  if (formAddMark != null && formAddMark.trim().isNotEmpty) {
+    address['addMark'] = formAddMark.trim();
+  } else {
+    address.remove('addMark');
   }
 
   final addressInIdCard = _buildAddress(
@@ -246,7 +283,9 @@ Future<OneClickApplyBuildResult> buildOneClickApplyBody({
     streetFallback: formStreet,
     fallbackAddress: address,
     buildingNoFallback: formBuildingNo,
-    addMarkFallback: idCardAddressText,
+    floorNoFallback: formFloorNo,
+    flatNoFallback: formFlatNo,
+    addMarkFallback: formAddMark,
   );
 
   // Keep location codes identical on address and addressInIdCard.
@@ -255,17 +294,15 @@ Future<OneClickApplyBuildResult> buildOneClickApplyBody({
   addressInIdCard['cityCode'] = address['cityCode'];
   addressInIdCard['villageCode'] = address['villageCode'];
 
-  // Working payload: addressInIdCard.street / addMark = ID-card address,
-  // and buildingNo / floorNo / flatNo = digits parsed from that address.
-  if (idCardAddressText != null && idCardAddressText.isNotEmpty) {
-    addressInIdCard['street'] = idCardAddressText;
-    addressInIdCard['addMark'] = idCardAddressText;
-    final idCardBuildingNo = _firstAddressNumber(idCardAddressText);
-    if (idCardBuildingNo != null && idCardBuildingNo.isNotEmpty) {
-      addressInIdCard['buildingNo'] = idCardBuildingNo;
-      addressInIdCard['floorNo'] = _asInt(idCardBuildingNo);
-      addressInIdCard['flatNo'] = _asInt(idCardBuildingNo);
-    }
+  // Mirror the same form address details into addressInIdCard (including street).
+  addressInIdCard['street'] = address['street'];
+  addressInIdCard['buildingNo'] = address['buildingNo'];
+  addressInIdCard['floorNo'] = address['floorNo'];
+  addressInIdCard['flatNo'] = address['flatNo'];
+  if (address.containsKey('addMark')) {
+    addressInIdCard['addMark'] = address['addMark'];
+  } else {
+    addressInIdCard.remove('addMark');
   }
   _normalizeAddressInIdCardDigits(addressInIdCard);
 
@@ -341,13 +378,7 @@ Future<List<Map<String, String>>> _buildDocuments(UserInfoModel model) async {
     final documentCode = UserInfoModel.documentApiCodes[field.key];
     if (documentCode == null || documentCode.isEmpty) continue;
 
-    // Working Postman payload only sends UTILITY_BILL + RENT_CONTRACT.
-    // OTHER is UI-optional and the API treats an extra/unlisted code as
-    // "required documents were not uploaded" (417).
-    if (field.key == UserInfoModel.otherDocumentImageKey) {
-      continue;
-    }
-
+    // Required docs must be present; optional "اخرى" is sent only when selected.
     if (path.isEmpty) {
       if (!UserInfoModel.requiredDocumentImageKeys.contains(field.key)) {
         continue;
@@ -472,6 +503,8 @@ Map<String, dynamic> _buildAddress({
   String? streetFallback,
   Map<String, dynamic>? fallbackAddress,
   String? buildingNoFallback,
+  String? floorNoFallback,
+  String? flatNoFallback,
   String? addMarkFallback,
   bool locationCodesFromLookupsOnly = false,
 }) {
@@ -525,16 +558,21 @@ Map<String, dynamic> _buildAddress({
         ]),
       ]) ??
       '';
-  final floorNo = _asInt(scoped(const ['floorNo', 'floor', 'floorNumber']));
-  final flatno = _asInt(scoped(const [
-    'flatno',
-    'flatNo',
-    'apartment',
-    'apartmentNo',
-    'unitNo',
+  final floorNo = _asInt(_firstNonEmpty([
+    floorNoFallback,
+    scoped(const ['floorNo', 'floor', 'floorNumber']),
+  ]));
+  final flatno = _asInt(_firstNonEmpty([
+    flatNoFallback,
+    scoped(const [
+      'flatno',
+      'flatNo',
+      'apartment',
+      'apartmentNo',
+      'unitNo',
+    ]),
   ]));
   final addMark = _firstNonEmpty([
-        // Prefer explicit customer-address source (عنوان المنشاه).
         addMarkFallback,
         scoped(const [
           'addMark',
@@ -555,8 +593,11 @@ Map<String, dynamic> _buildAddress({
     'buildingNo': buildingNo,
     'floorNo': floorNo,
     'flatNo': flatno,
-    'addMark': addMark,
   };
+  // addMark is optional — omit when empty.
+  if (addMark.trim().isNotEmpty) {
+    built['addMark'] = addMark.trim();
+  }
 
   final hasAny = stateCode != null ||
       cityCode != null ||
@@ -573,8 +614,16 @@ Map<String, dynamic> _buildAddress({
     if (buildingNoFallback != null && buildingNoFallback.trim().isNotEmpty) {
       copied['buildingNo'] = buildingNoFallback.trim();
     }
+    if (floorNoFallback != null && floorNoFallback.trim().isNotEmpty) {
+      copied['floorNo'] = _asInt(floorNoFallback) ?? floorNoFallback.trim();
+    }
+    if (flatNoFallback != null && flatNoFallback.trim().isNotEmpty) {
+      copied['flatNo'] = _asInt(flatNoFallback) ?? flatNoFallback.trim();
+    }
     if (addMarkFallback != null && addMarkFallback.trim().isNotEmpty) {
       copied['addMark'] = addMarkFallback.trim();
+    } else {
+      copied.remove('addMark');
     }
     return copied;
   }
@@ -839,10 +888,6 @@ int? _asInt(String? raw) {
   final t = _toWesternDigits(raw.trim());
   if (t.isEmpty) return null;
   return int.tryParse(t) ?? double.tryParse(t)?.round();
-}
-
-String? _firstAddressNumber(String raw) {
-  return RegExp(r'\d+').firstMatch(_toWesternDigits(raw))?.group(0);
 }
 
 double? _asDouble(String? raw) {

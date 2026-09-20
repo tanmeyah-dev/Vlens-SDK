@@ -412,8 +412,27 @@ bool isMonthlyExpenseField(RequestFieldItem field) {
           label.contains(normalizeArabicLabel('الشهري')));
 }
 
-/// All KYC form fields are mandatory.
-bool isOptionalUserInfoField(RequestFieldItem field) => false;
+/// Detects «مده التمويل» / installment count fields (integers only).
+bool isFinancingDurationField(RequestFieldItem field) {
+  final key = normalizeLookupKey(field.key);
+  if (key.contains('REQNOOFKSTS') ||
+      key.contains('NUMBEROFINSTALLMENTS') ||
+      key.contains('NOOFINSTALLMENTS') ||
+      key.contains('INSTALLMENTCOUNT') ||
+      key == 'TENURE') {
+    return true;
+  }
+
+  return _fieldArabicHaystackContains(field, const [
+    'مده التمويل',
+    'مدة التمويل',
+    'عدد الاقساط',
+    'عدد الأقساط',
+  ]);
+}
+
+/// KYC form fields are mandatory except optional markers (e.g. addMark).
+bool isOptionalUserInfoField(RequestFieldItem field) => isAddMarkField(field);
 
 /// Picks the Egyptian nationality option id from lookups (`مصري` / Egypt).
 String? findEgyptianNationalityId(List<LookupItem> items) {
@@ -597,7 +616,12 @@ bool _fieldArabicHaystackContains(
 }
 
 bool isStreetAddressField(RequestFieldItem field) {
-  if (isBuildingNoField(field)) return false;
+  if (isBuildingNoField(field) ||
+      isFloorNoField(field) ||
+      isFlatNoField(field) ||
+      isAddMarkField(field)) {
+    return false;
+  }
   final key = normalizeLookupKey(field.key);
   if (key == 'STREET' || key.contains('STREET') || key == 'PROPERTYADDRESS') {
     return true;
@@ -606,6 +630,13 @@ bool isStreetAddressField(RequestFieldItem field) {
 }
 
 bool isBuildingNoField(RequestFieldItem field) {
+  // Key-based floor/flat/addMark must win — API often reuses «رقم المبني»
+  // as displayText for those fields, which would otherwise match below.
+  if (isFloorNoField(field) ||
+      isFlatNoField(field) ||
+      isAddMarkField(field)) {
+    return false;
+  }
   final key = normalizeLookupKey(field.key);
   if (key.contains('BUILDINGNO') ||
       key.contains('BUILDINGNUMBER') ||
@@ -619,17 +650,112 @@ bool isBuildingNoField(RequestFieldItem field) {
   ]);
 }
 
-/// Places «الشارع» then «رقم المبني» immediately after المركز/القسم.
+bool isFloorNoField(RequestFieldItem field) {
+  final key = normalizeLookupKey(field.key);
+  if (key == 'FLOORNO' ||
+      key == 'FLOOR' ||
+      key == 'FLOORNUMBER' ||
+      key.contains('FLOORNO') ||
+      key.contains('FLOORNUMBER')) {
+    return true;
+  }
+  return _fieldArabicHaystackContains(field, const [
+    'رقم الدور',
+    'رقم الطابق',
+  ]);
+}
+
+bool isFlatNoField(RequestFieldItem field) {
+  final key = normalizeLookupKey(field.key);
+  if (key == 'FLATNO' ||
+      key == 'FLAT' ||
+      key == 'APARTMENT' ||
+      key == 'APARTMENTNO' ||
+      key == 'UNITNO' ||
+      key.contains('FLATNO') ||
+      key.contains('APARTMENTNO')) {
+    return true;
+  }
+  return _fieldArabicHaystackContains(field, const [
+    'رقم الشقة',
+    'رقم الشقه',
+  ]);
+}
+
+bool isAddMarkField(RequestFieldItem field) {
+  final key = normalizeLookupKey(field.key);
+  if (key == 'ADDMARK' ||
+      key == 'ADDRESSMARK' ||
+      key == 'LANDMARK' ||
+      key == 'NEARBY' ||
+      key.contains('ADDMARK') ||
+      key.contains('ADDRESSMARK') ||
+      key.contains('LANDMARK')) {
+    return true;
+  }
+  return _fieldArabicHaystackContains(field, const [
+    'علامة مميزة',
+    'علامة مميزه',
+    'علامه مميزة',
+    'علامه مميزه',
+    'علامة مميزة للعنوان',
+    'علامة العنوان',
+  ]);
+}
+
+/// Correct Arabic labels when API reuses «رقم المبني» for floor/flat/addMark.
+String displayLabelForUserInfoField(RequestFieldItem field) {
+  final fallback =
+      field.displayText.trim().isNotEmpty ? field.displayText.trim() : field.key;
+  if (isFloorNoField(field)) return 'رقم الدور';
+  if (isFlatNoField(field)) return 'رقم الشقة';
+  if (isAddMarkField(field)) {
+    return fallback.contains('اختياري') ? fallback : 'علامة مميزة (اختياري)';
+  }
+  if (isBuildingNoField(field)) return 'رقم المبني';
+  return fallback;
+}
+
+/// Digit-limited address number fields (building / floor / flat).
+bool isAddressNumberField(RequestFieldItem field) =>
+    isBuildingNoField(field) ||
+    isFloorNoField(field) ||
+    isFlatNoField(field);
+
+bool _isAddressBlockField(RequestFieldItem field) =>
+    isStreetAddressField(field) ||
+    isBuildingNoField(field) ||
+    isFloorNoField(field) ||
+    isFlatNoField(field) ||
+    isAddMarkField(field);
+
+/// Places street → buildingNo → floorNo → flatNo → addMark after المركز/القسم.
 List<RequestFieldItem> reorderStreetAndBuildingAfterDistrict(
   List<RequestFieldItem> fields,
 ) {
   final streetFields = fields.where(isStreetAddressField).toList();
-  final buildingFields = fields.where(isBuildingNoField).toList();
-  if (streetFields.isEmpty && buildingFields.isEmpty) return fields;
-
-  final rest = fields
-      .where((field) => !isStreetAddressField(field) && !isBuildingNoField(field))
+  // Exclusive partitions so a field never appears twice when API reuses labels.
+  final buildingFields = fields
+      .where(
+        (f) =>
+            isBuildingNoField(f) &&
+            !isFloorNoField(f) &&
+            !isFlatNoField(f) &&
+            !isAddMarkField(f),
+      )
       .toList();
+  final floorFields = fields.where(isFloorNoField).toList();
+  final flatFields = fields.where(isFlatNoField).toList();
+  final addMarkFields = fields.where(isAddMarkField).toList();
+  if (streetFields.isEmpty &&
+      buildingFields.isEmpty &&
+      floorFields.isEmpty &&
+      flatFields.isEmpty &&
+      addMarkFields.isEmpty) {
+    return fields;
+  }
+
+  final rest = fields.where((field) => !_isAddressBlockField(field)).toList();
   var insertAt = rest.indexWhere(
     (field) => detectLocationFieldRole(field) == LocationFieldRole.village,
   );
@@ -644,6 +770,9 @@ List<RequestFieldItem> reorderStreetAndBuildingAfterDistrict(
     ...rest.take(insertAt),
     ...streetFields,
     ...buildingFields,
+    ...floorFields,
+    ...flatFields,
+    ...addMarkFields,
     ...rest.skip(insertAt),
   ];
 }

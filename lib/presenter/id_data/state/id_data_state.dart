@@ -13,3 +13,10 @@ class IdDataNavigateToUserInfoState extends NonRenderState {
 
   IdDataNavigateToUserInfoState(this.eligibilityResponse);
 }
+
+/// Emitted when CMA check-user fails; the scene should show the mismatch dialog.
+class IdDataCheckUserFailedState extends NonRenderState {
+  final String message;
+
+  IdDataCheckUserFailedState(this.message);
+}

@@ -140,8 +140,9 @@ class AppTextField extends StatelessWidget {
             errorStyle: const TextStyle(
               color: AppColors.error,
               fontSize: 12,
-              height: 1.2,
+              height: 1.35,
             ),
+            errorMaxLines: 3,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 15,
               vertical: 15,
