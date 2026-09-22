@@ -3,6 +3,7 @@ import 'package:core/bases/states/base/base_state.dart';
 import 'package:core/bases/states/base/render_data_state.dart';
 import 'package:core/components/button/app_button.dart';
 import 'package:core/components/text/app_text.dart';
+import 'package:core/components/textField/app_textfield.dart';
 import 'package:core/extensions/widget_extension.dart';
 import 'package:core/utils/ui.dart';
 import 'package:core/style/app_colors.dart';
@@ -54,12 +55,36 @@ class _RegisterScreenState
   String _fullEmailForRequest = '';
   bool _isCreateCodeVisible = false;
   bool _isConfirmCodeVisible = false;
+  final TextEditingController _usernameController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    final routePhone = widget.mobileNumber?.trim() ?? '';
+    if (routePhone.isNotEmpty) {
+      _usernameController.text = routePhone;
+    }
     // Run after first frame so `buildWidget` has assigned `_model`.
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadCachedData());
+  }
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    super.dispose();
+  }
+
+  String get _displayPhoneNumber {
+    final fromRoute = widget.mobileNumber?.trim() ?? '';
+    if (fromRoute.isNotEmpty) return fromRoute;
+    return _cachedMobileNumber?.trim() ?? '';
+  }
+
+  void _syncUsernameFromPhone() {
+    final phone = _displayPhoneNumber;
+    if (_usernameController.text != phone) {
+      _usernameController.text = phone;
+    }
   }
 
   Future<void> _loadCachedData() async {
@@ -71,10 +96,12 @@ class _RegisterScreenState
         ? routeEmail
         : (_cachedEmail ?? '');
     _fullEmailForRequest = displayEmail.trim();
+    _syncUsernameFromPhone();
     print('📥 Loaded from cache:');
     print('📥 mobileNumber: $_cachedMobileNumber');
     print('📥 email: $_cachedEmail');
     _checkAndEnableSaveButton();
+    setState(() {});
   }
 
   @override
@@ -108,6 +135,8 @@ class _RegisterScreenState
                               40.height,
                               instructions(),
                               40.height,
+                              usernameField(),
+                              24.height,
                               createSecurityCodeField(),
                               24.height,
                               confirmSecurityCodeField(),
@@ -147,6 +176,18 @@ class _RegisterScreenState
           fontWeight: FontWeight.w500,
         ),
       ],
+    );
+  }
+
+  Widget usernameField() {
+    return AppTextField(
+      labelText: 'اسم المستخدم',
+      hintText: 'اسم المستخدم',
+      controller: _usernameController,
+      readOnly: true,
+      enableInteractiveSelection: false,
+      keyboardType: TextInputType.phone,
+      textAlign: TextAlign.right,
     );
   }
 
