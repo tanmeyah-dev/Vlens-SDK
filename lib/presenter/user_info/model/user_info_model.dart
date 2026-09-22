@@ -158,11 +158,17 @@ class UserInfoModel {
     List<RequestFieldItem>? lookupFieldsOverride,
   }) {
     _clearFieldControllers();
-    requestFields = reorderStreetAndBuildingAfterDistrict(fields);
+    final idCardAddress = idCardAddressFromExtractedData(cachedExtractedData);
+    requestFields = reorderStreetAndBuildingAfterDistrict(
+      ensureIdCardAddMarkField(
+        fields,
+        idCardAddress: idCardAddress,
+      ),
+    );
     lookupFields = lookupFieldsOverride ??
         buildLookupSelectFields(
           lookups,
-          existingRequestFields: fields,
+          existingRequestFields: requestFields,
         );
 
     final prefill = buildPrefillMapFromExtractedData(cachedExtractedData);
@@ -173,9 +179,11 @@ class UserInfoModel {
       final lookupItems = lookupItemsForField(field);
 
       if (t == 'text' || t == 'number') {
-        final initial = (field.value != null && field.value!.trim().isNotEmpty)
-            ? field.value!
-            : (cachedRaw ?? '');
+        final initial = isAddMarkField(field)
+            ? (idCardAddress ?? '')
+            : ((field.value != null && field.value!.trim().isNotEmpty)
+                ? field.value!
+                : (cachedRaw ?? ''));
         textControllers[field.key] = TextEditingController(text: initial);
       } else if (t == 'select' || t == 'radiogroup') {
         String? initial = field.value;

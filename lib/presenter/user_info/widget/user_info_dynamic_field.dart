@@ -69,6 +69,9 @@ class UserInfoDynamicField extends StatelessWidget {
           labelText: title,
           hintText: title,
           controller: controller,
+          enabled: !isLockedFromId,
+          readOnly: isLockedFromId,
+          enableInteractiveSelection: !isLockedFromId,
           keyboardType: (isNumberOfChildren || isAddressNumber)
               ? TextInputType.number
               : TextInputType.text,

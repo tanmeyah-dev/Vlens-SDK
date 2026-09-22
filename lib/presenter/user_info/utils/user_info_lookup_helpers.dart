@@ -322,8 +322,21 @@ bool isNationalityField(RequestFieldItem field) {
       label.contains(normalizeArabicLabel('الجنسية'));
 }
 
-/// Gender, religion, social status, and nationality stay read-only.
+const String kIdCardAddMarkFieldKey = 'addMark';
+const String kIdCardAddMarkLabel = 'علامه مميزه (رقم البطاقه)';
+
+/// Full address shown on the ID data table («العنوان»).
+String? idCardAddressFromExtractedData(ExtractedUserData? data) {
+  if (data == null) return null;
+  return _firstNonEmpty([
+    data.idFrontData?.address,
+    data.user?.address,
+  ]);
+}
+
+/// Gender, religion, social status, nationality, and ID-card addMark stay read-only.
 bool isIdExtractedLockedField(RequestFieldItem field) {
+  if (isAddMarkField(field)) return true;
   if (_isGenderReligionOrSocialKey(field.key)) return true;
   if (isNationalityField(field)) return true;
   final label = normalizeArabicLabel(field.displayText);
@@ -700,7 +713,31 @@ bool isAddMarkField(RequestFieldItem field) {
     'علامه مميزه',
     'علامة مميزة للعنوان',
     'علامة العنوان',
+    'اضف علامه مميزه',
+    'اضف علامة مميزة',
   ]);
+}
+
+/// Injects a locked addMark row when request/fields does not already send one.
+List<RequestFieldItem> ensureIdCardAddMarkField(
+  List<RequestFieldItem> fields, {
+  String? idCardAddress,
+}) {
+  if (fields.any(isAddMarkField)) return fields;
+  return [
+    ...fields,
+    RequestFieldItem(
+      order: 0,
+      key: kIdCardAddMarkFieldKey,
+      displayText: kIdCardAddMarkLabel,
+      type: 'text',
+      visibleToUser: true,
+      value: idCardAddress,
+      availableValues: const [],
+      availableValuesItems: const [],
+      relatedQuestions: const [],
+    ),
+  ];
 }
 
 /// Correct Arabic labels when API reuses «رقم المبني» for floor/flat/addMark.
@@ -709,9 +746,7 @@ String displayLabelForUserInfoField(RequestFieldItem field) {
       field.displayText.trim().isNotEmpty ? field.displayText.trim() : field.key;
   if (isFloorNoField(field)) return 'رقم الدور';
   if (isFlatNoField(field)) return 'رقم الشقة';
-  if (isAddMarkField(field)) {
-    return fallback.contains('اختياري') ? fallback : 'علامة مميزة (اختياري)';
-  }
+  if (isAddMarkField(field)) return kIdCardAddMarkLabel;
   if (isBuildingNoField(field)) return 'رقم المبني';
   return fallback;
 }
@@ -729,7 +764,7 @@ bool _isAddressBlockField(RequestFieldItem field) =>
     isFlatNoField(field) ||
     isAddMarkField(field);
 
-/// Places street → buildingNo → floorNo → flatNo → addMark after المركز/القسم.
+/// Places street → buildingNo → addMark → floorNo → flatNo after المركز/القسم.
 List<RequestFieldItem> reorderStreetAndBuildingAfterDistrict(
   List<RequestFieldItem> fields,
 ) {
@@ -770,9 +805,9 @@ List<RequestFieldItem> reorderStreetAndBuildingAfterDistrict(
     ...rest.take(insertAt),
     ...streetFields,
     ...buildingFields,
+    ...addMarkFields,
     ...floorFields,
     ...flatFields,
-    ...addMarkFields,
     ...rest.skip(insertAt),
   ];
 }

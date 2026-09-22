@@ -220,32 +220,21 @@ Future<OneClickApplyBuildResult> buildOneClickApplyBody({
       'unitNo',
     ],
   );
-  final formAddMark = _findFormAnswerByArabicLabel(
-    answers,
-    const [
-      'علامة مميزة',
-      'علامة مميزه',
-      'علامه مميزة',
-      'علامه مميزه',
-      'علامة العنوان',
-    ],
-    englishAliases: const [
-      'addMark',
-      'addressMark',
-      'landmark',
-      'nearBy',
-    ],
-  );
+  final idCardAddMark = _firstNonEmpty([
+    front?.address,
+    user?.address,
+  ]);
 
   final address = _buildAddress(
     model: model,
     byKey: byKey,
-    // address.street / buildingNo / floorNo / flatNo / addMark from form.
+    // address.street / buildingNo / floorNo / flatNo from form. addMark is
+    // never sent on the customer address — only on addressInIdCard.
     streetFallback: formStreet,
     buildingNoFallback: formBuildingNo,
     floorNoFallback: formFloorNo,
     flatNoFallback: formFlatNo,
-    addMarkFallback: formAddMark,
+    includeAddMark: false,
     // state/city/village must come only from locations lookups cascade.
     locationCodesFromLookupsOnly: true,
   );
@@ -265,12 +254,7 @@ Future<OneClickApplyBuildResult> buildOneClickApplyBody({
   if (formFlatNo != null && formFlatNo.isNotEmpty) {
     address['flatNo'] = _asInt(formFlatNo) ?? formFlatNo;
   }
-  // addMark is optional — only set when the user provided a value.
-  if (formAddMark != null && formAddMark.trim().isNotEmpty) {
-    address['addMark'] = formAddMark.trim();
-  } else {
-    address.remove('addMark');
-  }
+  address.remove('addMark');
 
   final addressInIdCard = _buildAddress(
     model: model,
@@ -285,7 +269,7 @@ Future<OneClickApplyBuildResult> buildOneClickApplyBody({
     buildingNoFallback: formBuildingNo,
     floorNoFallback: formFloorNo,
     flatNoFallback: formFlatNo,
-    addMarkFallback: formAddMark,
+    addMarkFallback: idCardAddMark,
   );
 
   // Keep location codes identical on address and addressInIdCard.
@@ -299,8 +283,9 @@ Future<OneClickApplyBuildResult> buildOneClickApplyBody({
   addressInIdCard['buildingNo'] = address['buildingNo'];
   addressInIdCard['floorNo'] = address['floorNo'];
   addressInIdCard['flatNo'] = address['flatNo'];
-  if (address.containsKey('addMark')) {
-    addressInIdCard['addMark'] = address['addMark'];
+  // addMark on the ID-card address is the OCR address from the ID data table.
+  if (idCardAddMark != null && idCardAddMark.trim().isNotEmpty) {
+    addressInIdCard['addMark'] = idCardAddMark.trim();
   } else {
     addressInIdCard.remove('addMark');
   }
@@ -507,6 +492,7 @@ Map<String, dynamic> _buildAddress({
   String? flatNoFallback,
   String? addMarkFallback,
   bool locationCodesFromLookupsOnly = false,
+  bool includeAddMark = true,
 }) {
   String? scoped(List<String> aliases) {
     if (keyPrefixAliases.isNotEmpty) {
@@ -594,8 +580,8 @@ Map<String, dynamic> _buildAddress({
     'floorNo': floorNo,
     'flatNo': flatno,
   };
-  // addMark is optional — omit when empty.
-  if (addMark.trim().isNotEmpty) {
+  // addMark is optional — omit when empty or when this is the customer address.
+  if (includeAddMark && addMark.trim().isNotEmpty) {
     built['addMark'] = addMark.trim();
   }
 
@@ -606,7 +592,7 @@ Map<String, dynamic> _buildAddress({
       buildingNo.isNotEmpty ||
       floorNo != null ||
       flatno != null ||
-      addMark.isNotEmpty;
+      (includeAddMark && addMark.isNotEmpty);
 
   if (!hasAny && fallbackAddress != null) {
     final copied = Map<String, dynamic>.from(fallbackAddress);
@@ -620,7 +606,9 @@ Map<String, dynamic> _buildAddress({
     if (flatNoFallback != null && flatNoFallback.trim().isNotEmpty) {
       copied['flatNo'] = _asInt(flatNoFallback) ?? flatNoFallback.trim();
     }
-    if (addMarkFallback != null && addMarkFallback.trim().isNotEmpty) {
+    if (includeAddMark &&
+        addMarkFallback != null &&
+        addMarkFallback.trim().isNotEmpty) {
       copied['addMark'] = addMarkFallback.trim();
     } else {
       copied.remove('addMark');

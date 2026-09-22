@@ -7,8 +7,8 @@ import 'package:flutter/foundation.dart';
 /// For Physical Devices: uses the actual IP address
 class ApiUrls {
   // Base IP address for local development server
-  static const String _localServerIp = '192.168.51.187';
-  static const String _localServerPort = '8088';
+  static const String _localServerIp = '192.168.54.117';
+  static const String _localServerPort = '8055';
 
   // Set to true if you're using a physical device (not emulator/simulator)
   // Set to false if you're using Android emulator or iOS simulator
