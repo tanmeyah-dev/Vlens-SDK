@@ -323,7 +323,7 @@ bool isNationalityField(RequestFieldItem field) {
 }
 
 const String kIdCardAddMarkFieldKey = 'addMark';
-const String kIdCardAddMarkLabel = 'علامه مميزه (رقم البطاقه)';
+const String kIdCardAddMarkLabel = 'علامه مميزه (عنوان البطاقه)';
 
 /// Full address shown on the ID data table («العنوان»).
 String? idCardAddressFromExtractedData(ExtractedUserData? data) {
@@ -764,7 +764,7 @@ bool _isAddressBlockField(RequestFieldItem field) =>
     isFlatNoField(field) ||
     isAddMarkField(field);
 
-/// Places street → buildingNo → addMark → floorNo → flatNo after المركز/القسم.
+/// Places street → buildingNo → floorNo → flatNo → addMark after المركز/القسم.
 List<RequestFieldItem> reorderStreetAndBuildingAfterDistrict(
   List<RequestFieldItem> fields,
 ) {
@@ -805,9 +805,9 @@ List<RequestFieldItem> reorderStreetAndBuildingAfterDistrict(
     ...rest.take(insertAt),
     ...streetFields,
     ...buildingFields,
-    ...addMarkFields,
     ...floorFields,
     ...flatFields,
+    ...addMarkFields,
     ...rest.skip(insertAt),
   ];
 }
