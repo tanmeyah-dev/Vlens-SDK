@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:core/components/button/app_button.dart';
 import 'package:core/style/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../model/request_current_response.dart';
+import '../utils/document_html_sanitizer.dart';
 import '../utils/e_contract_otp_helper.dart';
 
 class RequestDocumentsScene extends StatefulWidget {
@@ -30,6 +33,7 @@ class _RequestDocumentsSceneState extends State<RequestDocumentsScene> {
   late final WebViewController _webViewController;
   int _currentIndex = 0;
   bool _eContractBusy = false;
+  Timer? _endCheckTimer;
 
   /// API may send [RequestCurrentDocument.title] as plain text or as HTML (e.g. `<br/>` between languages).
   bool _titleLooksLikeHtml(String s) => _htmlTagStart.hasMatch(s);
@@ -64,6 +68,8 @@ class _RequestDocumentsSceneState extends State<RequestDocumentsScene> {
     _webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.white)
+      ..enableZoom(false)
+      ..setHorizontalScrollBarEnabled(false)
       ..addJavaScriptChannel(
         _scrollChannelName,
         onMessageReceived: (message) {
@@ -77,227 +83,151 @@ class _RequestDocumentsSceneState extends State<RequestDocumentsScene> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageFinished: (_) {
-            _injectDocumentLayoutAndScrollTracking();
+            _injectScrollTracking();
           },
         ),
-      );
+      )
+      ..setOnScrollPositionChange((_) => _scheduleEndCheck());
     _loadCurrentDocumentHtml();
   }
 
-  /// Pulls inner body markup when API sends a full HTML document, and strips
-  /// embedded styles that would override our mobile layout CSS.
-  String _normalizeDocumentHtml(String raw) {
-    var html = raw.trim();
-    if (html.isEmpty) return '<p>لا يوجد محتوى</p>';
-
-    final lower = html.toLowerCase();
-    final bodyOpen = lower.indexOf('<body');
-    if (bodyOpen >= 0) {
-      final bodyTagEnd = html.indexOf('>', bodyOpen);
-      final bodyClose = lower.lastIndexOf('</body>');
-      if (bodyTagEnd >= 0) {
-        html = bodyClose > bodyTagEnd
-            ? html.substring(bodyTagEnd + 1, bodyClose)
-            : html.substring(bodyTagEnd + 1);
-      }
-    }
-
-    html = html.replaceAll(
-      RegExp(r'<style[^>]*>[\s\S]*?</style>', caseSensitive: false),
-      '',
-    );
-    html = html.replaceAll(
-      RegExp(r'<link[^>]*>', caseSensitive: false),
-      '',
-    );
-    // Drop fixed widths / nowrap that force horizontal overflow on mobile.
-    html = html.replaceAll(
-      RegExp(r'''\swidth\s*=\s*["'][^"']*["']''', caseSensitive: false),
-      '',
-    );
-    html = html.replaceAllMapped(
-      RegExp(r'''style\s*=\s*["']([^"']*)["']''', caseSensitive: false),
-      (match) {
-        final cleaned = match
-            .group(1)!
-            .replaceAll(
-              RegExp(
-                r'(?:^|;)\s*(?:width|min-width|max-width|margin-left|margin-right|white-space)\s*:[^;]*',
-                caseSensitive: false,
-              ),
-              '',
-            )
-            .replaceAll(RegExp(r'^;+|;+$'), '')
-            .trim();
-        if (cleaned.isEmpty) return '';
-        return 'style="$cleaned"';
-      },
-    );
-
-    return html.trim().isEmpty ? '<p>لا يوجد محتوى</p>' : html.trim();
+  @override
+  void dispose() {
+    _endCheckTimer?.cancel();
+    super.dispose();
   }
 
-  Future<void> _injectDocumentLayoutAndScrollTracking() async {
+  void _scheduleEndCheck() {
+    _endCheckTimer?.cancel();
+    _endCheckTimer = Timer(const Duration(milliseconds: 80), () {
+      if (!mounted) return;
+      _webViewController.runJavaScript(
+        'window.__tanCheckEnd && window.__tanCheckEnd();',
+      );
+    });
+  }
+
+  /// Cleans Word export HTML, then wraps it as a vertical RTL page.
+  String _prepareDocumentHtml(String raw) {
+    final trimmed = sanitizeDocumentHtml(raw.trim());
+    if (trimmed.isEmpty) return _wrapFragment('<p>لا يوجد محتوى</p>');
+
+    final isFullDocument = RegExp(
+      r'<html[\s>]',
+      caseSensitive: false,
+    ).hasMatch(trimmed);
+    if (!isFullDocument) return _wrapFragment(trimmed);
+
+    const viewport = '''
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style id="tan-doc-base">
+$documentWebViewCss
+</style>
+''';
+
+    final head = RegExp(r'<head[^>]*>', caseSensitive: false);
+    if (head.hasMatch(trimmed)) {
+      return trimmed.replaceFirst(head, '<head>$viewport');
+    }
+
+    final htmlTag = RegExp(r'<html[^>]*>', caseSensitive: false);
+    if (htmlTag.hasMatch(trimmed)) {
+      return trimmed.replaceFirstMapped(htmlTag, (match) {
+        return '${match.group(0)}<head>$viewport</head>';
+      });
+    }
+    return _wrapFragment(trimmed);
+  }
+
+  String _wrapFragment(String fragment) {
+    return '''
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style id="tan-doc-base">
+$documentWebViewCss
+  </style>
+</head>
+<body dir="rtl">
+$fragment
+</body>
+</html>
+''';
+  }
+
+  Future<void> _injectScrollTracking() async {
     await _webViewController.runJavaScript('''
 (function() {
-  function applyDocumentLayout() {
+  function notify() {
+    try { $_scrollChannelName.postMessage('end'); } catch (e) {}
+  }
+
+  function checkEnd() {
     try {
-      document.documentElement.setAttribute('dir', 'rtl');
-      document.documentElement.style.overflowX = 'hidden';
-      document.body.setAttribute('dir', 'rtl');
-      document.body.style.margin = '0';
-      document.body.style.padding = '0';
-      document.body.style.overflowX = 'hidden';
-      document.body.style.direction = 'rtl';
-      document.body.style.textAlign = 'right';
-      document.body.style.background = '#FFFFFF';
-
-      var pad = document.getElementById('pad');
-      if (!pad) {
-        pad = document.createElement('td');
-        pad.id = 'pad';
-        var shell = document.createElement('table');
-        shell.id = 'shell';
-        var tr = document.createElement('tr');
-        while (document.body.firstChild) {
-          pad.appendChild(document.body.firstChild);
-        }
-        tr.appendChild(pad);
-        shell.appendChild(tr);
-        document.body.appendChild(shell);
-      }
-      pad.style.padding = '16px';
-      pad.style.direction = 'rtl';
-      pad.style.textAlign = 'right';
-      pad.style.verticalAlign = 'top';
-      pad.style.wordWrap = 'break-word';
-      pad.style.overflowWrap = 'anywhere';
-      pad.style.boxSizing = 'border-box';
-
-      var all = pad.querySelectorAll('*');
-      for (var i = 0; i < all.length; i++) {
-        var el = all[i];
-        if (el.id === 'shell' || el.id === 'pad') continue;
-        el.style.maxWidth = '100%';
-        el.style.boxSizing = 'border-box';
-        el.style.whiteSpace = 'normal';
-        el.style.overflowWrap = 'anywhere';
-        el.removeAttribute('width');
-        if (el.tagName !== 'IMG' && el.tagName !== 'SVG' && el.tagName !== 'CANVAS') {
-          el.style.direction = 'rtl';
-          el.style.textAlign = 'right';
-        }
+      var root = document.scrollingElement || document.documentElement;
+      var scrollTop = window.pageYOffset || root.scrollTop || 0;
+      var viewport = window.innerHeight || root.clientHeight || 0;
+      var fullHeight = root.scrollHeight || 0;
+      if (fullHeight > 20 && viewport > 0 &&
+          (fullHeight <= viewport + 32 || scrollTop + viewport >= fullHeight - 32)) {
+        notify();
+        return;
       }
 
-      var tables = pad.querySelectorAll('table');
-      for (var t = 0; t < tables.length; t++) {
-        var table = tables[t];
-        if (table.id === 'shell') continue;
-        table.classList.add('data-table');
-        table.removeAttribute('width');
-        table.style.width = '100%';
-        table.style.maxWidth = '100%';
-        table.style.margin = '0 0 10px 0';
-        table.style.display = 'block';
-        table.setAttribute('dir', 'rtl');
-
-        var rows = table.querySelectorAll('tr');
-        var headers = [];
-        if (rows.length > 0) {
-          var headerCells = rows[0].querySelectorAll('th, td');
-          for (var h = 0; h < headerCells.length; h++) {
-            headers.push((headerCells[h].innerText || '').trim());
-          }
-        }
-
-        for (var r = 0; r < rows.length; r++) {
-          var row = rows[r];
-          row.style.display = 'block';
-          row.style.width = '100%';
-          row.style.maxWidth = '100%';
-          row.style.boxSizing = 'border-box';
-          row.style.margin = '0 0 10px 0';
-          row.style.border = '1px solid #E5E7EB';
-          row.style.borderRadius = '8px';
-          row.style.padding = '8px';
-          row.style.background = '#FFFFFF';
-
-          var cells = row.querySelectorAll('th, td');
-          for (var c = 0; c < cells.length; c++) {
-            var cell = cells[c];
-            cell.removeAttribute('width');
-            cell.style.display = 'block';
-            cell.style.width = '100%';
-            cell.style.maxWidth = '100%';
-            cell.style.boxSizing = 'border-box';
-            cell.style.direction = 'rtl';
-            cell.style.textAlign = 'right';
-            cell.style.whiteSpace = 'normal';
-            cell.style.wordBreak = 'normal';
-            cell.style.overflowWrap = 'break-word';
-            cell.style.padding = '8px';
-            cell.style.border = 'none';
-            cell.style.borderBottom = '1px solid #F3F4F6';
-
-            if (r === 0 && cell.tagName === 'TH') {
-              cell.style.fontWeight = '700';
-              cell.style.background = '#F3F4F6';
-            } else if (headers[c] && r > 0 && !cell.getAttribute('data-stacked')) {
-              cell.setAttribute('data-stacked', '1');
-              var label = document.createElement('div');
-              label.textContent = headers[c];
-              label.style.fontWeight = '700';
-              label.style.color = '#6B7280';
-              label.style.fontSize = '12px';
-              label.style.marginBottom = '4px';
-              label.style.textAlign = 'right';
-              cell.insertBefore(label, cell.firstChild);
-            }
-          }
+      var nodes = document.body ? document.body.querySelectorAll('*') : [];
+      var best = null;
+      var bestOverflow = 0;
+      for (var i = 0; i < nodes.length; i++) {
+        var el = nodes[i];
+        if (el.id === 'tan-end-sentinel') continue;
+        var overflow = (el.scrollHeight || 0) - (el.clientHeight || 0);
+        if (overflow > bestOverflow && el.clientHeight > 80) {
+          best = el;
+          bestOverflow = overflow;
         }
       }
-
-      var media = pad.querySelectorAll('img, video, iframe, svg, canvas');
-      for (var m = 0; m < media.length; m++) {
-        media[m].style.maxWidth = '100%';
-        media[m].style.height = 'auto';
+      if (best && bestOverflow > 48 &&
+          best.scrollTop + best.clientHeight >= best.scrollHeight - 32) {
+        notify();
       }
     } catch (e) {}
   }
 
-  applyDocumentLayout();
-
-  function checkEnd() {
-    var doc = document.documentElement;
-    var body = document.body;
-    var scrollTop = window.pageYOffset || doc.scrollTop || body.scrollTop || 0;
-    var viewport = window.innerHeight || doc.clientHeight || 0;
-    var fullHeight = Math.max(
-      body.scrollHeight || 0,
-      doc.scrollHeight || 0,
-      body.offsetHeight || 0,
-      doc.offsetHeight || 0,
-      body.clientHeight || 0,
-      doc.clientHeight || 0
-    );
-    if (scrollTop + viewport >= fullHeight - 24) {
-      $_scrollChannelName.postMessage('end');
-    }
-  }
+  window.__tanCheckEnd = checkEnd;
 
   if (!window.__tanScrollTrackingInstalled) {
     window.__tanScrollTrackingInstalled = true;
+    document.addEventListener('scroll', checkEnd, { passive: true, capture: true });
     window.addEventListener('scroll', checkEnd, { passive: true });
-    window.addEventListener('resize', function() {
-      applyDocumentLayout();
-      checkEnd();
-    });
-    document.addEventListener('touchmove', checkEnd, { passive: true });
+    window.addEventListener('scrollend', checkEnd, { passive: true });
+    window.addEventListener('touchend', function() {
+      setTimeout(checkEnd, 60);
+    }, { passive: true });
+    window.addEventListener('resize', checkEnd);
+
+    if (document.body && !document.getElementById('tan-end-sentinel')) {
+      var sentinel = document.createElement('div');
+      sentinel.id = 'tan-end-sentinel';
+      sentinel.setAttribute('aria-hidden', 'true');
+      sentinel.style.cssText = 'display:block;clear:both;height:1px;width:1px;pointer-events:none;';
+      document.body.appendChild(sentinel);
+      if ('IntersectionObserver' in window) {
+        var observer = new IntersectionObserver(function(entries) {
+          for (var i = 0; i < entries.length; i++) {
+            if (entries[i].isIntersecting) notify();
+          }
+        }, { root: null, rootMargin: '0px 0px 80px 0px', threshold: 0 });
+        observer.observe(sentinel);
+      }
+    }
   }
 
-  setTimeout(function() { applyDocumentLayout(); checkEnd(); }, 50);
-  setTimeout(function() { applyDocumentLayout(); checkEnd(); }, 300);
-  setTimeout(function() { applyDocumentLayout(); checkEnd(); }, 800);
+  checkEnd();
+  setTimeout(checkEnd, 300);
+  setTimeout(checkEnd, 800);
 })();
 ''');
   }
@@ -310,91 +240,8 @@ class _RequestDocumentsSceneState extends State<RequestDocumentsScene> {
     }
 
     final currentDoc = _documents[_currentIndex];
-    final bodyHtml = _normalizeDocumentHtml(currentDoc.content ?? '');
-    // Platform WebViews often ignore Flutter Padding; bake inset into HTML
-    // with a full-width shell cell so text never touches the card edges.
-    final wrappedHtml = '''
-<!DOCTYPE html>
-<html dir="rtl" lang="ar">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow-x: hidden;
-      background: #FFFFFF;
-      direction: rtl;
-      text-align: right;
-      -webkit-text-size-adjust: 100%;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-      line-height: 1.6;
-      color: #1F2937;
-    }
-    #shell {
-      width: 100%;
-      border-collapse: collapse;
-      table-layout: fixed;
-    }
-    #shell > tbody > tr > td#pad {
-      padding: 16px !important;
-      direction: rtl !important;
-      text-align: right !important;
-      vertical-align: top;
-      word-wrap: break-word;
-      overflow-wrap: anywhere;
-    }
-    #pad, #pad * {
-      max-width: 100% !important;
-      box-sizing: border-box !important;
-      white-space: normal !important;
-      direction: rtl !important;
-      text-align: right !important;
-    }
-    #pad img, #pad video, #pad iframe, #pad svg, #pad canvas {
-      max-width: 100% !important;
-      height: auto !important;
-    }
-    #pad table.data-table {
-      width: 100% !important;
-      display: block !important;
-      margin: 0 0 10px 0 !important;
-    }
-    #pad table.data-table, #pad table.data-table thead,
-    #pad table.data-table tbody, #pad table.data-table tr,
-    #pad table.data-table th, #pad table.data-table td {
-      display: block !important;
-      width: 100% !important;
-      max-width: 100% !important;
-      box-sizing: border-box !important;
-    }
-    #pad table.data-table tr {
-      margin: 0 0 10px 0 !important;
-      border: 1px solid #E5E7EB !important;
-      border-radius: 8px !important;
-      padding: 8px !important;
-      background: #FFF !important;
-    }
-    #pad table.data-table th, #pad table.data-table td {
-      padding: 8px !important;
-      border: none !important;
-      border-bottom: 1px solid #F3F4F6 !important;
-      word-break: normal !important;
-      overflow-wrap: break-word !important;
-    }
-  </style>
-</head>
-<body>
-  <table id="shell"><tr><td id="pad">
-    $bodyHtml
-  </td></tr></table>
-</body>
-</html>
-''';
-    _webViewController.loadHtmlString(wrappedHtml);
+    final documentHtml = _prepareDocumentHtml(currentDoc.content ?? '');
+    _webViewController.loadHtmlString(documentHtml);
   }
 
   void _goToPreviousDocument() {
