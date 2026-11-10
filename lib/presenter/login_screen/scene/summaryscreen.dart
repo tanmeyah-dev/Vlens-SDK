@@ -389,7 +389,15 @@ class _SummaryScreenState extends State<SummaryScreen> {
         'end=${content.substring(content.length - 8)}',
       );
     }
-    print('═══════════════════════════════════════════════════════');
+    print('════════ ONE-CLICK APPLY PAYLOAD START ════════');
+    const payloadChunk = 800;
+    for (var start = 0; start < bodyJson.length; start += payloadChunk) {
+      final end = start + payloadChunk < bodyJson.length
+          ? start + payloadChunk
+          : bodyJson.length;
+      print(bodyJson.substring(start, end));
+    }
+    print('════════ ONE-CLICK APPLY PAYLOAD END ════════');
     print('');
 
     final response = await SdkHttpClient.post(

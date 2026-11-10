@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:core/components/image/app_image.dart';
 import '../../style/app_gradient.dart';
@@ -108,7 +107,7 @@ class AppButton extends Container {
               height: iconSize,
             ),
           if (fontAwesomeIcon != null)
-            FaIcon(fontAwesomeIcon, size: iconSize),
+            Icon(fontAwesomeIcon, size: iconSize),
           icon != null || fontAwesomeIcon != null
               ? const SizedBox(width: 8)
               : const SizedBox(width: 0),

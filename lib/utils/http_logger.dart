@@ -14,6 +14,7 @@ class HttpLogger {
     Map<String, String>? headers,
     Object? body,
   }) {
+    if (!kDebugMode) return;
     _requestCounter++;
     final timestamp = DateTime.now().toIso8601String();
     
@@ -28,11 +29,8 @@ class HttpLogger {
     if (headers != null && headers.isNotEmpty) {
       print('📋 Headers:');
       headers.forEach((key, value) {
-        // Mask sensitive headers
-        if (key.toLowerCase().contains('authorization') || 
-            key.toLowerCase().contains('token') ||
-            key.toLowerCase().contains('api-key')) {
-          print('   $key: ${value.substring(0, value.length > 10 ? 10 : value.length)}***');
+        if (_isSensitiveKey(key)) {
+          print('   $key: ***');
         } else {
           print('   $key: $value');
         }
@@ -41,25 +39,12 @@ class HttpLogger {
     
     if (body != null) {
       print('📦 Body:');
-      if (body is String) {
-        try {
-          // Try to format JSON
-          final jsonBody = jsonDecode(body);
-          print('   ${const JsonEncoder.withIndent('   ').convert(jsonBody)}');
-        } catch (_) {
-          print('   $body');
-        }
-      } else if (body is Map) {
-        print('   ${const JsonEncoder.withIndent('   ').convert(body)}');
-      } else {
-        print('   $body');
-      }
+      print('   ${_redactBody(body)}');
     }
     
     print('═══════════════════════════════════════════════════════════════════');
     print('');
     
-    // Also log to debug console
     debugPrint('📤 HTTP REQUEST #$_requestCounter: $method $url');
   }
 
@@ -72,6 +57,7 @@ class HttpLogger {
     String? url,
   }) {
     final timestamp = DateTime.now().toIso8601String();
+    if (!kDebugMode) return;
     final isSuccess = statusCode >= 200 && statusCode < 300;
     
     print('');
@@ -87,20 +73,16 @@ class HttpLogger {
     if (headers.isNotEmpty) {
       print('📋 Headers:');
       headers.forEach((key, value) {
-        print('   $key: $value');
+        if (_isSensitiveKey(key)) {
+          print('   $key: ***');
+        } else {
+          print('   $key: $value');
+        }
       });
     }
     
     print('📦 Body:');
-    try {
-      // Try to format JSON
-      final jsonBody = jsonDecode(body);
-      print('   ${const JsonEncoder.withIndent('   ').convert(jsonBody)}');
-    } catch (_) {
-      // Not JSON, print as is
-      final bodyPreview = body.length > 500 ? '${body.substring(0, 500)}...' : body;
-      print('   $bodyPreview');
-    }
+    print('   ${_redactBody(body)}');
     
     print('═══════════════════════════════════════════════════════════════════');
     print('');
@@ -115,6 +97,7 @@ class HttpLogger {
     required dynamic error,
     String? url,
   }) {
+    if (!kDebugMode) return;
     final timestamp = DateTime.now().toIso8601String();
     
     print('');
@@ -249,6 +232,41 @@ class HttpLogger {
       logError(requestNumber: requestNumber, error: e, url: url.toString());
       rethrow;
     }
+  }
+
+  static bool _isSensitiveKey(String key) {
+    final normalized = key.toLowerCase();
+    return normalized.contains('authorization') ||
+        normalized.contains('token') ||
+        normalized.contains('password') ||
+        normalized.contains('secret') ||
+        normalized.contains('api-key') ||
+        normalized.contains('nationalid') ||
+        normalized == 'otp';
+  }
+
+  static String _redactBody(Object? body) {
+    try {
+      final decoded = body is String ? jsonDecode(body) : body;
+      return const JsonEncoder.withIndent('   ').convert(_redactValue(decoded));
+    } catch (_) {
+      return '[body omitted]';
+    }
+  }
+
+  static dynamic _redactValue(dynamic value) {
+    if (value is Map) {
+      return value.map((key, item) {
+        if (_isSensitiveKey(key.toString())) {
+          return MapEntry(key, '***');
+        }
+        return MapEntry(key, _redactValue(item));
+      });
+    }
+    if (value is List) {
+      return value.map(_redactValue).toList();
+    }
+    return value;
   }
 
   /// Gets human-readable status text

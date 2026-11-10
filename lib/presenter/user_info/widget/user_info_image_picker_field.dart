@@ -20,7 +20,8 @@ import '../utils/user_info_image_preview_helper.dart';
 /// After returning from Settings, uses `requestFullMetadata: false` (PHPicker)
 /// to avoid the known crash when Full Access was just granted.
 ///
-/// **Android:** Requests runtime gallery permission, then opens the picker.
+/// **Android:** Android 13+ opens the system photo picker, which needs no
+/// gallery permission. Android 12 and below requests storage permission.
 class UserInfoImagePickerField extends StatefulWidget {
   const UserInfoImagePickerField({
     super.key,
@@ -75,7 +76,11 @@ class _UserInfoImagePickerFieldState extends State<UserInfoImagePickerField>
     if (!Platform.isAndroid) return true;
 
     final sdkInt = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
-    final permission = sdkInt >= 33 ? Permission.photos : Permission.storage;
+    // READ_MEDIA_IMAGES is not in the app manifest. The system photo picker
+    // selects one image without that permission.
+    if (sdkInt >= 33) return true;
+
+    final permission = Permission.storage;
 
     try {
       var status = await permission.status;
